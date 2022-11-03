@@ -1,0 +1,12 @@
+#!/bin/bash
+#PBS -l select=30:ncpus=40:mpiprocs=40
+#PBS -q L
+#PBS -N SDM64
+#PBS -o $PBS_O_WORKDIR/log.txt
+#PBS -e $PBS_O_WORKDIR/error.txt
+source /etc/profile.d/modules.sh
+source ~/.bashrc
+cd ${PBS_O_WORKDIR}
+module load intel/17.0.0 mpt hdf5/1.8.12 netcdf/4.4.1
+mpiexec_mpt dplace -s1 ./scale-rm_init init.conf || exit
+mpiexec_mpt dplace -s1 ./scale-rm  run.conf || exit

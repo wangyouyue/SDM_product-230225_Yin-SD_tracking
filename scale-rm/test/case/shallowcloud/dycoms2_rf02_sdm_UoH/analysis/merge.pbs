@@ -1,0 +1,10 @@
+#!/bin/bash
+#PBS -l select=1:ncpus=1
+#PBS -q S
+#PBS -N SDM_merge
+#PBS -o $PBS_O_WORKDIR/log_merge.txt
+#PBS -e $PBS_O_WORKDIR/error_merge.txt
+
+source ~/.bashrc
+cd ${PBS_O_WORKDIR}
+ncl ./merge.ncl

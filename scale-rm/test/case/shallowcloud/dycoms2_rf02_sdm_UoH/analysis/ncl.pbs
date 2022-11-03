@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -l select=5:ncpus=40:mpiprocs=40
+#PBS -q M
+#PBS -N SDM_ncl
+#PBS -o $PBS_O_WORKDIR/log.txt
+#PBS -e $PBS_O_WORKDIR/error.txt
+
+source ~/.bashrc
+cd ${PBS_O_WORKDIR}
+rm -rf SDM_history_*.ncl
+MPI=1200
+core_num=200
+let p=MPI/core_num
+i=0
+while(( $i<$(($core_num-1)) ))
+do
+    cp ./SDM_history.ncl ./SDM_history_$(($i*$p)).ncl
+    sed -i "s/0,MPI/$(($i*$p)),$((($i+1)*$p))/" ./SDM_history_$(($i*$p)).ncl
+    ncl SDM_history_$(($i*$p)).ncl &
+    let "i++"
+done
+cp ./SDM_history.ncl ./SDM_history_$(($i*$p)).ncl
+sed -i "s/0,MPI/$(($i*$p)),$((($i+1)*$p))/" ./SDM_history_$(($i*$p)).ncl
+ncl SDM_history_$(($i*$p)).ncl
+wait
