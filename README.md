@@ -17,10 +17,10 @@ The paths of the model setups for the sensitivity tests used in the paper are re
 + [SN14 with supersaturation limiter test](https://github.com/wangyouyue/GMD_2022_code/tree/SDM_DYCOMSII-RF02_SN14_Slimiter/scale-rm/test/case/shallowcloud/dycoms2_rf02_SN14_Slimiter)
 - [SDM without supersaturation limiter test](https://github.com/wangyouyue/GMD_2022_code/tree/SDM_DYCOMSII-RF02_no_Slimiter/scale-rm/test/case/shallowcloud/dycoms2_rf02_SDM_no_Slimiter)
 * [Adjustment of latent heat release](https://github.com/wangyouyue/GMD_2022_code/tree/SDM_DYCOMSII-RF02_LHmod/scale-rm/test/case/shallowcloud/dycoms2_rf02_SDM_LHmod)
-+ To turn off Sedimentation, just replacing "MP_DOPRECIPITATION  = .true." with "MP_DOPRECIPITATION  = .false." in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L199)
-- Similarly, to turn off Sedimentation, just replacing "MP_DOAUTOCONVERSION  = .true." with "MP_DOAUTOCONVERSION  = .false." in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L198)
-* To adjust the initial SD number per cell, just giving a positive number to the option "sdm_inisdnc" in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L132)
-+ Adjusting intial aerosol number concentration in SN14 by change the value of the option "C_CCN" in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_SN14/run.conf#L99)
++ To turn off Sedimentation, just replacing `MP_DOPRECIPITATION  = .true.` with `MP_DOPRECIPITATION  = .false.` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L199)
+- Similarly, to turn off Sedimentation, just replacing `MP_DOAUTOCONVERSION  = .true.` with `MP_DOAUTOCONVERSION  = .false.` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L198)
+* To adjust the initial SD number per cell, just giving a positive number to the option `sdm_inisdnc` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L132)
++ Adjusting intial aerosol number concentration in SN14 by change the value of the option `C_CCN` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_SN14/run.conf#L99)
 
 # Required software and supported environment
 Fortran and C compiler are required to compile SCALE-SDM. MPI, NetCDF4, and HDF5 libraries are are also required.
@@ -31,32 +31,42 @@ The numerical experiments were conducted by using Intel Fortran/C compiler 19.1.
 `$ export SCALE_SYS=Linux64-intel-impi`
 
 # Clean
-`$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/`
-`make allclean`
-`make allclean SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T`
+```
+$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
+$ make allclean
+$ make allclean SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+```
 
 # Compile
 ## Using SDM
-`cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/`
-`make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T`
-`ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .`
+```
+$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
+$ make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+$ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
+```
 
 ## Using the bulk model of Seiki and Nakajima (2014)
-`cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sn14_hokudai/`
-`make SCALE_DISABLE_LOCALBIN=T`
-`ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .`
+```
+$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sn14_hokudai/
+$ make SCALE_DISABLE_LOCALBIN=T
+$ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
+```
 
 # Run a batch job on Hokudai supercomputer
 Modify the job script according to your system. The job scheduler on Hokudai supercomputer is PJM ([for more information(https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/)]).
-`pjsub hokudai_run.sh`
+`$ pjsub hokudai_run.sh`
 
 # Run analysis program
 ## For SDM
-`cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/`
-`pjsub --step --sparam "sn=1" ncl.sh`
-`pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh`
+```
+$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
+$ pjsub --step --sparam "sn=1" ncl.sh
+$ pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh
+```
 
 ## For SN14
-`cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sn14_hokudai/`
-`pjsub --step --sparam "sn=1" ncl.sh`
-`pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh`
+```
+$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sn14_hokudai/
+$ pjsub --step --sparam "sn=1" ncl.sh
+$ pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh
+```
