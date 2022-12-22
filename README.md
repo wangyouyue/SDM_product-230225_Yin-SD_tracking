@@ -54,7 +54,8 @@ $ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-r
 
 # Run a batch job on Hokudai supercomputer
 Modify the job script according to your system. The job scheduler on Hokudai supercomputer is PJM ([for more information](https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/)).
-```$ pjsub hokudai_run.sh```
+
+`$ pjsub hokudai_run.sh`
 
 # Run analysis program
 ## For SDM
