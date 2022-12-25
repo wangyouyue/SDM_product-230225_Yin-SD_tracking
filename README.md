@@ -18,14 +18,14 @@ The paths of the model setups for the sensitivity tests used in the paper are re
 - [SDM without supersaturation limiter test](https://github.com/wangyouyue/GMD_2022_code/tree/SDM_DYCOMSII-RF02_no_Slimiter/scale-rm/test/case/shallowcloud/dycoms2_rf02_SDM_no_Slimiter)
 * [Adjustment of latent heat release](https://github.com/wangyouyue/GMD_2022_code/tree/SDM_DYCOMSII-RF02_LHmod/scale-rm/test/case/shallowcloud/dycoms2_rf02_SDM_LHmod)
 + To turn off Sedimentation, just replacing `MP_DOPRECIPITATION  = .true.` with `MP_DOPRECIPITATION  = .false.` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L199)
-- Similarly, to turn off Sedimentation, just replacing `MP_DOAUTOCONVERSION  = .true.` with `MP_DOAUTOCONVERSION  = .false.` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L198)
+- Similarly, to turn off Collision-coalescence, just replacing `MP_DOAUTOCONVERSION  = .true.` with `MP_DOAUTOCONVERSION  = .false.` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L198)
 * To adjust the initial SD number per cell, just giving a positive number to the option `sdm_inisdnc` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L132)
 + Adjusting intial aerosol number concentration in SN14 by change the value of the option `C_CCN` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_SN14/run.conf#L99)
 
 # Required software and supported environment
 Fortran and C compiler are required to compile SCALE-SDM. MPI, NetCDF4, and HDF5 libraries are are also required.
 
-The numerical experiments were conducted by using Intel Fortran/C compiler 19.1.3.304, HDF5 1.12.0, and NetCDF 4.5.3. For data analysis, NCL 6.6.2 was used.
+The numerical experiments were conducted by using Intel Fortran/C compiler 19.1.3.304,Intel MPI 2019.9.304, HDF5 1.12.0, and NetCDF 4.5.3. For data analysis, NCL 6.6.2 was used.
 
 # Set environment variable
 `$ export SCALE_SYS=Linux64-intel-impi`
