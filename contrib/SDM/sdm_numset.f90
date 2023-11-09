@@ -17,6 +17,7 @@
 !! @li      2016-07-14 (S.Shima) [mod] Evaluation of bufsiz1, bufsiz2_r8, etc. moved from sdm_allocinit to sdm_numset
 !! @li      2018-06-30 (S.Shima) [add] rime mass and number of monomers as SD attributes
 !! @li      2019-10-07 (S.Shima) [add] aslset=5 for DYCOMSII(RF02) (Ackerman et al. 2009)
+!! @li      2023-03-14 (C.Yin)   [mod] bufsiz2_i8 = 2 for multiplicity and ID
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -150,7 +151,7 @@ contains
     sdnum_s2c = nint(sdininum_s2c) + bufsiz1
 
     bufsiz2_r8 = 7 + sdnumasl_s2c    !! x,y,rk,u,v,wc(vz),r,asl
-    bufsiz2_i8 = 1                   !! n
+    bufsiz2_i8 = 2                   !! n,ID
     bufsiz2_i2 = 1                   !! liqice
     bufsiz2_i4 = 1                   !! nmono (cold)
 

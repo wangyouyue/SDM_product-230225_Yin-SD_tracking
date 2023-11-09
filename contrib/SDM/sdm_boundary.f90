@@ -21,6 +21,7 @@
 !! @li      2018-05-13 (S.Shima) [fix] a bug in sdm_getbufsy
 !! @li      2018-06-26 (S.Shima) [fix] a bug in sdm_boundary
 !! @li      2018-06-30 (S.Shima) [add] rime mass and number of monomers as SD attributes
+!! @li      2023-04-01 (C.Yin)   [add] MPI comunication of ID
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -151,7 +152,7 @@ contains
   subroutine sdm_boundary(wbc,ebc,sbc,nbc,                         &
                          sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,   &
                          sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,           &
-                         bufsiz1,                               &
+                         sd_id,bufsiz1,                               &
                          bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                          sd_itmp1,                              &
                          rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
@@ -183,6 +184,7 @@ contains
     integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
     ! Input and output variables
     integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
+    integer(DP), intent(inout) :: sd_id(1:sd_num)   ! universal ID of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -214,12 +216,12 @@ contains
     integer(DP), intent(inout) ::                                &
          &                             rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! reciving buffer for MPI (int8)
-                       ! dim02 = 1 (multiplicity of super-droplets)
+                       ! dim02 = 2 (multiplicity and ID of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer(DP), intent(inout) ::                                &
          &                             sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! sending buffer for MPI (int8)
-                       ! dim02 = 1 (multiplicity of super-droplets)
+                       ! dim02 = 2 (multiplicity and ID of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer(i2), intent(inout) ::                                &
          &                             rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -265,7 +267,7 @@ contains
        
        call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,                               &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -277,7 +279,7 @@ contains
 
        call sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,                               &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -301,7 +303,7 @@ contains
 
        call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,                               &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -313,7 +315,7 @@ contains
        
        call sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,                               &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -344,7 +346,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                           &
+       sd_r,sd_asl,sdi,sd_id,                           &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -361,6 +363,7 @@ contains
     integer, intent(in) :: sd_num ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
+    integer(DP), intent(in) :: sd_id(1:sd_num)   ! universal ID of super-droplets
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -391,7 +394,7 @@ contains
     integer(DP), intent(out) ::                                  &
      &                              sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity 
+                       ! dim02 = 2 : multiplicity, ID
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(out) ::                                  &
      &                              sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -465,6 +468,7 @@ contains
              sbuf_r8(m,7,1) = sd_r(n)
 
              sbuf_i8(m,1,1) = sd_n(n)
+             sbuf_i8(m,2,1) = sd_id(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
           end do
 
@@ -537,6 +541,7 @@ contains
              sbuf_r8(m,7,2) = sd_r(n)
 
              sbuf_i8(m,1,2) = sd_n(n)
+             sbuf_i8(m,2,1) = sd_id(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
           end do
 
@@ -608,7 +613,7 @@ contains
     integer(DP), intent(in)                                      &
      &                      :: sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity
+                       ! dim02 = 2 : multiplicity, ID
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(in)                                      &
      &                      :: sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -632,7 +637,7 @@ contains
     integer(DP), intent(out)                                     &
      &                      :: rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity
+                       ! dim02 = 2 : multiplicity, ID
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(out)                                     &
      &                      :: rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -832,7 +837,7 @@ contains
   !--------------------------------------------------------------------------
   subroutine sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                            &
+       sd_r,sd_asl,sdi,sd_id,                            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -862,7 +867,7 @@ contains
     integer(DP), intent(in) ::                                  &
      &                              rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity 
+                       ! dim02 = 2 : multiplicity and ID
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(in) ::                                  &
      &                              rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -877,6 +882,7 @@ contains
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
+    integer(DP), intent(inout) :: sd_id(1:sd_num)   ! universal ID of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -958,6 +964,7 @@ contains
              sd_r(n)    = rbuf_r8(m,7,1)
 
              sd_n(n)      = rbuf_i8(m,1,1)
+             sd_id(n)     = rbuf_i8(m,2,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
           end do
 
@@ -1030,6 +1037,7 @@ contains
              sd_r(n)    = rbuf_r8(m,7,2)
 
              sd_n(n)      = rbuf_i8(m,1,2)
+             sd_id(n)     = rbuf_i8(m,2,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
 
           end do
@@ -1069,7 +1077,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                           &
+       sd_r,sd_asl,sdi,sd_id,                           &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -1086,6 +1094,7 @@ contains
     integer, intent(in) :: sd_num  ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical materia contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
+    integer(DP), intent(in) :: sd_id(1:sd_num)   ! universal ID of super-droplets
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1116,7 +1125,7 @@ contains
     integer(DP), intent(out) ::                                  &
      &                              sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity 
+                       ! dim02 = 2 : multiplicity and ID
                        ! dim03 = 1 : south, 2: north
     integer(i2), intent(out) ::                                  &
      &                              sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -1190,6 +1199,7 @@ contains
              sbuf_r8(m,7,1) = sd_r(n)
 
              sbuf_i8(m,1,1) = sd_n(n)
+             sbuf_i8(m,2,1) = sd_id(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
           end do
 
@@ -1262,6 +1272,7 @@ contains
              sbuf_r8(m,7,2) = sd_r(n)
 
              sbuf_i8(m,1,2) = sd_n(n)
+             sbuf_i8(m,2,1) = sd_id(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
           end do
 
@@ -1331,7 +1342,7 @@ contains
     integer(DP), intent(in)                                      &
      &                      :: sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity
+                       ! dim02 = 2 : multiplicity, ID
                        ! dim03 = 1 : south, 2: north
     integer(i2), intent(in)                                      &
      &                      :: sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -1355,7 +1366,7 @@ contains
     integer(DP), intent(out)                                     &
      &                      :: rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity
+                       ! dim02 = 2 : multiplicity, ID
                        ! dim03 = 1 : south, 2: north
     integer(i2), intent(out)                                     &
      &                      :: rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -1557,7 +1568,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                            &
+       sd_r,sd_asl,sdi,sd_id,                            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -1587,7 +1598,7 @@ contains
     integer(DP), intent(in) ::                                  &
      &                              rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity 
+                       ! dim02 = 2 : multiplicity, ID
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(in) ::                                  &
      &                              rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -1602,6 +1613,7 @@ contains
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat  ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
+    integer(DP), intent(inout) :: sd_id(1:sd_num)   ! universal ID of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1683,6 +1695,7 @@ contains
              sd_r(n)    = rbuf_r8(m,7,1)
 
              sd_n(n)      = rbuf_i8(m,1,1)
+             sd_id(n)     = rbuf_i8(m,2,2)
              sd_liqice(n) = rbuf_i2(m,1,1)
           end do
 
@@ -1754,6 +1767,7 @@ contains
              sd_r(n)    = rbuf_r8(m,7,2)
 
              sd_n(n)      = rbuf_i8(m,1,2)
+             sd_id(n)     = rbuf_i8(m,2,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
           end do
 

@@ -27,6 +27,7 @@
 !! @li      2018-02-28 (S.Shima) [add] sd_dtmp3,4,5,6
 !! @li      2018-06-30 (S.Shima) [add] rime mass and number of monomers as SD attributes
 !! @li      2020-07-23 (S.Shima) [add] variables for sdm_dmpvar == 1?? and sdm_dmpvar == 2??
+!! @li      2023-02-28 (C.Yin)   [mod] initialize universal ID of super-droplets
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -63,6 +64,7 @@ contains
     allocate(sdu_s2c(1:sdnum_s2c))
     allocate(sdv_s2c(1:sdnum_s2c))
     allocate(sdvz_s2c(1:sdnum_s2c))
+    allocate(sdid_s2c(1:sdnum_s2c))
     allocate(sdasl_s2c(1:sdnum_s2c,1:sdnumasl_s2c))
     allocate(sdn_fm(1:sdfmnum_s2c))
     allocate(sdri_fm(1:sdfmnum_s2c))
@@ -73,6 +75,7 @@ contains
     allocate(sdz_fm(1:sdfmnum_s2c))
     allocate(sdr_fm(1:sdfmnum_s2c))
     allocate(sdvz_fm(1:sdfmnum_s2c))
+    allocate(sdid_fm(1:sdfmnum_s2c))
     allocate(sdasl_fm(1:sdfmnum_s2c,1:sdnumasl_s2c))
 
     allocate(sdliqice_s2c(1:sdnum_s2c))
@@ -145,6 +148,7 @@ contains
 
     allocate(sd_i2tmp1(1:sdnum_s2c))
     allocate(sd_i8tmp1(1:sdnum_s2c))
+    allocate(sd_i8tmp2(1:sdnum_s2c))
 
     allocate(sd_dtmp1(1:sdnum_s2c))
     allocate(sd_dtmp2(1:sdnum_s2c))
@@ -195,6 +199,7 @@ contains
        sdu_s2c(n) = 0.0_RP
        sdv_s2c(n) = 0.0_RP
        sdvz_s2c(n) = 0.0_RP
+       sdid_s2c(n) = int(0,kind=DP)
 
        sd_itmp1(n) = 0
        sd_itmp2(n) = 0
@@ -218,6 +223,7 @@ contains
          sdz_fm(n) = 0.0_RP
          sdr_fm(n) = 0.0_RP
          sdvz_fm(n) = 0.0_RP
+         sdid_fm(n) = int(0,kind=DP)
        enddo
        do s = 1, sdnumasl_s2c
             do n = 1, sdnum_s2c
@@ -248,6 +254,7 @@ contains
     allocate(sdvz_s2c_restart(1:sdnum_s2c))
     allocate(sdasl_s2c_restart(1:sdnum_s2c,1:sdnumasl_s2c))
     allocate(sdliqice_s2c_restart(1:sdnum_s2c))
+    allocate(sdid_s2c_restart(1:sdnum_s2c))
     if( sdm_cold ) then
        allocate(sdice_s2c_restart%re(1:sdnum_s2c))
        allocate(sdice_s2c_restart%rp(1:sdnum_s2c))

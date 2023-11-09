@@ -51,6 +51,7 @@
 !! @li      2019-06-08 (S.Shima) [mod] sdm_outcome_riming() to avoid creation of long columns 
 !! @li      2019-07-01 (S.Shima) [fix] the overflow by int(sd_n1/sd_n2) -> int(sd_n1/sd_n2,kind=DP)
 !! @li      2019-10-07 (S.Shima) [add] aslset=5 for DYCOMSII(RF02) (Ackerman et al. 2009)
+!! @li      2023-03-12 (C.Yin)   [add] update universal ID of super-droplets during coalescence
 !
 !<
 !-------------------------------------------------------------------------------
@@ -69,7 +70,8 @@ contains
                         zph_crs,                &
                         ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl, &
                         sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,&
-                        sdi,                                   &
+                        sdi,                             &
+                        ! sd_id,                             &
                         sort_id,sort_key,sort_freq,sort_tag,   &
                         sd_rng,sd_rand,                        &
                         sort_tag0,fsort_id,icp,sd_perm,c_rate  )
@@ -118,6 +120,7 @@ contains
     integer, intent(inout) :: sort_freq(1:ni_sdm*nj_sdm*nk_sdm+1) ! number of super-droplets in each SD-grid
     integer, intent(inout) :: sort_tag(1:ni_sdm*nj_sdm*nk_sdm+2) ! accumulated number of super-droplets in each SD-grid
     integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
+    ! integer(DP), intent(inout) :: sd_id(1:sd_num) ! universal ID of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice

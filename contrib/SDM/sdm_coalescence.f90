@@ -20,6 +20,7 @@
 !! @li      2016-07-20 (S.Shima) [add] Coalescence of the "liqice" attribute added 
 !! @li      2019-07-01 (S.Shima) [fix] the possiblity of overflow by int(sd_n1/sd_n2,kind=RP)) -> int(sd_n1/sd_n2,kind=DP)
 !! @li      2019-10-07 (S.Shima) [add] aslset=5 for DYCOMSII(RF02) (Ackerman et al. 2009)
+!! @li      2023-03-12 (C.Yin)   [add] update universal ID of super-droplets during coalescence
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -38,6 +39,7 @@ contains
                         zph_crs,                &
                         ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl, &
                         sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,&
+                        ! sd_id, &
                         sort_id,sort_key,sort_freq,sort_tag,   &
                         sd_rng,sd_rand,                        &
                         sort_tag0,fsort_id,icp,sd_perm,c_rate  )
@@ -85,6 +87,7 @@ contains
     integer, intent(inout) :: sort_freq(1:ni_sdm*nj_sdm*nk_sdm+1) ! number of super-droplets in each SD-grid
     integer, intent(inout) :: sort_tag(1:ni_sdm*nj_sdm*nk_sdm+2) ! accumulated number of super-droplets in each SD-grid
     integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
+    ! integer(DP), intent(inout) :: sd_id(1:sd_num) ! universal ID of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -159,6 +162,8 @@ contains
     integer(DP) :: sd_nmax  ! maximum multiplicity
     integer(DP) :: sd_n1    ! multiplicity of super-droplets with large multiplicity
     integer(DP) :: sd_n2    ! multiplicity of super-droplets  with small multiplicity
+    ! integer(DP) :: sd_id1   ! universal ID of super-droplets with large multiplicity
+    ! integer(DP) :: sd_id2   ! universal ID of super-droplets  with small multiplicity
     integer(i2) :: sd_li1, sd_li2
 
     integer, allocatable :: fsort_tag(:) ! buffer for sorting
@@ -930,11 +935,13 @@ contains
              sd_rk1 = sd_rk( icptc )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptc )
+             ! sd_id1 = sd_id( icptc )
 
              sd_n2  = sd_n( icptp )
              sd_r2  = sd_r( icptp )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptp )
+             ! sd_id2 = sd_id( icptp )
 
              do k=1,22
                 s = idx_nasl(k)
@@ -949,11 +956,13 @@ contains
              sd_rk1 = sd_rk( icptp )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptp )
+             ! sd_id1 = sd_id( icptp )
 
              sd_n2  = sd_n( icptc )
              sd_r2  = sd_r( icptc )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptc )
+             ! sd_id2 = sd_id( icptc )
 
              do k=1,22
                 s = idx_nasl(k)

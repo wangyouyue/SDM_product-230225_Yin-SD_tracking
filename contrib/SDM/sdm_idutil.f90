@@ -17,7 +17,7 @@
 !! @li      2020-07-23 (S.Shima) [add] sdm_copy_selected_sd for sdm_dmpvar == 1?? and sdm_dmpvar == 2??
 !! @li      2020-07-24 (S.Shima) [add] 'all', 'large', and 'selected' options to sdm_copy_selected_sd 
 !! @li      2020-07-30 (S.Shima) [fix] sdm_copy_selected_sd 
-!! @li      2020-10-30 (S.Shima) [fix] sdm_copy_selected_sd 
+!! @li      2020-10-30 (S.Shima) [fix] sdm_copy_selected_sd
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -185,11 +185,11 @@ contains
     return
   end subroutine sdm_sort
   !---------------------------------------------------------------------------------------------------------------------------------
-  subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,    sd_ri,    sd_rj,    sd_rk,     &
-       &                          sd_liqice,    sd_asl,    sd_r,    sdi,                                             &
-       &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
-       &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,                                         &
-       &                          TEMP0,ilist,sdtype)
+subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,    sd_ri,    sd_rj,    sd_rk,     &
+     &                          sd_liqice,    sd_asl,    sd_r,    sdi,     sd_id,                                   &
+     &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
+     &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,                              &
+     &                          TEMP0,ilist,sdtype)
     use scale_process, only: &
          & PRC_MPIstop
     use scale_grid_index, only: &
@@ -203,6 +203,7 @@ contains
     integer,  intent(in)  :: sd_num      ! number of super-droplets
     integer,  intent(in)  :: sd_numasl   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
+    integer(DP), intent(in) :: sd_id(1:sd_num) ! ID of super-droplets
     real(RP), intent(in)  :: sd_x(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(in)  :: sd_y(1:sd_num) ! y-coordinate of super-droplets
     real(RP), intent(inout) :: sd_ri(1:sd_num)   ! index[i/real] of super-droplets
@@ -219,6 +220,7 @@ contains
     integer,  intent(out) :: sd_num_tmp  ! number of super-droplets
     integer,  intent(out)  :: sd_numasl_tmp   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(out) :: sd_n_tmp(1:sd_num) ! multiplicity of super-droplets
+    integer(DP), intent(out) :: sd_id_tmp(1:sd_num) ! ID of super-droplets
     real(RP), intent(out)  :: sd_x_tmp(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(out)  :: sd_y_tmp(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(out) :: sd_ri_tmp(1:sd_num)   ! index[i/real] of super-droplets
@@ -415,6 +417,7 @@ contains
           sd_rk_tmp(m)     = sd_rk(n)
           sd_liqice_tmp(m) = sd_liqice(n)
           sd_r_tmp(m)      = sd_r(n)
+          sd_id_tmp(m)    = sd_id(n)
 
        end do
        end do
