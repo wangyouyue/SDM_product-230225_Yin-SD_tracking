@@ -541,7 +541,7 @@ contains
              sbuf_r8(m,7,2) = sd_r(n)
 
              sbuf_i8(m,1,2) = sd_n(n)
-             sbuf_i8(m,2,1) = sd_id(n)
+             sbuf_i8(m,2,2) = sd_id(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
           end do
 
@@ -1272,7 +1272,7 @@ contains
              sbuf_r8(m,7,2) = sd_r(n)
 
              sbuf_i8(m,1,2) = sd_n(n)
-             sbuf_i8(m,2,1) = sd_id(n)
+             sbuf_i8(m,2,2) = sd_id(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
           end do
 
