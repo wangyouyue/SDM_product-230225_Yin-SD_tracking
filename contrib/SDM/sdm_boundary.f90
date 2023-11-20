@@ -1695,7 +1695,7 @@ contains
              sd_r(n)    = rbuf_r8(m,7,1)
 
              sd_n(n)      = rbuf_i8(m,1,1)
-             sd_id(n)     = rbuf_i8(m,2,2)
+             sd_id(n)     = rbuf_i8(m,2,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
           end do
 
