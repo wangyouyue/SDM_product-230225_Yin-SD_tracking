@@ -151,11 +151,12 @@ contains
     sdnum_s2c = nint(sdininum_s2c) + bufsiz1
 
     bufsiz2_r8 = 7 + sdnumasl_s2c    !! x,y,rk,u,v,wc(vz),r,asl
-    bufsiz2_i8 = 2                   !! n,ID
+    bufsiz2_i8 = 1                   !! n,ID
     bufsiz2_i2 = 1                   !! liqice
-    bufsiz2_i4 = 1                   !! nmono (cold)
+    bufsiz2_i4 = 2                   !! save and domain index
 
     if( sdm_cold ) then
+       bufsiz2_i4 = 3                !! nmono (cold), save and domain index
        bufsiz2_r8 = bufsiz2_r8 + 5   !! re,ro,rho,tf,mrime
     end if
 

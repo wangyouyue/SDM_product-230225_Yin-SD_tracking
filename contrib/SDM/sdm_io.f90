@@ -21,7 +21,7 @@
 !! @li      2020-07-17 (S.Shima) [add] sdm_outnetcdf_hist
 !! @li      2020-07-23 (S.Shima) [mod] sdm_outnetcdf and sdm_outnetcdf_hist for sdm_dmpvar == 1?? and sdm_dmpvar == 2?? 
 !! @li      2020-10-30 (S.Shima) [fix] sdm_outnetcdf and sdm_outnetcdf_hist for sdm_dmpvar == 1?? and sdm_dmpvar == 2??
-!! @li      2023-03-01 (C.Yin)   [add] output the universal ID of Super-droplets
+!! @li      2023-03-01 (C.Yin)   [add] output the index of Super-droplets
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -32,7 +32,7 @@ module m_sdm_io
   public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist
 
 contains
-  subroutine sdm_outasci(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,sd_id,sdn_dmpnskip)
+  subroutine sdm_outasci(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,sdn_dmpnskip)
     use scale_precision
     use scale_stdio
     use scale_time
@@ -48,7 +48,8 @@ contains
     integer, intent(in) :: sd_num    ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of chemical species contained in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer(DP), intent(in) :: sd_id(1:sd_num) ! ID of super-droplets
+    integer(i4), intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
+    integer(i4), intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
     integer(kind=i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -95,9 +96,9 @@ contains
        write(fid_sdm_o,'(3a,i2.2,2a)') '# x[m],y[m],z[m],vz[m],',       &
             &                'radius(droplet)[m],',                        &
             &                'mass_of_aerosol_in_droplet(1:',sd_numasl,')[g],',&
-            &                'multiplicity[-],status[-],index,ID'
+            &                'multiplicity[-],status[-],index,previous index,previous domain'
 
-       write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10,i20)" )')(sd_numasl+6)
+       write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10)" )')(sd_numasl+5)
 
        do m=1,sd_num,sdn_dmpnskip
 
@@ -107,7 +108,9 @@ contains
                &                   sd_y(m),           &
                &                   sd_z(m), sd_vz(m), sd_r(m),        &
                &                   (sd_asl(m,n),n=1,sd_numasl),       &
-               &                   sd_n(m), cstat, m, sd_id(m)
+               &                   sd_n(m), cstat, m, pre_sdid(m), pre_dmid(m)
+          pre_sdid(m) = m
+          pre_dmid(m) = mype
        end do
 
     else
@@ -119,10 +122,11 @@ contains
             &            'density(droplet/ice)[kg/m3],',                       &
 !            &            'temperature[K],',                                    &
             &            'freezing_temp.(ice)[deg],',                          &
-            &            'multiplicity[-],status[-],index,rime_mass[kg],num_of_monomers[-],ID'
+            &            'multiplicity[-],status[-],index,rime_mass[kg],num_of_monomers[-],', &
+            &            'previous index,previous domain'
 
 !       write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10)" )')(sd_numasl+10)
-       write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10,e16.8,i10,i20)" )')(sd_numasl+10)
+       write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10,e16.8,i10)" )')(sd_numasl+9)
 
        do m=1,sd_num,sdn_dmpnskip
 
@@ -141,7 +145,10 @@ contains
                &                   sdi%re(m), sdi%rp(m), sdi%rho(m),  &
 !               &                   sdi%t(m), sdi%tf(m),               &
                &                   sdi%tf(m),               &
-               &                   sd_n(m), cstat, m, sdi%mrime(m), sdi%nmono(m), sd_id(m)
+               &                   sd_n(m), cstat, m, sdi%mrime(m), sdi%nmono(m), &
+               &                   pre_sdid(m), pre_dmid(m)
+               pre_sdid(m) = m
+               pre_dmid(m) = mype
        end do
 
 
@@ -154,7 +161,7 @@ contains
 
   end subroutine sdm_outasci
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,sd_id,sdn_dmpnskip,filetag)
+  subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,sdn_dmpnskip,filetag)
     use netcdf
     use scale_precision
     use scale_stdio
@@ -170,7 +177,8 @@ contains
     integer, intent(in) :: sd_num    ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of chemical species contained in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer(DP), intent(in) :: sd_id(1:sd_num) ! ID of super-droplets
+    integer(i4), intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
+    integer(i4), intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
     integer(kind=i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -195,7 +203,7 @@ contains
     character(len=5)  :: cstat   ! status character
     integer :: nf90_real_precision
     integer :: ncid, sd_num_id, sd_numasl_id
-    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id
+    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id
     integer :: sdi_re_id, sdi_rp_id, sdi_rho_id, sdi_tf_id, sdi_mrime_id, sdi_nmono_id
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
@@ -283,12 +291,18 @@ contains
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'long_name', 'status of droplets: 01=liquid, 10=ice, 11=mixture') )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'units', '') )
-    !!! sd_id
-    call check_netcdf( nf90_def_var(ncid, "sd_id", NF90_INT64, sd_num_id, sd_id_id) )
+    !!! pre_sdid
+    call check_netcdf( nf90_def_var(ncid, "pre_sdid", NF90_INT, sd_num_id, sd_id_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, sd_id_id, &
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'universal ID') )
+    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'previous index') )
     call check_netcdf( nf90_put_att(ncid, sd_id_id, 'units', '') )
+    !!! pre_dmid
+    call check_netcdf( nf90_def_var(ncid, "pre_dmid", NF90_INT, sd_num_id, domain_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, domain_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
+    call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
 
     if( sdm_cold ) then
        !!! sdi%re
@@ -350,8 +364,10 @@ contains
     call check_netcdf( nf90_put_var(ncid, sd_n_id, sd_n) )
     !!! sd_liqice
     call check_netcdf( nf90_put_var(ncid, sd_liqice_id, sd_liqice) )
-    !!! sd_id
-    call check_netcdf( nf90_put_var(ncid, sd_id_id, sd_id) )
+    !!! pre_sdid
+    call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid) )
+    !!! pre_dmid
+    call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid) )
 
     if( sdm_cold ) then
        !!! sdi_re
@@ -373,11 +389,16 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF) of Super Droplet'
 
+    do n=1,sdnum_s2c
+       pre_sdid(n) = n
+       pre_dmid(n) = mype
+    end do
+
     return
 
   end subroutine sdm_outnetcdf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_outnetcdf_hist(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,sd_id,sdn_dmpnskip,filetag)
+  subroutine sdm_outnetcdf_hist(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,sdn_dmpnskip,filetag)
     use netcdf
     use scale_precision
     use scale_stdio
@@ -394,7 +415,8 @@ contains
     integer, intent(in) :: sd_num    ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of chemical species contained in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer(DP), intent(in) :: sd_id(1:sd_num) ! ID of super-droplets
+    integer(i4), intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
+    integer(i4), intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
     integer(kind=i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -420,7 +442,7 @@ contains
     character(len=5)  :: cstat   ! status character
     integer :: nf90_real_precision
     integer :: ncid, sd_num_id, sd_numasl_id
-    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id
+    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id
     integer :: sdi_re_id, sdi_rp_id, sdi_rho_id, sdi_tf_id, sdi_mrime_id, sdi_nmono_id
     integer :: sd_dmp_time_idx_id, sd_dmp_time_id
 
@@ -580,14 +602,18 @@ contains
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'long_name', 'status of droplets: 01=liquid, 10=ice, 11=mixture') )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'units', '') )
-    !!! sd_id
-    write(var_name,fmt='(A,I0.4)') "sd_id_", time_count(fileid)
-    var_name = trim(var_name)
-    call check_netcdf( nf90_def_var(ncid, var_name, NF90_INT64, sd_num_id, sd_id_id) )
+    !!! pre_sdid
+    call check_netcdf( nf90_def_var(ncid, "pre_sdid", NF90_INT, sd_num_id, sd_id_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, sd_id_id, &
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'universal ID') )
+    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'previous index') )
     call check_netcdf( nf90_put_att(ncid, sd_id_id, 'units', '') )
+    !!! pre_dmid
+    call check_netcdf( nf90_def_var(ncid, "pre_dmid", NF90_INT, sd_num_id, domain_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, domain_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
+    call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
 
     if( sdm_cold ) then
        !!! sdi%re
@@ -664,8 +690,10 @@ contains
     call check_netcdf( nf90_put_var(ncid, sd_n_id, sd_n) )
     !!! sd_liqice
     call check_netcdf( nf90_put_var(ncid, sd_liqice_id, sd_liqice) )
-    !!! sd_id
-    call check_netcdf( nf90_put_var(ncid, sd_id_id, sd_id) )
+    !!! pre_sdid
+    call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid) )
+    !!! pre_dmid
+    call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid) )
 
     if( sdm_cold ) then
        !!! sdi_re
@@ -686,6 +714,11 @@ contains
     call check_netcdf( nf90_close(ncid) )
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF_HIST) of Super Droplet'
+
+    do n=1,sdnum_s2c
+       pre_sdid(n) = n
+       pre_dmid(n) = mype
+    end do
 
     return
 

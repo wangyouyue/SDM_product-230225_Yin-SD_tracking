@@ -41,7 +41,7 @@
 !! @li      2019-07-01 (S.Shima) [mod] definition of namelist PARAM_ATMOS_PHY_MP_SDM
 !! @li      2019-10-07 (S.Shima) [add] aslset=5 for DYCOMSII(RF02) (Ackerman et al. 2009)
 !! @li      2020-07-23 (S.Shima) [add] variables for sdm_dmpvar == 1?? and sdm_dmpvar == 2??
-!! @li      2023-02-28 (C.Yin)   [mod] universal ID of super-droplets
+!! @li      2023-11-22 (C.Yin)   [mod] save and domain index of super-droplets
 !!
 !< 
 !-------------------------------------------------------------------------------
@@ -91,7 +91,8 @@ module m_sdm_common
   !
   !------------------------------------------------------------------------------
   integer(DP), allocatable, save :: sdn_s2c(:)   ! multipilicity
-  integer(DP), allocatable, save :: sdid_s2c(:)  ! ID
+  integer(i4), allocatable, save :: sdid_s2c(:)  ! save index
+  integer(i4), allocatable, save :: dmid_s2c(:)  ! domain index
   real(RP), allocatable, save :: sdri_s2c(:)     ! index-i(real) of s.d.
   real(RP), allocatable, save :: sdrj_s2c(:)     ! index-j(real) of s.d.
   real(RP), allocatable, save :: sdrk_s2c(:)     ! index-k(real) of s.d.
@@ -107,7 +108,8 @@ module m_sdm_common
   real(RP), allocatable, save :: sdrku_s2c(:,:)  ! index-k(real) at 'sdm_upper'
   ! SDM for aerosol formation
   integer(DP), allocatable, save :: sdn_fm(:)    ! multiplicity of super-droplets
-  integer(DP), allocatable, save :: sdid_fm(:)   ! ID of super-droplets
+  integer(i4), allocatable, save :: sdid_fm(:)   ! save index of super-droplets
+  integer(i4), allocatable, save :: dmid_fm(:)   ! domain index of super-droplets
   real(RP), allocatable, save :: sdri_fm(:)      ! index-i(real) of super-droplets
   real(RP), allocatable, save :: sdrj_fm(:)      ! index-j(real) of super-droplets
   real(RP), allocatable, save :: sdrk_fm(:)      ! index-k(real) of super-droplets
@@ -140,11 +142,11 @@ module m_sdm_common
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer(DP), allocatable :: rbuf_i8(:,:,:)
                        ! reciving buffer for MPI (int8)
-                       ! dim02 = 2 (multiplicity and ID of super-droplets)
+                       ! dim02 = 1 (multiplicity of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer(DP), allocatable :: sbuf_i8(:,:,:)
                        ! sending buffer for MPI (int8)
-                       ! dim02 = 2 (multiplicity and ID of super-droplets)
+                       ! dim02 = 1 (multiplicity of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer(i2), allocatable :: rbuf_i2(:,:,:)
                        ! reciving buffer for MPI (int2)
@@ -156,11 +158,11 @@ module m_sdm_common
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable :: rbuf_i4(:,:,:)
                        ! reciving buffer for MPI (int4)
-                       ! dim02 = 1 number of monomers (ice)
+                       ! dim02 = 2/3 number of monomers (ice), save and domain index
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable :: sbuf_i4(:,:,:)
                        ! sending buffer for MPI (int4)
-                       ! dim02 = 1 number of monomers
+                       ! dim02 = 2/3 number of monomers, save and domain index
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable, save :: sdm_itmp1(:)
   integer, allocatable, save :: sdm_itmp2(:)
@@ -169,8 +171,9 @@ module m_sdm_common
   integer, allocatable, save :: sd_itmp2(:)
   integer, allocatable, save :: sd_itmp3(:)
   integer(i2), allocatable, target :: sd_i2tmp1(:)
+  integer(i4), allocatable, target :: sd_i4tmp1(:)
+  integer(i4), allocatable, target :: sd_i4tmp2(:)
   integer(DP), allocatable, target :: sd_i8tmp1(:)
-  integer(DP), allocatable, target :: sd_i8tmp2(:)
   real(RP), allocatable, target, save :: sd_dtmp1(:)
   real(RP), allocatable, target, save :: sd_dtmp2(:)
   real(RP), allocatable, target, save :: sd_dtmp3(:)
@@ -209,7 +212,8 @@ module m_sdm_common
 
   !! These working arrays are needed due to the scale restart output timimg. Could be removed in the future scale version.  
   integer(DP), allocatable, save :: sdn_s2c_restart(:)      ! multipilicity
-  integer(DP), allocatable, save :: sdid_s2c_restart(:)     ! ID
+  integer(i4), allocatable, save :: sdid_s2c_restart(:)     ! save index
+  integer(i4), allocatable, save :: dmid_s2c_restart(:)     ! domain index
   real(RP), allocatable, save    :: sdrk_s2c_restart(:)     ! index-k(real) of s.d.
   real(RP), allocatable, save    :: sdx_s2c_restart(:)      ! x-cordinate of s.d.
   real(RP), allocatable, save    :: sdy_s2c_restart(:)      ! y-cordinate of s.d.
@@ -276,6 +280,7 @@ module m_sdm_common
   real(RP), parameter :: INVALID = -999.999_RP ! value indicated as invalid super-droplets
   integer(DP), parameter :: INVALID_i8 = -999_DP ! value indicated as invalid super-droplets
   integer(i2), parameter :: INVALID_i2 = -999_i2 ! value indicated as invalid super-droplets
+  integer(i4), parameter :: INVALID_i4 = -999_i4 ! value indicated as invalid super-droplets
 
   !------------------------------------------------------------------------------
   !

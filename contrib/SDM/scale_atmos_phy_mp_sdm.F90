@@ -117,8 +117,8 @@
 !! @li      2020-07-23 (S.Shima) [add] sdm_dmpvar == 1?? and sdm_dmpvar == 2??
 !! @li      2020-07-27 (S.Shima) [mod] History output of SNC (SD number density). Data is updated only at the time it will be saved
 !! @li      2020-07-28 (S.Shima) [add] History output of the density of droplet moments
-!! @li      2023-02-25 (C.Yin)   [add] Universal ID of super-droplet (sd_id)
-!<  
+!! @li      2023-11-22 (C.Yin)   [add] previous MPI process number (pre_dmid) and save index of super-droplet (pre_sdid)
+!<
 !-------------------------------------------------------------------------------
 #include "macro_thermodyn.h"
 module scale_atmos_phy_mp_sdm
@@ -821,7 +821,7 @@ contains
     real(RP), pointer :: sdasl_tmp(:,:)
     integer(i2), pointer :: sdliqice_tmp(:)
     integer(DP), pointer :: sdn_tmp(:)
-    integer(DP), pointer :: sdid_tmp(:)
+    integer(i4), pointer :: sdid_tmp(:), dmid_tmp(:)
     type(sdicedef), pointer :: sdice_tmp
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
@@ -870,7 +870,7 @@ contains
                       sdasl_s2c, sdx_s2c, sdy_s2c,        &
                       sdz_s2c, sdr_s2c,                   &
                       sdrk_s2c, sdvz_s2c,                 &
-                      sdrkl_s2c, sdrku_s2c, sdid_s2c      )
+                      sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c  )
          prr_crs(1:IA,1:JA,1:6)=0.0_RP
       end if
     endif
@@ -889,6 +889,7 @@ contains
        sdvz_s2c_restart(:) = sdvz_s2c(:)
        sdasl_s2c_restart(:,:) = sdasl_s2c(:,:)
        sdid_s2c_restart(:) = sdid_s2c(:)
+       dmid_s2c_restart(:) = dmid_s2c(:)
        rng_s2c_restart = rng_s2c
        sdliqice_s2c_restart(:) = sdliqice_s2c(:)
        if( sdm_cold ) then
@@ -942,7 +943,7 @@ contains
        call sdm_outasci(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c, &
+                        sdice_s2c,sdid_s2c,dmid_s2c, &
                         sdm_dmpnskip)
     end if
 
@@ -969,13 +970,13 @@ contains
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c, &
+                        sdice_s2c,sdid_s2c,dmid_s2c, &
                         sdm_dmpnskip,filetag='all')
        else if( (mod(sdm_dmpvar,100))/10==2) then
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c, &
+                        sdice_s2c,sdid_s2c,dmid_s2c, &
                         sdm_dmpnskip,filetag='all')
        end if
     end if
@@ -997,14 +998,15 @@ contains
        sdice_tmp=> sd_icetmp1
        sdn_tmp  => sd_i8tmp1
        sdasl_tmp=> sd_asltmp1
-       sdid_tmp => sd_i8tmp2
+       sdid_tmp => sd_i4tmp1
+       dmid_tmp => sd_i4tmp2
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,                                  &
+            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                                  &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,                                  &
-            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated' 
+            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                                  &
+            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        !! Evaluate diagnostic variables
        !!! z
@@ -1026,13 +1028,13 @@ contains
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_tmp,sdnumasl_tmp,                    &
                         sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp, &
+                        sdice_tmp,sdid_tmp,dmid_tmp, &
                         sdm_dmpnskip,filetag='selected')
        else if( (mod(sdm_dmpvar,1000))/100==2) then
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                         sdnum_tmp,sdnumasl_tmp,                    &
                         sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp, &
+                        sdice_tmp,sdid_tmp,dmid_tmp, &
                         sdm_dmpnskip,filetag='selected')
        end if
 
@@ -1049,12 +1051,14 @@ contains
        nullify(sdn_tmp)
        nullify(sdasl_tmp)
        nullify(sdid_tmp)
+       nullify(dmid_tmp)
     end if
 
 #ifdef _FAPP_
     ! Section specification for fapp profiler
     call fapp_stop("sdm_out",0,0)
 #endif
+
     !== run SDM at future ==!
      call sdm_calc(MOMX,MOMY,MOMZ,DENS,RHOT,QTRC,                 & 
                    sdm_calvar,sdm_mvexchg,sdm_dtcmph, sdm_aslset,  &
@@ -1062,8 +1066,8 @@ contains
                    lsdmup,ni_s2c,nj_s2c,nk_s2c,                   &
                    sdnum_s2c,sdnumasl_s2c,                        &
                    sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,    &
-                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,sdice_s2c,    &
-                   sdrkl_s2c,sdrku_s2c,                        &
+                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,    &
+                   sdice_s2c,sdrkl_s2c,sdrku_s2c,                        &
                    rng_s2c,rand_s2c,sortid_s2c,sortkey_s2c,       &
                    sortfreq_s2c,sorttag_s2c,                      &
                    bufsiz1,                                       &
@@ -1137,9 +1141,9 @@ contains
 !!$                         ptpf_crs,qvf_crs,zph_crs,rhod_crs,          &
 !!$                         sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdliqice_s2c,sdx_s2c,     &
 !!$                         sdy_s2c,sdz_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdu_s2c,           &
-!!$                         sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,       &
+!!$                         sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,       &
 !!$                         sdfmnum_s2c,sdn_fm,sdx_fm,sdy_fm,sdz_fm,    &
-!!$                         sdri_fm,sdrj_fm,sdrk_fm,sdvz_fm,sdr_fm,sdasl_fm,sdid_fm,       &
+!!$                         sdri_fm,sdrj_fm,sdrk_fm,sdvz_fm,sdr_fm,sdasl_fm,sdid_fm,dmid_fm,       &
 !!$                         ni_s2c,nj_s2c,nk_s2c,                       &
 !!$                         sortid_s2c,sortkey_s2c,sortfreq_s2c,        &
 !!$                         sorttag_s2c,rng_s2c,                        &
@@ -1162,7 +1166,7 @@ contains
 !!$       call sdm_adjsdnum(sdm_nadjvar,ni_s2c,nj_s2c,nk_s2c,          &
 !!$                         sdnum_s2c,sdnumasl_s2c,sd_nc,              &
 !!$                         sdn_s2c,sdx_s2c,sdy_s2c,sdr_s2c,           &
-!!$                         sdasl_s2c,sdid_s2c,sdvz_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,               &
+!!$                         sdasl_s2c,sdid_s2c,dmid_s2c,sdvz_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,               &
 !!$                         sortid_s2c,sortkey_s2c,sortfreq_s2c,       &
 !!$                         sorttag_s2c,rng_s2c,rand_s2c,                &
 !!$!                         sorttag_s2c,rand_s2c,                      &
@@ -1275,14 +1279,15 @@ contains
        sdice_tmp=> sd_icetmp1
        sdn_tmp  => sd_i8tmp1
        sdasl_tmp=> sd_asltmp1
-       sdid_tmp => sd_i8tmp2
+       sdid_tmp => sd_i4tmp1
+       dmid_tmp => sd_i4tmp2
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,                                  &
+            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                                  &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,                                  &
-            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated' 
+            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                                  &
+            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        if( do_puthist_0 )then
           order_n = 0
@@ -1329,6 +1334,7 @@ contains
        nullify(sdn_tmp)
        nullify(sdasl_tmp)
        nullify(sdid_tmp)
+       nullify(dmid_tmp)
     endif
 
 #ifdef _FIPP_
@@ -1356,7 +1362,7 @@ contains
                          sdasl_s2c, sdx_s2c, sdy_s2c,        &
                          sdz_s2c, sdr_s2c,                   &
                          sdrk_s2c, sdvz_s2c,                 &
-                         sdrkl_s2c, sdrku_s2c, sdid_s2c      )
+                         sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c  )
   !***********************************************************************
   ! Input variables
       use scale_const, only: &
@@ -1382,7 +1388,6 @@ contains
            sdm_condevp
       use m_sdm_meltfreeze, only: &
            sdm_meltfreeze
-      use mpi
 
       real(RP), intent(in) :: DENS(KA,IA,JA) ! Density     [kg/m3]
       real(RP), intent(in) :: RHOT(KA,IA,JA) ! DENS * POTT [K*kg/m3]
@@ -1408,7 +1413,8 @@ contains
       real(RP),intent(inout) :: sdvz_s2c(1:sdnum_s2c)
       real(RP),intent(inout) :: sdrkl_s2c(IA,JA)
       real(RP),intent(inout) :: sdrku_s2c(IA,JA)
-      integer(DP),intent(inout) :: sdid_s2c(1:sdnum_s2c)
+      integer(i4),intent(inout) :: sdid_s2c(1:sdnum_s2c)
+      integer(i4),intent(inout) :: dmid_s2c(1:sdnum_s2c)
       ! Work variables
       real(RP) :: n0                            ! number of real droplets per unit volume and per aerosol radius
       real(RP) :: dry_r                         ! aerosol radius
@@ -1416,8 +1422,6 @@ contains
       logical :: lsdmup                         ! flag for updating water hydrometeor by SDM
       integer :: iexced, sdnum_tmp1, sdnum_tmp2 ! temporary
       integer :: i, j, k, n, iq, np             ! index
-      integer :: ierr     ! Error descriptor
-      integer :: rank_id  ! ID of MPI rank
       real(RP) :: crs_dtmp1(KA,IA,JA), crs_dtmp2(KA,IA,JA), crs_dtmp3(KA,IA,JA)
       integer :: sd_str, sd_end, sd_valid
 
@@ -1577,10 +1581,10 @@ contains
       if( sdm_cold ) then
          call gen_rand_array( rng_s2c, sdice_s2c%tf )
       end if
-      ! Initialize ID of super-droplets
-      call mpi_comm_rank( mpi_comm_world, rank_id, ierr )
+      ! Initialize index and domain ID of super-droplets
       do n=1,sdnum_s2c
-         sdid_s2c(n) = n + rank_id  * sdnum_s2c
+         sdid_s2c(n) = INVALID_i4
+         dmid_s2c(n) = INVALID_i4
       end do
 
       ! Initialized all super-droplets as water droplet.
@@ -1945,7 +1949,7 @@ contains
                       prec_crs,zph_crs,   &
                       lsdmup,ni_sdm,nj_sdm,nk_sdm,                &
                       sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_ri,sd_rj,sd_rk,      &
-                      sd_u,sd_v,sd_vz,sd_r,sd_asl,sd_id,sdi,sd_rkl,sd_rku,  &
+                      sd_u,sd_v,sd_vz,sd_r,sd_asl,pre_sdid,pre_dmid,sdi,sd_rkl,sd_rku,  &
                       sd_rng,sd_rand,sort_id,sort_key,sort_freq,  &
                       sort_tag,                                   &
                       bufsiz1,                                    & 
@@ -2012,7 +2016,8 @@ contains
    integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
    ! Input and output variables
    integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
-   integer(DP), intent(inout) :: sd_id(1:sd_num)   ! universal ID of super-droplets
+   integer(i4), intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
+   integer(i4), intent(inout) :: pre_dmid(1:sd_num)   ! domain id of super-droplets
    integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -2055,12 +2060,12 @@ contains
     integer(DP), intent(inout) ::                                &
          &                             rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! reciving buffer for MPI (int8)
-                       ! dim02 = 2 (multiplicity and ID of super-droplets)
+                       ! dim02 = 1 (multiplicity of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer(DP), intent(inout) ::                                &
          &                             sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! sending buffer for MPI (int8)
-                       ! dim02 = 2 (multiplicity and ID of super-droplets)
+                       ! dim02 = 1 (multiplicity of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer(i2), intent(inout) ::                                &
          &                             rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -2073,16 +2078,16 @@ contains
                        ! dim02 = 1 (status(liq/ice) of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer, intent(inout) ::                                &
-         &                             rbuf_i4(1:,1:,1:)
-                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2) 
+         &                             rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2)
                        ! reciving buffer for MPI (int4)
-                       ! dim02 = 1 (sdi_nmono of super-droplets)
+                       ! dim02 = 2/3 (sdi_nmono of super-droplets, domain and save index)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer, intent(inout) ::                                &
-         &                             sbuf_i4(1:,1:,1:)
-                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2) 
+         &                             sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2)
                        ! sending buffer for MPI (int4)
-                       ! dim02 = 1 (sdi_nmono of super-droplets)
+                       ! dim02 = 2/3 (sdi_nmono of super-droplets, domain and save index)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
    ! Output variables
    logical, intent(out) :: lsdmup  ! flag for updating water hydrometeor by SDM
@@ -2252,7 +2257,7 @@ contains
             !! do MPI communication to send/receiv SDs
             call sdm_boundary(wbc,ebc,sbc,nbc,                           &
                              sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,     &
-                             sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,               &
+                             sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,pre_sdid,pre_dmid,               &
                              bufsiz1,                                    &
                              bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                              sd_itmp1,                              &
@@ -2459,7 +2464,6 @@ contains
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
                             sdi,                                        &
-                            ! sd_id,                                  &
                             sort_id,sort_key,sort_freq,sort_tag,        &
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
@@ -2485,7 +2489,6 @@ contains
                             zph_crs,                                    &
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
-                            ! sd_id,                                       &
                             sort_id,sort_key,sort_freq,sort_tag,        &
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
@@ -2714,8 +2717,8 @@ contains
                          pbr_crs,ptbr_crs,pp_crs,         &
                          ptp_crs,qv_crs,zph_crs,rhod_crs,         &
                          sd_num,sd_numasl,sd_n,sd_x,sd_y,sd_z,    &
-                         sd_ri,sd_rj,sd_rk,sd_u,sd_v,sd_vz,sd_r,sd_asl,sd_id,   &
-                         sd_fmnum,sd_fmn,sd_fmliqice,sd_fmx,sd_fmy,sd_fmz,    &
+                         sd_ri,sd_rj,sd_rk,sd_u,sd_v,sd_vz,sd_r,sd_asl,pre_sdid,   &
+                         pre_dmid,sd_fmnum,sd_fmn,sd_fmliqice,sd_fmx,sd_fmy,sd_fmz,    &
                          sd_fmri,sd_fmrj,sd_fmrk,sd_fmvz,sd_fmr,sd_fmasl,sd_fmid,         &
                          ni_sdm,nj_sdm,nk_sdm,sort_id,sort_key,   &
                          sort_freq,sort_tag,sd_rng,               &
@@ -2735,6 +2738,8 @@ contains
          sdm_sort
     use m_sdm_condensation_water, only: &
         sdm_condevp
+    use scale_process, only:  &
+        mype => PRC_myrank
       ! Input variables
     real(RP), intent(in) :: DENS(KA,IA,JA)        !! Density [kg/m3]
     real(RP), intent(in) :: RHOT(KA,IA,JA)        !! DENS * POTT [K*kg/m3]
@@ -2762,7 +2767,8 @@ contains
       integer, intent(in) :: sd_fmnum ! number of super-droplets at aerosol formation
       ! Input and output variables
       integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
-      integer(DP), intent(inout) :: sd_id(1:sd_num)  ! universal ID of super-droplets
+      integer(i4), intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
+      integer(i4), intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_x(1:sd_num)      ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)      ! y-coordinate of super-droplets
       real(RP), intent(inout) :: sd_z(1:sd_num)      ! z-coordinate of super-droplets
@@ -2775,7 +2781,7 @@ contains
       real(RP), intent(inout) :: sd_r(1:sd_num)      ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
       integer(DP), intent(inout) :: sd_fmn(1:sd_fmnum) ! multiplicity of super-droplets at aerosol formation
-      integer(DP), intent(inout) :: sd_fmid(1:sd_fmnum) ! ID of super-droplets at aerosol formation
+      integer(i2), intent(inout) :: sd_fmid(1:sd_fmnum) ! ID of super-droplets at aerosol formation
       integer(i2), intent(inout) :: sd_fmliqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -2883,7 +2889,7 @@ contains
                    * real(sdm_zupper-(minzph+sdm_zlower),kind=RP)
 
          sd_fmr(n) = 1.0E-15_RP
-         sd_fmid(n) = sd_id(sd_num) + n
+         sd_fmid(n) = -1 * n ! negative index for new formation SDs
       end do
 
       !### index[k/real] of super-droplets ###!
@@ -2948,7 +2954,8 @@ contains
          sd_vz(id_invd) = sd_fmvz(n)
 
          sd_r(id_invd)  = sd_fmr(n)
-         sd_id(id_invd) = sd_fmid(n)
+         pre_sdid(id_invd) = sd_fmid(n)
+         pre_dmid(id_invd) = -1 * mype ! negative MPI process number for new formation SDs
       end do
 
       do k=1,sd_numasl
@@ -2969,7 +2976,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_adjsdnum(sdm_nadjvar,ni_sdm,nj_sdm,nk_sdm,    &
                           sd_num,sd_numasl,sd_nc,                 &
-                          sd_n,sd_x,sd_y,sd_r,sd_asl,sd_id,sd_vz,sd_ri,sd_rj,sd_rk, &
+                          sd_n,sd_x,sd_y,sd_r,sd_asl,pre_sdid,pre_dmid,sd_vz,sd_ri,sd_rj,sd_rk, &
                           sort_id,sort_key,sort_freq,sort_tag,    &
                           sd_rng,sd_rand,                         &
 !                          sd_rand,                                &
@@ -2994,7 +3001,8 @@ contains
       real(RP), intent(inout) :: sd_x(1:sd_num)  ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)  ! y-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
-      integer(DP), intent(inout) :: sd_id(1:sd_num)  ! universal ID of super-droplets
+      integer(i4), intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
+      integer(i4), intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
       real(RP), intent(inout) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
@@ -3037,7 +3045,7 @@ contains
 
          call sdm_sdadd(ni_sdm,nj_sdm,nk_sdm,                           &
                         sdnum_lwr,sd_num,sd_numasl,                     &
-                        sd_n,sd_x,sd_y,sd_r,sd_asl,sd_id,sd_vz,sd_ri,sd_rj,sd_rk,         &
+                        sd_n,sd_x,sd_y,sd_r,sd_asl,pre_sdid,pre_dmid,sd_vz,sd_ri,sd_rj,sd_rk,         &
                         sort_id,sort_key,sort_freq,sort_tag,            &
                         sd_rng,sd_rand,                                 &
 !                        sd_rand,                                        &
@@ -3224,8 +3232,8 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_sdadd(ni_sdm,nj_sdm,nk_sdm,                      &
                        sdnum_lwr,sd_num,sd_numasl,                &
-                       sd_n,sd_x,sd_y,sd_r,sd_asl,sd_id,sd_vz,sd_ri,sd_rj,sd_rk,    &
-                       sort_id,sort_key,sort_freq,sort_tag,       &
+                       sd_n,sd_x,sd_y,sd_r,sd_asl,pre_sdid,pre_dmid,sd_vz,sd_ri,sd_rj,    &
+                       sd_rk,sort_id,sort_key,sort_freq,sort_tag,       &
                        sd_rng,sd_rand,                            &
 !                       sd_rand,                                   &
                        sort_tag0,fsort_id,isd_perm)
@@ -3252,7 +3260,8 @@ contains
       real(RP), intent(inout) :: sd_x(1:sd_num)    ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)    ! y-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-      integer(DP), intent(inout) :: sd_id(1:sd_num)  ! universal ID of super-droplets
+      integer(i4), intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
+      integer(i4), intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)    ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
       real(RP), intent(inout) :: sd_vz(1:sd_num)   ! terminal velocity of super-droplets
@@ -3403,7 +3412,8 @@ contains
             sd_r(id_invd)  = sd_r(id_vd)
             sd_vz(id_invd) = sd_vz(id_vd)
             sd_rk(id_invd) = sd_rk(id_vd)
-            sd_id(id_invd) = sd_id(id_vd)
+            pre_sdid(id_invd) = pre_sdid(id_vd)
+            pre_dmid(id_invd) = pre_dmid(id_vd)
 
             do n=1,20
               sd_asl(id_invd,idx_nasl(n)) = sd_asl(id_vd,idx_nasl(n))
@@ -3771,6 +3781,7 @@ contains
     read(fid_sd_i) ((sdasl_s2c(n,m),n=1,sdnum_s2c),m=1,sdnumasl_s2c)
     read(fid_sd_i) (sdliqice_s2c(n),n=1,sdnum_s2c)
     read(fid_sd_i) (sdid_s2c(n),n=1,sdnum_s2c)
+    read(fid_sd_i) (dmid_s2c(n),n=1,sdnum_s2c)
     if( sdm_cold ) then
        read(fid_sd_i) (sdice_s2c%re(n),n=1,sdnum_s2c)
        read(fid_sd_i) (sdice_s2c%rp(n),n=1,sdnum_s2c)
@@ -3844,6 +3855,7 @@ contains
     write(fid_sd_o) ((sdasl_s2c_restart(n,m),n=1,sdnum_s2c),m=1,sdnumasl_s2c)
     write(fid_sd_o) (sdliqice_s2c_restart(n),n=1,sdnum_s2c)
     write(fid_sd_o) (sdid_s2c_restart(n),n=1,sdnum_s2c)
+    write(fid_sd_o) (dmid_s2c_restart(n),n=1,sdnum_s2c)
     if( sdm_cold ) then
        write(fid_sd_o) (sdice_s2c_restart%re(n),n=1,sdnum_s2c)
        write(fid_sd_o) (sdice_s2c_restart%rp(n),n=1,sdnum_s2c)
