@@ -389,7 +389,7 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF) of Super Droplet'
 
-    do n=1,sdnum_s2c
+    do n=1,sd_num
        pre_sdid(n) = n
        pre_dmid(n) = mype
     end do
@@ -715,7 +715,7 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF_HIST) of Super Droplet'
 
-    do n=1,sdnum_s2c
+    do n=1,sdnum
        pre_sdid(n) = n
        pre_dmid(n) = mype
     end do

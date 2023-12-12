@@ -598,7 +598,7 @@ contains
     use m_sdm_common, only: &
          nisub, &
          dstw_sub, dste_sub, srcw_sub, srce_sub, &
-         INVALID,INVALID_i8,INVALID_i2, &
+         INVALID,INVALID_i8,INVALID_i2,INVALID_i4, &
          tag,i2,sdm_cold
     ! Input variables
     integer, intent(in) :: wbc      ! Option for west boundary conditions
@@ -852,7 +852,7 @@ contains
     use scale_grid_index, only: &
          IS,IE
     use m_sdm_common, only: &
-         nisub,VALID2INVALID,VALID2INVALID_i8,i2,sdm_cold,sdicedef
+         nisub,VALID2INVALID,VALID2INVALID_i8,INVALID_i4,i2,sdm_cold,sdicedef
     ! Input variables
     integer, intent(in) :: wbc       ! Option for west boundary conditions
     integer, intent(in) :: ebc       ! Option for east boundaty conditions
@@ -1095,7 +1095,7 @@ contains
     use scale_grid_index, only: &
          JS,JE
     use m_sdm_common, only: &
-         njsub,INVALID,INVALID_i8,INVALID_i2,VALID2INVALID,i2,sdm_cold,sdicedef
+         njsub,INVALID,INVALID_i8,INVALID_i2,INVALID_i4,VALID2INVALID,i2,sdm_cold,sdicedef
     ! Input variables
     integer, intent(in) :: sbc   ! Option for west boundary conditions
     integer, intent(in) :: nbc   ! Option for east boundaty conditions
@@ -1333,7 +1333,7 @@ contains
     use m_sdm_common, only: &
          njsub, &
          dsts_sub, dstn_sub, srcs_sub, srcn_sub, &
-         INVALID,INVALID_i8,INVALID_i2, &
+         INVALID,INVALID_i8,INVALID_i2,INVALID_i4, &
          tag,i2,sdm_cold
 
     ! Input variables
