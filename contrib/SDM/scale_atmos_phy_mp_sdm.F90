@@ -821,7 +821,7 @@ contains
     real(RP), pointer :: sdasl_tmp(:,:)
     integer(i2), pointer :: sdliqice_tmp(:)
     integer(DP), pointer :: sdn_tmp(:)
-    integer(i4), pointer :: sdid_tmp(:), dmid_tmp(:)
+    integer, pointer :: sdid_tmp(:), dmid_tmp(:)
     type(sdicedef), pointer :: sdice_tmp
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
@@ -1413,8 +1413,8 @@ contains
       real(RP),intent(inout) :: sdvz_s2c(1:sdnum_s2c)
       real(RP),intent(inout) :: sdrkl_s2c(IA,JA)
       real(RP),intent(inout) :: sdrku_s2c(IA,JA)
-      integer(i4),intent(inout) :: sdid_s2c(1:sdnum_s2c)
-      integer(i4),intent(inout) :: dmid_s2c(1:sdnum_s2c)
+      integer,intent(inout) :: sdid_s2c(1:sdnum_s2c)
+      integer,intent(inout) :: dmid_s2c(1:sdnum_s2c)
       ! Work variables
       real(RP) :: n0                            ! number of real droplets per unit volume and per aerosol radius
       real(RP) :: dry_r                         ! aerosol radius
@@ -2016,8 +2016,8 @@ contains
    integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
    ! Input and output variables
    integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
-   integer(i4), intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-   integer(i4), intent(inout) :: pre_dmid(1:sd_num)   ! domain id of super-droplets
+   integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
+   integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain id of super-droplets
    integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -2767,8 +2767,8 @@ contains
       integer, intent(in) :: sd_fmnum ! number of super-droplets at aerosol formation
       ! Input and output variables
       integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
-      integer(i4), intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
-      integer(i4), intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
+      integer, intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
+      integer, intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_x(1:sd_num)      ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)      ! y-coordinate of super-droplets
       real(RP), intent(inout) :: sd_z(1:sd_num)      ! z-coordinate of super-droplets
@@ -3001,8 +3001,8 @@ contains
       real(RP), intent(inout) :: sd_x(1:sd_num)  ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)  ! y-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
-      integer(i4), intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
-      integer(i4), intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
+      integer, intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
+      integer, intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
       real(RP), intent(inout) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
@@ -3260,8 +3260,8 @@ contains
       real(RP), intent(inout) :: sd_x(1:sd_num)    ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)    ! y-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-      integer(i4), intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
-      integer(i4), intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
+      integer, intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
+      integer, intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)    ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
       real(RP), intent(inout) :: sd_vz(1:sd_num)   ! terminal velocity of super-droplets

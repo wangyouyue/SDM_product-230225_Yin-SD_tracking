@@ -184,8 +184,8 @@ contains
     integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
     ! Input and output variables
     integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
-    integer(i4), intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer(i4), intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -364,8 +364,8 @@ contains
     integer, intent(in) :: sd_num ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer(i4), intent(in) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer(i4), intent(in) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(in) :: pre_sdid(1:sd_num)   ! save index of super-droplets
+    integer, intent(in) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -887,8 +887,8 @@ contains
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
-    integer(i4), intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer(i4), intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1102,8 +1102,8 @@ contains
     integer, intent(in) :: sd_num  ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical materia contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
-    integer(i4), intent(in) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer(i4), intent(in) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(in) :: pre_sdid(1:sd_num)   ! save index of super-droplets
+    integer, intent(in) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1625,8 +1625,8 @@ contains
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat  ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
-    integer(i4), intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer(i4), intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice

@@ -190,6 +190,7 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
      &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
      &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,dm_id_tmp,                              &
      &                          TEMP0,ilist,sdtype)
+    ! sdm_copy_selected_sd is not supported for SD-tracking
     use scale_process, only: &
          & PRC_MPIstop
     use scale_grid_index, only: &
@@ -203,8 +204,8 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
     integer,  intent(in)  :: sd_num      ! number of super-droplets
     integer,  intent(in)  :: sd_numasl   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer(i4), intent(in) :: pre_sdid(1:sd_num) ! save index of super-droplets
-    integer(i4), intent(in) :: pre_dmid(1:sd_num) ! domain index of super-droplets
+    integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
+    integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
     real(RP), intent(in)  :: sd_x(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(in)  :: sd_y(1:sd_num) ! y-coordinate of super-droplets
     real(RP), intent(inout) :: sd_ri(1:sd_num)   ! index[i/real] of super-droplets
@@ -221,8 +222,8 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
     integer,  intent(out) :: sd_num_tmp  ! number of super-droplets
     integer,  intent(out)  :: sd_numasl_tmp   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(out) :: sd_n_tmp(1:sd_num) ! multiplicity of super-droplets
-    integer(i4), intent(out) :: sd_id_tmp(1:sd_num) ! save index of super-droplets
-    integer(i4), intent(out) :: dm_id_tmp(1:sd_num) ! domain index of super-droplets
+    integer, intent(out) :: sd_id_tmp(1:sd_num) ! save index of super-droplets
+    integer, intent(out) :: dm_id_tmp(1:sd_num) ! domain index of super-droplets
     real(RP), intent(out)  :: sd_x_tmp(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(out)  :: sd_y_tmp(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(out) :: sd_ri_tmp(1:sd_num)   ! index[i/real] of super-droplets

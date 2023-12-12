@@ -91,8 +91,8 @@ module m_sdm_common
   !
   !------------------------------------------------------------------------------
   integer(DP), allocatable, save :: sdn_s2c(:)   ! multipilicity
-  integer(i4), allocatable, save :: sdid_s2c(:)  ! save index
-  integer(i4), allocatable, save :: dmid_s2c(:)  ! domain index
+  integer, allocatable, save :: sdid_s2c(:)  ! save index
+  integer, allocatable, save :: dmid_s2c(:)  ! domain index
   real(RP), allocatable, save :: sdri_s2c(:)     ! index-i(real) of s.d.
   real(RP), allocatable, save :: sdrj_s2c(:)     ! index-j(real) of s.d.
   real(RP), allocatable, save :: sdrk_s2c(:)     ! index-k(real) of s.d.
@@ -108,8 +108,8 @@ module m_sdm_common
   real(RP), allocatable, save :: sdrku_s2c(:,:)  ! index-k(real) at 'sdm_upper'
   ! SDM for aerosol formation
   integer(DP), allocatable, save :: sdn_fm(:)    ! multiplicity of super-droplets
-  integer(i4), allocatable, save :: sdid_fm(:)   ! save index of super-droplets
-  integer(i4), allocatable, save :: dmid_fm(:)   ! domain index of super-droplets
+  integer, allocatable, save :: sdid_fm(:)   ! save index of super-droplets
+  integer, allocatable, save :: dmid_fm(:)   ! domain index of super-droplets
   real(RP), allocatable, save :: sdri_fm(:)      ! index-i(real) of super-droplets
   real(RP), allocatable, save :: sdrj_fm(:)      ! index-j(real) of super-droplets
   real(RP), allocatable, save :: sdrk_fm(:)      ! index-k(real) of super-droplets
@@ -171,8 +171,8 @@ module m_sdm_common
   integer, allocatable, save :: sd_itmp2(:)
   integer, allocatable, save :: sd_itmp3(:)
   integer(i2), allocatable, target :: sd_i2tmp1(:)
-  integer(i4), allocatable, target :: sd_i4tmp1(:)
-  integer(i4), allocatable, target :: sd_i4tmp2(:)
+  integer, allocatable, target :: sd_i4tmp1(:)
+  integer, allocatable, target :: sd_i4tmp2(:)
   integer(DP), allocatable, target :: sd_i8tmp1(:)
   real(RP), allocatable, target, save :: sd_dtmp1(:)
   real(RP), allocatable, target, save :: sd_dtmp2(:)
@@ -212,8 +212,8 @@ module m_sdm_common
 
   !! These working arrays are needed due to the scale restart output timimg. Could be removed in the future scale version.  
   integer(DP), allocatable, save :: sdn_s2c_restart(:)      ! multipilicity
-  integer(i4), allocatable, save :: sdid_s2c_restart(:)     ! save index
-  integer(i4), allocatable, save :: dmid_s2c_restart(:)     ! domain index
+  integer, allocatable, save :: sdid_s2c_restart(:)     ! save index
+  integer, allocatable, save :: dmid_s2c_restart(:)     ! domain index
   real(RP), allocatable, save    :: sdrk_s2c_restart(:)     ! index-k(real) of s.d.
   real(RP), allocatable, save    :: sdx_s2c_restart(:)      ! x-cordinate of s.d.
   real(RP), allocatable, save    :: sdy_s2c_restart(:)      ! y-cordinate of s.d.
@@ -280,7 +280,7 @@ module m_sdm_common
   real(RP), parameter :: INVALID = -999.999_RP ! value indicated as invalid super-droplets
   integer(DP), parameter :: INVALID_i8 = -999_DP ! value indicated as invalid super-droplets
   integer(i2), parameter :: INVALID_i2 = -999_i2 ! value indicated as invalid super-droplets
-  integer(i4), parameter :: INVALID_i4 = -999_i4 ! value indicated as invalid super-droplets
+  integer, parameter :: INVALID_i4 = -999 ! value indicated as invalid super-droplets
 
   !------------------------------------------------------------------------------
   !
