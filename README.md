@@ -1,4 +1,4 @@
-Readme file for SCALE-SDM to reproduce the results of *Simulation of marine stratocumulus using the super-droplet method: Numerical convergence and comparison to a double-moment bulk scheme*.
+Readme file for SCALE-SDM to reproduce the results of *Simulation of marine stratocumulus using the super-droplet method: Numerical convergence and comparison to a double-moment bulk scheme using SCALE-SDM 5.2.6-2.3.1*.
 
 Corresponding Author: Shin-ichiro Shima (s_shima@sim.u-hyogo.ac.jp)
 
@@ -21,11 +21,12 @@ The paths of the model setups for the sensitivity tests used in the paper are re
 - To turn off Collision-coalescence, just replacing `doautoconversion  = .true.` with `doautoconversion  = .false.` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L198)
 * To adjust the initial SD number per cell, just giving a positive number to the option `sdm_inisdnc` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/run.conf#L132)
 + Adjusting intial aerosol number concentration in SN14 by change the value of the option `C_CCN` in [run.conf](https://github.com/wangyouyue/GMD_2022_code/blob/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/dycoms2_rf02_SN14/run.conf#L99)
+- [SDM with horizontal SGS turbulence mixing tests](https://github.com/wangyouyue/GMD_2022_code/tree/SDM_DYCOMSII-RF02/scale-rm/test/case/shallowcloud/SDM_horiz_smg)
 
 # Required software and supported environment
 Fortran and C compiler are required to compile SCALE-SDM. MPI, NetCDF4, and HDF5 libraries are are also required.
 
-The numerical experiments were conducted by using Intel Fortran/C compiler 19.1.3.304,Intel MPI 2019.9.304, HDF5 1.12.0, and NetCDF 4.5.3. For data analysis, NCL 6.6.2 was used.
+The numerical experiments were conducted by using Intel Fortran/C compiler 2021.7.1, Intel MPI 2021.7.1, HDF5 1.14.0, NetCDF 4.9.0 and NetCDF-Fortran 4.6.0. For data analysis, NCL 6.6.2 was used.
 
 # Set environment variable
 `$ export SCALE_SYS=Linux64-intel-impi`
