@@ -73,9 +73,7 @@ For more details, please see [the official user guide](https://scale.riken.jp/ar
 4. **Running Simulations:**
    Modify and submit the job script according to your system's job scheduler. For detailed execution steps and analysis programs for SDM, refer to the provided scripts and the SCALE user guide.
    - **Run a batch job on Hokudai supercomputer:**
-     Modify the job script according to your system. The job scheduler on Hokudai supercomputer is [PJM] (https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/).
-
-  `$ pjsub hokudai_run.sh`
+     Modify the job script according to your system. The job scheduler on Hokudai supercomputer is [PJM](https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/).Run `$ pjsub hokudai_run.sh` to submit the job.
 
 5. **Run analysis program:**
   ```
