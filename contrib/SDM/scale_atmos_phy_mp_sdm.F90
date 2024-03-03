@@ -1582,10 +1582,8 @@ contains
          call gen_rand_array( rng_s2c, sdice_s2c%tf )
       end if
       ! Initialize index and domain ID of super-droplets
-      do n=1,sdnum_s2c
-         sdid_s2c(n) = INVALID_i4
-         dmid_s2c(n) = INVALID_i4
-      end do
+      sdid_s2c(1:sdnum_s2c) = INVALID_i4
+      dmid_s2c(1:sdnum_s2c) = INVALID_i4
 
       ! Initialized all super-droplets as water droplet.
       !### status(liquid/ice) of super-droplets ###!

@@ -715,7 +715,7 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF_HIST) of Super Droplet'
 
-    do n=1,sdnum
+    do n=1,sd_num
        pre_sdid(n) = n
        pre_dmid(n) = mype
     end do
