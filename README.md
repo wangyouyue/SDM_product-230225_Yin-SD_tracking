@@ -44,7 +44,7 @@ The SD tracking method provides a valuable tool for understanding the dynamics a
 Future enhancements could include developing more sophisticated event detection mechanisms, improving real-time analysis capabilities, and optimizing the balance between detail and computational efficiency.
 
 # Installation and Usage
-For more details, please refer [the official user guide](https://scale.riken.jp/archives/scale_users_guide_En.v5.2.6.pdf).
+For more details, please see [the official user guide](https://scale.riken.jp/archives/scale_users_guide_En.v5.2.6.pdf).
 
 ## Prerequisites
 - **Compilers:** Fortran and C compilers are required.
@@ -56,33 +56,33 @@ For more details, please refer [the official user guide](https://scale.riken.jp/
 
 2. **Clean:**
    Please clean up past compilation files before compiling.
-```
-$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
-$ make allclean
-$ make allclean SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
-```
+  ```
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
+  $ make allclean
+  $ make allclean SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+  ```
 
 3. **Compilation:**
    Navigate to the desired test case directory and compile using the provided Makefile. For SDM-specific cases, ensure the appropriate flags are set.
-```
-$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
-$ make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
-$ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
-```
+  ```
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
+  $ make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+  $ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
+  ```
 
 4. **Running Simulations:**
    Modify and submit the job script according to your system's job scheduler. For detailed execution steps and analysis programs for SDM, refer to the provided scripts and the SCALE user guide.
    - **Run a batch job on Hokudai supercomputer:**
-     Modify the job script according to your system. The job scheduler on Hokudai supercomputer is PJM ([for more information](https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/)).
+     Modify the job script according to your system. The job scheduler on Hokudai supercomputer is [PJM] (https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/).
 
-`$ pjsub hokudai_run.sh`
+  `$ pjsub hokudai_run.sh`
 
 5. **Run analysis program:**
-```
-$ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
-$ pjsub --step --sparam "sn=1" ncl.sh
-$ pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh
-```
+  ```
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
+  $ pjsub --step --sparam "sn=1" ncl.sh
+  $ pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh
+  ```
 
 ## Support and Community
 Questions, issues, and discussions about SCALE-SDM can be directed here. Contributions and feedback are highly encouraged to enhance the model's capabilities and user experience.
