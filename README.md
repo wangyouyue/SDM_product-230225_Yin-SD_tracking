@@ -1,7 +1,7 @@
 # Introduction to the Super Droplet Method (SDM) in SCALE-SDM
 
 ## What is SDM?
-The Super Droplet Method (SDM), introduced by Shima et al. in 2009, offers a novel Lagrangian approach to cloud microphysics simulations. Unlike traditional schemes, SDM tracks "super droplets," each representing a collection of real cloud particles with similar attributes. This method enables detailed simulations of microphysical processes such as condensation, evaporation, and coalescence, providing insights into cloud formation and precipitation dynamics.
+The Super Droplet Method (SDM), introduced by Shima et al. in 2009, offers a novel Lagrangian approach to cloud microphysics simulations. Unlike traditional schemes, SDM tracks "super droplets," each representing a collection of real particles (aerosols, cloud droplets and precipitation particles) with similar attributes. This method enables detailed simulations of microphysical processes such as condensation, evaporation, and coalescence, providing insights into cloud formation and precipitation dynamics.
 
 ## Integration with SCALE-SDM
 The SCALE (Scalable Computing for Advanced Library and Environment) library is developed with co-design by researchers of computational science and computer science, ensuring a robust and scalable platform for high-resolution atmospheric simulations (Nishizawa et al., 2015; Sato et al., 2015).  For more information about SCALE and its features, visit the  [SCALE's official website](http://scale.aics.riken.jp/). The specific implementation of SDM into SCALE version 5.2.6 can be explored in the [SCALE version 5.2.6 archives](https://scale.riken.jp/archives/5.2.6/)
@@ -19,15 +19,14 @@ The Super Droplet tracking method is designed to monitor the lifecycle and inter
 ## Methodology
 At each output interval, the method records two key pieces of information for each SD:
 
-- **pre_id:** The previous identifier of the SD before any interaction or movement.
-- **pre_dmid:** The domain identifier, indicating the spatial location of the SD in the simulation grid.
+- **pre_id:** The identifier of the SD at the previous output interval.
+- **pre_dmid:** The domain identifier, indicating the simulation domain of the SD at the previous output interval.
   
 This information allows for backward tracing of each SD's path through the simulation, providing insights into the microphysical processes and interactions that each droplet undergoes.
 
 ## Advantages
 1. **Simplicity:** The method is straightforward to implement and integrate into existing cloud microphysics simulation frameworks.
 2. **Efficiency:** By only recording data at output intervals, the method minimizes the computational overhead and storage requirements compared to continuous tracking.
-3. **Flexibility:** The approach can be adapted to different types of cloud microphysics models and simulation setups.
   
 ## Disadvantages and Solutions
 1. **Backward Tracing Complexity:** Forward tracing of SDs becomes cumbersome, as the method is inherently designed for backward tracing.
@@ -37,6 +36,14 @@ This information allows for backward tracing of each SD's path through the simul
   - **Solution B:** Record key events (e.g., coalescence) as they occur, in addition to the regular output, to ensure significant changes are not missed.
   - **Solution C:** Use event-driven outputs that trigger based on specific changes in SD states, offering a compromise between data volume and detail.
 
+## **Output Methods and Compatibility**
+The model supports three output formats for SD results:
+- **sdm_outasci:** Outputs all SDs in ASCII format.
+- **sdm_outnetcdf:** Outputs all SDs in netCDF format.
+- **sdm_copy_selected_sd:** Outputs selected SDs in netCDF format. However, this method is currently not compatible with the SD tracking feature.
+
+   Additionally, users must choose between `sdm_outasci` and `sdm_outnetcdf` as these cannot be used simultaneously. To address this, users can set the `sdm_dmpvar` option in the SDM settings section (&PARAM_ATMOS_PHY_MP_SDM) of the run.conf namelist file to either `010` or `001`.
+
 ## Conclusion
 The SD tracking method provides a valuable tool for understanding the dynamics and interactions of super droplets in cloud microphysics simulations. While it offers simplicity and efficiency, the method also faces challenges in capturing detailed microphysical processes and facilitating forward tracing. The proposed solutions aim to address these challenges, enabling more comprehensive and detailed tracking of SDs.
 
@@ -44,7 +51,7 @@ The SD tracking method provides a valuable tool for understanding the dynamics a
 Future enhancements could include developing more sophisticated event detection mechanisms, improving real-time analysis capabilities, and optimizing the balance between detail and computational efficiency.
 
 # Installation and Usage
-For more details, please see [the official user guide](https://scale.riken.jp/archives/scale_users_guide_En.v5.2.6.pdf).
+For more details, please see [the official user guide of SACLE](https://scale.riken.jp/archives/scale_users_guide_En.v5.2.6.pdf).
 
 ## Prerequisites
 - **Compilers:** Fortran and C compilers are required.
@@ -83,7 +90,7 @@ For more details, please see [the official user guide](https://scale.riken.jp/ar
   ```
 
 ## Support and Community
-Questions, issues, and discussions about SCALE-SDM can be directed here. Contributions and feedback are highly encouraged to enhance the model's capabilities and user experience.
+Questions, issues, and discussions about SCALE-SDM can be directed here. Contributions and feedback are highly encouraged to enhance the model's capabilities and user experience. Please feel free to contact me: yinchongzhi@gmail.com. :grin:
 
 ## Reference
 *Nishizawa, S., Yashiro, H., Sato, Y., Miyamoto, Y., and Tomita, H.: Influence of grid aspect ratio on planetary boundary layer turbulence in large-eddy simulations, Geoscientific Model Development, 8, 3393-3419, [https://doi.org/10.5194/gmd-8-33932015](https://doi.org/10.5194/gmd-8-33932015), 2015.*
