@@ -737,4 +737,126 @@ contains
     end if
   end subroutine check_netcdf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine sdm_coal_outnetcdf(otime, num_pair, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col)
+    use netcdf
+    use scale_precision
+    use scale_stdio
+    use scale_time
+    use scale_process, only: &
+         mype => PRC_myrank
+    use m_sdm_common, only: &
+         sdm_cold
+
+    implicit none
+
+    real(DP), intent(in) :: otime
+    integer, intent(in) :: num_pair    ! number of super-droplet pairs
+    integer, intent(in) :: pre_sdid1(1:num_pair) ! save index of super-droplets
+    integer, intent(in) :: pre_dmid1(1:num_pair) ! domain index of super-droplets
+    integer, intent(in) :: pre_sdid2(1:num_pair) ! save index of super-droplets
+    integer, intent(in) :: pre_dmid2(1:num_pair) ! domain index of super-droplets
+    integer, intent(in) :: num_col(1:num_pair)   ! number of coalesence of pairs of SDs
+
+    character(len=17) :: fmt2="(A, '.', A, I*.*)"
+    character(len=H_LONG) :: ftmp
+    character(len=H_LONG) :: basename_sd_out
+    character(len=19) :: basename_time
+    integer :: fid_sdm_o
+    integer :: ierr
+    character(len=80) :: fmt     ! output formate
+    character(len=5)  :: cstat   ! status character
+    integer :: nf90_real_precision
+    integer :: ncid, num_pair_id
+    integer :: pre_sdid1_id, pre_sdid2_id, pre_dmid1_id, pre_dmid2_id, num_col_id
+
+    integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
+    integer,parameter :: nc_deflate       = .true. ! turn on NetCDF compresion
+    integer,parameter :: nc_shuffle       = .true. ! turn on NetCDF shuffle filter
+
+    !--- output Super Droplets in NetCDF format
+    call TIME_gettimelabel(basename_time)
+    fid_sdm_o = IO_get_available_fid()
+
+    ftag = 'SD_coal_output'
+
+    write(fmt2(14:14),'(I1)') 6
+    write(fmt2(16:16),'(I1)') 6
+    write(ftmp,'(3A)') trim(ftag), '_NetCDF_', trim(basename_time)
+    write(basename_sd_out,fmt2) trim(ftmp), 'pe',mype
+
+    ! Check the presision
+    if(RP == SP)then
+       nf90_real_precision = NF90_FLOAT
+    else
+       nf90_real_precision = NF90_DOUBLE
+    end if
+
+    ! Open the output file
+    call check_netcdf( nf90_create(trim(basename_sd_out),NF90_NETCDF4, ncid) )
+
+    ! Definition of dimensions and variables
+    !!! num_pair
+    call check_netcdf( nf90_def_dim(ncid, "num_pair", num_pair, num_pair_id) )
+
+    !!! pre_sdid1
+    call check_netcdf( nf90_def_var(ncid, "pre_sdid1", NF90_INT, num_pair_id,pre_sdid1_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid1_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'long_name', 'previous index of large SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'units', '') )
+    !!! pre_dmid1
+    call check_netcdf( nf90_def_var(ncid, "pre_dmid1", NF90_INT, num_pair_id, pre_dmid1_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid1_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'long_name', 'previous domain of large SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'units', '') )
+    !!! pre_sdid2
+    call check_netcdf( nf90_def_var(ncid, "pre_sdid2", NF90_INT, num_pair_id,pre_sdid2_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid2_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'long_name', 'previous index of small SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'units', '') )
+    !!! pre_dmid2
+    call check_netcdf( nf90_def_var(ncid, "pre_dmid2", NF90_INT, num_pair_id, pre_dmid2_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid2_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'long_name', 'previous domain of small SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'units', '') )
+    !!! num_col
+    call check_netcdf( nf90_def_var(ncid, "num_col", NF90_INT, num_pair_id, num_col_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, num_col_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, num_col_id, 'long_name', 'number of coalesence of pairs of SDs') )
+    call check_netcdf( nf90_put_att(ncid, num_col_id, 'units', '') )
+
+    !if( sdm_cold ) then
+        !!! to be continued
+    !end if
+
+    !!! End of definition
+    call check_netcdf( nf90_enddef(ncid) )
+
+    ! Save data
+    !!! pre_sdid1
+    call check_netcdf( nf90_put_var(ncid, pre_sdid1_id, pre_sdid1) )
+    !!! pre_dmid1
+    call check_netcdf( nf90_put_var(ncid, pre_dmid1_id, pre_dmid1) )
+    !!! pre_sdid2
+    call check_netcdf( nf90_put_var(ncid, pre_sdid2_id, pre_sdid2) )
+    !!! pre_dmid2
+    call check_netcdf( nf90_put_var(ncid, pre_dmid2_id, pre_dmid2) )
+
+    !if( sdm_cold ) then
+       !!! to be continued
+    !end if
+
+    ! Close the output file
+    call check_netcdf( nf90_close(ncid) )
+
+    if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF) of Super Droplet'
+
+    return
+
+  end subroutine sdm_coal_outnetcdf
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 end module m_sdm_io

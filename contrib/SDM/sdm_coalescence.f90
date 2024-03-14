@@ -39,7 +39,7 @@ contains
                         zph_crs,                &
                         ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl, &
                         sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,&
-                        ! sd_id, &
+                        pre_sdid, pre_dmid, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, num_pair,&
                         sort_id,sort_key,sort_freq,sort_tag,   &
                         sd_rng,sd_rand,                        &
                         sort_tag0,fsort_id,icp,sd_perm,c_rate  )
@@ -79,6 +79,8 @@ contains
     real(RP), intent(in) :: sd_x(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(in) :: sd_y(1:sd_num) ! y-coordinate of super-droplets
     real(RP), intent(in) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
+    integer, intent(in) :: pre_sdid   ! previous SD ID of super-droplets
+    integer, intent(in) :: pre_dmid   ! previous domain ID of super-droplets
     ! Input and output variables
     type(c_rng_uniform_mt), intent(inout) :: sd_rng ! random number generator
     real(RP),intent(inout) :: sd_rand(1:sd_num) ! random numbers
@@ -103,7 +105,13 @@ contains
     integer, intent(out) :: icp(1:sd_num) ! index of coalescence pair
     integer, intent(out) :: sd_perm(1:sd_num) ! random permutations
     real(RP), intent(out) :: c_rate(1:sd_num) ! coalescence probability
-    ! Internal shared variables
+    integer, allocatable(out) :: pre_sdid1(:)   ! previous SD ID of super-droplets with large multiplicity
+    integer, allocatable(out) :: pre_sdid2(:)   ! previous SD ID of super-droplets  with small multiplicity
+    integer, allocatable(out) :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
+    integer, allocatable(out) :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
+    integer, allocatable(out) :: num_col(:)     ! number of coalesence of pairs of SDs
+ 
+       ! Internal shared variables
     real(RP) :: sd_aslrho(1:22) ! Density of chemical material contained as water-soluble aerosol in super droplets
     integer(RP) :: sd_ncol ! how many times coalescence occurs
     integer :: freq_max ! get the maximum number of super-droplets in each grid
@@ -162,9 +170,13 @@ contains
     integer(DP) :: sd_nmax  ! maximum multiplicity
     integer(DP) :: sd_n1    ! multiplicity of super-droplets with large multiplicity
     integer(DP) :: sd_n2    ! multiplicity of super-droplets  with small multiplicity
-    ! integer(DP) :: sd_id1   ! universal ID of super-droplets with large multiplicity
-    ! integer(DP) :: sd_id2   ! universal ID of super-droplets  with small multiplicity
     integer(i2) :: sd_li1, sd_li2
+
+    integer, allocatable :: pre_sdid1_temp(:)
+    integer, allocatable :: pre_sdid2_temp(:)
+    integer, allocatable :: pre_dmid1_temp(:)
+    integer, allocatable :: pre_dmid2_temp(:)
+    integer, allocatable :: num_col_temp(:)    ! temporary
 
     integer, allocatable :: fsort_tag(:) ! buffer for sorting
     integer, allocatable :: fsort_freq(:) ! buffer for sorting
@@ -179,6 +191,7 @@ contains
     integer :: i, j, k, m, n, s   ! index
     integer :: t, tc, tp          ! index
     integer :: ix, jy
+    integer(out) :: num_pair           ! number of coalescent SD pairs
 
     integer :: sort_tag0m
     integer :: sort_freqm
@@ -900,6 +913,14 @@ contains
 !!$            tp = tc + sort_freq(m)/2
 
 !OCL NORECURRENCE
+
+    allocate(pre_sdid1_temp(sd_num/2))
+    allocate(pre_sdid2_temp(sd_num/2))
+    allocate(pre_dmid1_temp(sd_num/2))
+    allocate(pre_dmid2_temp(sd_num/2))
+    allocate(num_col_temp(sd_num/2))
+
+    num_pair = 0
     do m=1,gnum
        if( sort_freq(m) <= 1 ) cycle
 
@@ -928,6 +949,7 @@ contains
 
           !### coalescence procudure ###!
 
+          num_pair = num_pair + 1
           if( sd_n(icptc) > sd_n(icptp) ) then
 
              sd_n1  = sd_n( icptc )
@@ -935,13 +957,15 @@ contains
              sd_rk1 = sd_rk( icptc )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptc )
-             ! sd_id1 = sd_id( icptc )
+             pre_sdid1_temp( num_pair ) = pre_sdid( icptc )
+             pre_dmid1_temp( num_pair ) = pre_dmid( icptc )
 
              sd_n2  = sd_n( icptp )
              sd_r2  = sd_r( icptp )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptp )
-             ! sd_id2 = sd_id( icptp )
+             pre_sdid2_temp( num_pair ) = pre_sdid( icptp )
+             pre_dmid2_temp( num_pair ) = pre_dmid( icptp )
 
              do k=1,22
                 s = idx_nasl(k)
@@ -956,13 +980,15 @@ contains
              sd_rk1 = sd_rk( icptp )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptp )
-             ! sd_id1 = sd_id( icptp )
+             pre_sdid1_temp( num_pair ) = pre_sdid( icptp )
+             pre_dmid1_temp( num_pair ) = pre_dmid( icptp )
 
              sd_n2  = sd_n( icptc )
              sd_r2  = sd_r( icptc )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptc )
-             ! sd_id2 = sd_id( icptc )
+             pre_sdid2_temp( num_pair ) = pre_sdid( icptc )
+             pre_dmid2_temp( num_pair ) = pre_dmid( icptc )
 
              do k=1,22
                 s = idx_nasl(k)
@@ -973,6 +999,7 @@ contains
           end if
 
           sd_ncol = min( sd_ncol, int(sd_n1/sd_n2,kind=DP) )
+          num_col_temp( num_pair ) = sd_ncol
 
           if( sd_n1 > sd_n2*sd_ncol ) then
 
@@ -1071,9 +1098,26 @@ contains
 
     end do
 
+    ! Allocate
+    allocate(pre_dmid1( num_pair ))
+    allocate(pre_dmid2( num_pair ))
+    allocate(pre_sdid1( num_pair ))
+    allocate(pre_sdid2( num_pair ))
+    allocate(num_col( num_pair ))
+    pre_dmid1 = pre_dmid1_temp( :num_pair )
+    pre_dmid2 = pre_dmid2_temp( :num_pair )
+    pre_sdid1 = pre_sdid1_temp( :num_pair )
+    pre_sdid2 = pre_sdid2_temp( :num_pair )
+    num_col = num_col_temp( :num_pair )
+
     ! Deallocate
     deallocate( fsort_tag  )
     deallocate( fsort_freq )
+    deallocate( pre_dmid1_temp )
+    deallocate( pre_dmid2_temp )
+    deallocate( pre_sdid1_temp )
+    deallocate( pre_sdid2_temp )
+    deallocate( num_col_temp )
 
 #ifdef _FAPP_
     ! Section specification for fapp profiler

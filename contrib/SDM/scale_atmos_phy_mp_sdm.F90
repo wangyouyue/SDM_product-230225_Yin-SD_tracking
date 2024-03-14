@@ -1986,6 +1986,8 @@ contains
         sdm_meltfreeze, sdm_meltfreeze_updatefluid
     use m_sdm_subldep, only: &
         sdm_subldep, sdm_subldep_updatefluid
+    use m_sdm_io, only: &
+        sdm_coal_outnetcdf
 
    real(RP), intent(inout) :: DENS(KA,IA,JA)        !! Density [kg/m3]
    real(RP), intent(inout) :: MOMZ(KA,IA,JA)        !! Momentum [kg/s/m2]
@@ -2487,11 +2489,15 @@ contains
                             zph_crs,                                    &
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
+                            pre_sdid, pre_dmid, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, num_pair,&
                             sort_id,sort_key,sort_freq,sort_tag,        &
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
                             sd_itmp1(1:sd_num),sd_itmp2(1:sd_num),  &
                             sd_dtmp1)
+               ! output sdm_coalesence SD pairs
+               call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,           &
+                            pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col)
             end if
 
          end if
