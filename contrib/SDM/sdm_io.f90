@@ -29,7 +29,7 @@ module m_sdm_io
 
   implicit none
   private
-  public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist
+  public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_coal_outnetcdf
 
 contains
   subroutine sdm_outasci(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,sdn_dmpnskip)

@@ -2133,7 +2133,6 @@ contains
    integer, allocatable :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
    integer, allocatable :: num_col(:)     ! number of coalesence of pairs of SDs
    integer :: num_pair    ! number of super-droplet pairs
-, num_pair
   !---------------------------------------------------------------------
 
       ! Initialize and rename variables
