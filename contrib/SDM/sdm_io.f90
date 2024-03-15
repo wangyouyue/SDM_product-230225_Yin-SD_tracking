@@ -763,8 +763,6 @@ contains
     character(len=19) :: basename_time
     integer :: fid_sdm_o
     integer :: ierr
-    character(len=80) :: fmt     ! output formate
-    character(len=5)  :: cstat   ! status character
     integer :: nf90_real_precision
     integer :: ncid, num_pair_id
     integer :: pre_sdid1_id, pre_sdid2_id, pre_dmid1_id, pre_dmid2_id, num_col_id
@@ -827,7 +825,7 @@ contains
     call check_netcdf( nf90_def_var(ncid, "num_col", NF90_INT, num_pair_id, num_col_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, num_col_id, &
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, num_col_id, 'long_name', 'number of coalesence of pairs of SDs') )
+    call check_netcdf( nf90_put_att(ncid, num_col_id, 'long_name', 'coalescence count of SD pairs') )
     call check_netcdf( nf90_put_att(ncid, num_col_id, 'units', '') )
 
     !if( sdm_cold ) then
@@ -846,6 +844,8 @@ contains
     call check_netcdf( nf90_put_var(ncid, pre_sdid2_id, pre_sdid2) )
     !!! pre_dmid2
     call check_netcdf( nf90_put_var(ncid, pre_dmid2_id, pre_dmid2) )
+    !!! num_col
+    call check_netcdf( nf90_put_var(ncid, num_col_id, num_col) )
 
     !if( sdm_cold ) then
        !!! to be continued
