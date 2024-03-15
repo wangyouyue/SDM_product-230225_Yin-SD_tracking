@@ -79,8 +79,8 @@ contains
     real(RP), intent(in) :: sd_x(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(in) :: sd_y(1:sd_num) ! y-coordinate of super-droplets
     real(RP), intent(in) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
-    integer, intent(in) :: pre_sdid   ! previous SD ID of super-droplets
-    integer, intent(in) :: pre_dmid   ! previous domain ID of super-droplets
+    integer, intent(in) :: pre_sdid(1:sd_num)   ! previous SD ID of super-droplets
+    integer, intent(in) :: pre_dmid(1:sd_num)   ! previous domain ID of super-droplets
     ! Input and output variables
     type(c_rng_uniform_mt), intent(inout) :: sd_rng ! random number generator
     real(RP),intent(inout) :: sd_rand(1:sd_num) ! random numbers
@@ -89,7 +89,6 @@ contains
     integer, intent(inout) :: sort_freq(1:ni_sdm*nj_sdm*nk_sdm+1) ! number of super-droplets in each SD-grid
     integer, intent(inout) :: sort_tag(1:ni_sdm*nj_sdm*nk_sdm+2) ! accumulated number of super-droplets in each SD-grid
     integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    ! integer(DP), intent(inout) :: sd_id(1:sd_num) ! universal ID of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -105,13 +104,13 @@ contains
     integer, intent(out) :: icp(1:sd_num) ! index of coalescence pair
     integer, intent(out) :: sd_perm(1:sd_num) ! random permutations
     real(RP), intent(out) :: c_rate(1:sd_num) ! coalescence probability
-    integer, allocatable(out) :: pre_sdid1(:)   ! previous SD ID of super-droplets with large multiplicity
-    integer, allocatable(out) :: pre_sdid2(:)   ! previous SD ID of super-droplets  with small multiplicity
-    integer, allocatable(out) :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
-    integer, allocatable(out) :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
-    integer, allocatable(out) :: num_col(:)     ! number of coalesence of pairs of SDs
+    integer, allocatable, intent(out) :: pre_sdid1(:)   ! previous SD ID of super-droplets with large multiplicity
+    integer, allocatable, intent(out) :: pre_sdid2(:)   ! previous SD ID of super-droplets  with small multiplicity
+    integer, allocatable, intent(out) :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
+    integer, allocatable, intent(out) :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
+    integer, allocatable, intent(out) :: num_col(:)     ! number of coalesence of pairs of SDs
  
-       ! Internal shared variables
+    ! Internal shared variables
     real(RP) :: sd_aslrho(1:22) ! Density of chemical material contained as water-soluble aerosol in super droplets
     integer(RP) :: sd_ncol ! how many times coalescence occurs
     integer :: freq_max ! get the maximum number of super-droplets in each grid
@@ -191,7 +190,7 @@ contains
     integer :: i, j, k, m, n, s   ! index
     integer :: t, tc, tp          ! index
     integer :: ix, jy
-    integer(out) :: num_pair           ! number of coalescent SD pairs
+    integer, intent(out) :: num_pair           ! number of coalescent SD pairs
 
     integer :: sort_tag0m
     integer :: sort_freqm
@@ -1097,18 +1096,19 @@ contains
        end do
 
     end do
-
-    ! Allocate
-    allocate(pre_dmid1( num_pair ))
-    allocate(pre_dmid2( num_pair ))
-    allocate(pre_sdid1( num_pair ))
-    allocate(pre_sdid2( num_pair ))
-    allocate(num_col( num_pair ))
-    pre_dmid1 = pre_dmid1_temp( :num_pair )
-    pre_dmid2 = pre_dmid2_temp( :num_pair )
-    pre_sdid1 = pre_sdid1_temp( :num_pair )
-    pre_sdid2 = pre_sdid2_temp( :num_pair )
-    num_col = num_col_temp( :num_pair )
+    if( num_pair > 0 ) then
+        ! Allocate
+        allocate(pre_dmid1( num_pair ))
+        allocate(pre_dmid2( num_pair ))
+        allocate(pre_sdid1( num_pair ))
+        allocate(pre_sdid2( num_pair ))
+        allocate(num_col( num_pair ))
+        pre_dmid1 = pre_dmid1_temp( :num_pair )
+        pre_dmid2 = pre_dmid2_temp( :num_pair )
+        pre_sdid1 = pre_sdid1_temp( :num_pair )
+        pre_sdid2 = pre_sdid2_temp( :num_pair )
+        num_col = num_col_temp( :num_pair )
+    end if
 
     ! Deallocate
     deallocate( fsort_tag  )

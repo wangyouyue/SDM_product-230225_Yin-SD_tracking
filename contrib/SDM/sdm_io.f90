@@ -751,11 +751,11 @@ contains
 
     real(DP), intent(in) :: otime
     integer, intent(in) :: num_pair    ! number of super-droplet pairs
-    integer, intent(in) :: pre_sdid1(1:num_pair) ! save index of super-droplets
-    integer, intent(in) :: pre_dmid1(1:num_pair) ! domain index of super-droplets
-    integer, intent(in) :: pre_sdid2(1:num_pair) ! save index of super-droplets
-    integer, intent(in) :: pre_dmid2(1:num_pair) ! domain index of super-droplets
-    integer, intent(in) :: num_col(1:num_pair)   ! number of coalesence of pairs of SDs
+    integer, allocatable, intent(in) :: pre_sdid1(:) ! save index of super-droplets
+    integer, allocatable, intent(in) :: pre_dmid1(:) ! domain index of super-droplets
+    integer, allocatable, intent(in) :: pre_sdid2(:) ! save index of super-droplets
+    integer, allocatable, intent(in) :: pre_dmid2(:) ! domain index of super-droplets
+    integer, allocatable, intent(in) :: num_col(:)   ! number of coalesence of pairs of SDs
 
     character(len=17) :: fmt2="(A, '.', A, I*.*)"
     character(len=H_LONG) :: ftmp
@@ -772,6 +772,7 @@ contains
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
     integer,parameter :: nc_deflate       = .true. ! turn on NetCDF compresion
     integer,parameter :: nc_shuffle       = .true. ! turn on NetCDF shuffle filter
+    character(len=100) :: ftag ! =filetag or ''(default)
 
     !--- output Super Droplets in NetCDF format
     call TIME_gettimelabel(basename_time)

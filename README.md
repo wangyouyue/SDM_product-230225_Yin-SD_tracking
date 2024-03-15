@@ -42,7 +42,7 @@ The model supports three output formats for SD results:
 - **sdm_outnetcdf:** Outputs all SDs in netCDF format.
 - **sdm_copy_selected_sd:** Outputs selected SDs in netCDF format. However, this method is currently not compatible with the SD tracking feature.
 
-   Additionally, users must choose between `sdm_outasci` and `sdm_outnetcdf` as these cannot be used simultaneously. To address this, users can set the `sdm_dmpvar` option in the SDM settings section (&PARAM_ATMOS_PHY_MP_SDM) of the run.conf namelist file to either `010` or `001`.
+   Additionally, users must choose between `sdm_outasci` and `sdm_outnetcdf` as these cannot be used simultaneously. To address this, users can set the `sdm_dmpvar` option in the SDM settings section (`&PARAM_ATMOS_PHY_MP_SDM`) of the run.conf namelist file to either `010` or `001`.
 
 ## Conclusion
 The SD tracking method provides a valuable tool for understanding the dynamics and interactions of super droplets in cloud microphysics simulations. While it offers simplicity and efficiency, the method also faces challenges in capturing detailed microphysical processes and facilitating forward tracing. The proposed solutions aim to address these challenges, enabling more comprehensive and detailed tracking of SDs.

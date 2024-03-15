@@ -2127,6 +2127,13 @@ contains
    real(RP) :: sdm_dtmlt  ! time step of {melt/freeze of super-droplets} process
    real(RP) :: sdm_dtsbl  ! time step of {sublimation/deposition of super-droplets} process
    real(RP) :: tmp_mink
+   integer, allocatable :: pre_sdid1(:)   ! previous SD ID of super-droplets with large multiplicity
+   integer, allocatable :: pre_sdid2(:)   ! previous SD ID of super-droplets  with small multiplicity
+   integer, allocatable :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
+   integer, allocatable :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
+   integer, allocatable :: num_col(:)     ! number of coalesence of pairs of SDs
+   integer :: num_pair    ! number of super-droplet pairs
+, num_pair
   !---------------------------------------------------------------------
 
       ! Initialize and rename variables
@@ -2495,9 +2502,17 @@ contains
                             sdm_itmp1,sdm_itmp2,                        &
                             sd_itmp1(1:sd_num),sd_itmp2(1:sd_num),  &
                             sd_dtmp1)
-               ! output sdm_coalesence SD pairs
-               call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,           &
-                            pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col)
+
+               if (allocated(num_col)) then
+                   ! output sdm_coalesence SD pairs
+                   call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,           &
+                                pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col)
+                   deallocate(pre_dmid1)
+                   deallocate(pre_dmid2)
+                   deallocate(pre_sdid1)
+                   deallocate(pre_sdid2)
+                   deallocate(num_col)
+               end if
             end if
 
          end if
