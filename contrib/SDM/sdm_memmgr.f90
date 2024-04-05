@@ -66,6 +66,7 @@ contains
     allocate(sdvz_s2c(1:sdnum_s2c))
     allocate(sdid_s2c(1:sdnum_s2c))
     allocate(dmid_s2c(1:sdnum_s2c))
+    allocate(ifcoal_s2c(1:sdnum_s2c))
     allocate(sdasl_s2c(1:sdnum_s2c,1:sdnumasl_s2c))
     allocate(sdn_fm(1:sdfmnum_s2c))
     allocate(sdri_fm(1:sdfmnum_s2c))
@@ -78,6 +79,7 @@ contains
     allocate(sdvz_fm(1:sdfmnum_s2c))
     allocate(sdid_fm(1:sdfmnum_s2c))
     allocate(dmid_fm(1:sdfmnum_s2c))
+    allocate(ifcoal_fm(1:sdfmnum_s2c))
     allocate(sdasl_fm(1:sdfmnum_s2c,1:sdnumasl_s2c))
 
     allocate(sdliqice_s2c(1:sdnum_s2c))
@@ -149,6 +151,7 @@ contains
     allocate(sd_itmp3(1:sdnum_s2c))
 
     allocate(sd_i2tmp1(1:sdnum_s2c))
+    allocate(sd_i2tmp2(1:sdnum_s2c))
     allocate(sd_i8tmp1(1:sdnum_s2c))
     allocate(sd_i4tmp1(1:sdnum_s2c))
     allocate(sd_i4tmp2(1:sdnum_s2c))
@@ -204,6 +207,7 @@ contains
        sdvz_s2c(n) = 0.0_RP
        sdid_s2c(n) = 0
        dmid_s2c(n) = 0
+       ifcoal_s2c(n) = 0
 
        sd_itmp1(n) = 0
        sd_itmp2(n) = 0
@@ -229,6 +233,7 @@ contains
          sdvz_fm(n) = 0.0_RP
          sdid_fm(n) = 0
          dmid_fm(n) = 0
+         ifcoal_fm(n) = 0
        enddo
        do s = 1, sdnumasl_s2c
             do n = 1, sdnum_s2c
@@ -261,6 +266,7 @@ contains
     allocate(sdliqice_s2c_restart(1:sdnum_s2c))
     allocate(sdid_s2c_restart(1:sdnum_s2c))
     allocate(dmid_s2c_restart(1:sdnum_s2c))
+    allocate(ifcoal_s2c_restart(1:sdnum_s2c))
     if( sdm_cold ) then
        allocate(sdice_s2c_restart%re(1:sdnum_s2c))
        allocate(sdice_s2c_restart%rp(1:sdnum_s2c))

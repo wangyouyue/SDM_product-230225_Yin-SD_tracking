@@ -32,7 +32,7 @@ module m_sdm_io
   public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_coal_outnetcdf
 
 contains
-  subroutine sdm_outasci(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,sdn_dmpnskip)
+  subroutine sdm_outasci(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,if_coal,sdn_dmpnskip)
     use scale_precision
     use scale_stdio
     use scale_time
@@ -50,6 +50,10 @@ contains
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
     integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
     integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
+    integer(kind=i2), intent(in) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(kind=i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -96,7 +100,7 @@ contains
        write(fid_sdm_o,'(3a,i2.2,2a)') '# x[m],y[m],z[m],vz[m],',       &
             &                'radius(droplet)[m],',                        &
             &                'mass_of_aerosol_in_droplet(1:',sd_numasl,')[g],',&
-            &                'multiplicity[-],status[-],index,previous index,previous domain'
+            &                'multiplicity[-],status[-],index,previous index,previous domain,if_coal'
 
        write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10)" )')(sd_numasl+5)
 
@@ -123,7 +127,7 @@ contains
 !            &            'temperature[K],',                                    &
             &            'freezing_temp.(ice)[deg],',                          &
             &            'multiplicity[-],status[-],index,rime_mass[kg],num_of_monomers[-],', &
-            &            'previous index,previous domain'
+            &            'previous index,previous domain,if_coal'
 
 !       write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10)" )')(sd_numasl+10)
        write(fmt,'( "(", i2.2, "e16.8,i20,a5,i10,e16.8,i10)" )')(sd_numasl+9)
@@ -146,7 +150,7 @@ contains
 !               &                   sdi%t(m), sdi%tf(m),               &
                &                   sdi%tf(m),               &
                &                   sd_n(m), cstat, m, sdi%mrime(m), sdi%nmono(m), &
-               &                   pre_sdid(m), pre_dmid(m)
+               &                   pre_sdid(m), pre_dmid(m), if_coal(m)
                pre_sdid(m) = m
                pre_dmid(m) = mype
        end do
@@ -161,7 +165,7 @@ contains
 
   end subroutine sdm_outasci
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,sdn_dmpnskip,filetag)
+  subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,if_coal,sdn_dmpnskip,filetag)
     use netcdf
     use scale_precision
     use scale_stdio
@@ -179,6 +183,10 @@ contains
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
     integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
     integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
+    integer(kind=i2), intent(in) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(kind=i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -203,7 +211,7 @@ contains
     character(len=5)  :: cstat   ! status character
     integer :: nf90_real_precision
     integer :: ncid, sd_num_id, sd_numasl_id
-    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id
+    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id, if_coal_id
     integer :: sdi_re_id, sdi_rp_id, sdi_rho_id, sdi_tf_id, sdi_mrime_id, sdi_nmono_id
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
@@ -303,6 +311,12 @@ contains
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
     call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
     call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
+    !!! if_coal
+    call check_netcdf( nf90_def_var(ncid, "if_coal", NF90_SHORT, sd_num_id, if_coal_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, if_coal_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'long_name', 'coalescence flag: 0=has not occurred, 1=occurred') )
+    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'units', '') )
 
     if( sdm_cold ) then
        !!! sdi%re
@@ -368,6 +382,8 @@ contains
     call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid) )
     !!! pre_dmid
     call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid) )
+    !!! if_coal
+    call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal) )
 
     if( sdm_cold ) then
        !!! sdi_re
@@ -398,7 +414,7 @@ contains
 
   end subroutine sdm_outnetcdf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_outnetcdf_hist(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,sdn_dmpnskip,filetag)
+  subroutine sdm_outnetcdf_hist(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,if_coal,sdn_dmpnskip,filetag)
     use netcdf
     use scale_precision
     use scale_stdio
@@ -417,6 +433,10 @@ contains
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
     integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
     integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
+    integer(kind=i2), intent(in) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(kind=i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -442,7 +462,7 @@ contains
     character(len=5)  :: cstat   ! status character
     integer :: nf90_real_precision
     integer :: ncid, sd_num_id, sd_numasl_id
-    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id
+    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id, if_coal_id
     integer :: sdi_re_id, sdi_rp_id, sdi_rho_id, sdi_tf_id, sdi_mrime_id, sdi_nmono_id
     integer :: sd_dmp_time_idx_id, sd_dmp_time_id
 
@@ -614,6 +634,12 @@ contains
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
     call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
     call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
+    !!! if_coal
+    call check_netcdf( nf90_def_var(ncid, "if_coal", NF90_SHORT, sd_num_id, if_coal_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, if_coal_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'long_name', 'coalescence flag: 0=has not occurred, 1=occurred') )
+    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'units', '') )
 
     if( sdm_cold ) then
        !!! sdi%re
@@ -694,6 +720,8 @@ contains
     call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid) )
     !!! pre_dmid
     call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid) )
+    !!! sd_liqice
+    call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal_) )
 
     if( sdm_cold ) then
        !!! sdi_re

@@ -118,6 +118,7 @@
 !! @li      2020-07-27 (S.Shima) [mod] History output of SNC (SD number density). Data is updated only at the time it will be saved
 !! @li      2020-07-28 (S.Shima) [add] History output of the density of droplet moments
 !! @li      2023-11-22 (C.Yin)   [add] previous MPI process number (pre_dmid) and save index of super-droplet (pre_sdid)
+!! @li      2024-04-01 (C.Yin)   [add] a flag if_coal to identify if the SDs have undergone coalescence during the previous output interval
 !<
 !-------------------------------------------------------------------------------
 #include "macro_thermodyn.h"
@@ -822,6 +823,7 @@ contains
     integer(i2), pointer :: sdliqice_tmp(:)
     integer(DP), pointer :: sdn_tmp(:)
     integer, pointer :: sdid_tmp(:), dmid_tmp(:)
+    integer(i2), pointer :: ifcoal_tmp(:)
     type(sdicedef), pointer :: sdice_tmp
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
@@ -870,7 +872,7 @@ contains
                       sdasl_s2c, sdx_s2c, sdy_s2c,        &
                       sdz_s2c, sdr_s2c,                   &
                       sdrk_s2c, sdvz_s2c,                 &
-                      sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c  )
+                      sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c )
          prr_crs(1:IA,1:JA,1:6)=0.0_RP
       end if
     endif
@@ -890,6 +892,7 @@ contains
        sdasl_s2c_restart(:,:) = sdasl_s2c(:,:)
        sdid_s2c_restart(:) = sdid_s2c(:)
        dmid_s2c_restart(:) = dmid_s2c(:)
+       ifcoal_s2c_restart(:) = ifcoal_s2c(:)
        rng_s2c_restart = rng_s2c
        sdliqice_s2c_restart(:) = sdliqice_s2c(:)
        if( sdm_cold ) then
@@ -943,7 +946,7 @@ contains
        call sdm_outasci(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c,dmid_s2c, &
+                        sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip)
     end if
 
@@ -970,13 +973,13 @@ contains
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c,dmid_s2c, &
+                        sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip,filetag='all')
        else if( (mod(sdm_dmpvar,100))/10==2) then
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c,dmid_s2c, &
+                        sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip,filetag='all')
        end if
     end if
@@ -1000,12 +1003,13 @@ contains
        sdasl_tmp=> sd_asltmp1
        sdid_tmp => sd_i4tmp1
        dmid_tmp => sd_i4tmp2
+       ifcoal_tmp => sd_i2tmp2
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                                  &
+            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                                  &
+            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
             &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        !! Evaluate diagnostic variables
@@ -1028,13 +1032,13 @@ contains
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_tmp,sdnumasl_tmp,                    &
                         sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp,dmid_tmp, &
+                        sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
                         sdm_dmpnskip,filetag='selected')
        else if( (mod(sdm_dmpvar,1000))/100==2) then
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                         sdnum_tmp,sdnumasl_tmp,                    &
                         sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp,dmid_tmp, &
+                        sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
                         sdm_dmpnskip,filetag='selected')
        end if
 
@@ -1052,6 +1056,7 @@ contains
        nullify(sdasl_tmp)
        nullify(sdid_tmp)
        nullify(dmid_tmp)
+       nullify(ifcoal_tmp)
     end if
 
 #ifdef _FAPP_
@@ -1066,7 +1071,7 @@ contains
                    lsdmup,ni_s2c,nj_s2c,nk_s2c,                   &
                    sdnum_s2c,sdnumasl_s2c,                        &
                    sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,    &
-                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,    &
+                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c),&
                    sdice_s2c,sdrkl_s2c,sdrku_s2c,                        &
                    rng_s2c,rand_s2c,sortid_s2c,sortkey_s2c,       &
                    sortfreq_s2c,sorttag_s2c,                      &
@@ -1281,12 +1286,13 @@ contains
        sdasl_tmp=> sd_asltmp1
        sdid_tmp => sd_i4tmp1
        dmid_tmp => sd_i4tmp2
+       ifcoal_tmp => sd_i2tmp2
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                                  &
+            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                                  &
+            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
             &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        if( do_puthist_0 )then
@@ -1335,6 +1341,7 @@ contains
        nullify(sdasl_tmp)
        nullify(sdid_tmp)
        nullify(dmid_tmp)
+       nullify(ifcoal_tmp)
     endif
 
 #ifdef _FIPP_
@@ -1362,7 +1369,7 @@ contains
                          sdasl_s2c, sdx_s2c, sdy_s2c,        &
                          sdz_s2c, sdr_s2c,                   &
                          sdrk_s2c, sdvz_s2c,                 &
-                         sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c  )
+                         sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c  )
   !***********************************************************************
   ! Input variables
       use scale_const, only: &
@@ -1415,6 +1422,7 @@ contains
       real(RP),intent(inout) :: sdrku_s2c(IA,JA)
       integer,intent(inout) :: sdid_s2c(1:sdnum_s2c)
       integer,intent(inout) :: dmid_s2c(1:sdnum_s2c)
+      integer(i2),intent(inout) :: ifcoal_s2c(1:sdnum_s2c)
       ! Work variables
       real(RP) :: n0                            ! number of real droplets per unit volume and per aerosol radius
       real(RP) :: dry_r                         ! aerosol radius
@@ -1584,6 +1592,9 @@ contains
       ! Initialize index and domain ID of super-droplets
       sdid_s2c(1:sdnum_s2c) = INVALID_i4
       dmid_s2c(1:sdnum_s2c) = INVALID_i4
+
+      ! Initialize coalescence flag
+      ifcoal_s2c(1:sdnum_s2c) = 0
 
       ! Initialized all super-droplets as water droplet.
       !### status(liquid/ice) of super-droplets ###!
@@ -1947,7 +1958,7 @@ contains
                       prec_crs,zph_crs,   &
                       lsdmup,ni_sdm,nj_sdm,nk_sdm,                &
                       sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_ri,sd_rj,sd_rk,      &
-                      sd_u,sd_v,sd_vz,sd_r,sd_asl,pre_sdid,pre_dmid,sdi,sd_rkl,sd_rku,  &
+                      sd_u,sd_v,sd_vz,sd_r,sd_asl,pre_sdid,pre_dmid,if_coal,sdi,sd_rkl,sd_rku,  &
                       sd_rng,sd_rand,sort_id,sort_key,sort_freq,  &
                       sort_tag,                                   &
                       bufsiz1,                                    & 
@@ -2018,6 +2029,10 @@ contains
    integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
    integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain id of super-droplets
+   integer(i2), intent(inout) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
    integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -2070,12 +2085,12 @@ contains
     integer(i2), intent(inout) ::                                &
          &                             rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! reciving buffer for MPI (int2)
-                       ! dim02 = 1 (status(liq/ice) of super-droplets)
+                       ! dim02 = 2 (status(liq/ice) of super-droplets) and coalescence flag
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer(i2), intent(inout) ::                                &
          &                             sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! sending buffer for MPI (int2)
-                       ! dim02 = 1 (status(liq/ice) of super-droplets)
+                       ! dim02 = 2 (status(liq/ice) of super-droplets) and coalescence flag
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer, intent(inout) ::                                &
          &                             rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -2263,8 +2278,8 @@ contains
             !! do MPI communication to send/receiv SDs
             call sdm_boundary(wbc,ebc,sbc,nbc,                           &
                              sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,     &
-                             sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,pre_sdid,pre_dmid,               &
-                             bufsiz1,                                    &
+                             sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,pre_sdid,pre_dmid,   &
+                             if_coal,bufsiz1,                                     &
                              bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                              sd_itmp1,                              &
                              rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
@@ -2455,6 +2470,9 @@ contains
                            sd_itmp1,'no_interpolation' )
             end if
 
+            ! Initialize coalescence flag
+            if_coal(1:sd_num) = 0
+
             ! { coalescence } in SDM
             if( sdm_cold )then
                ! get density of solid-water before riming
@@ -2496,7 +2514,7 @@ contains
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
                             pre_sdid, pre_dmid, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, num_pair,&
-                            sort_id,sort_key,sort_freq,sort_tag,        &
+                            if_coal,sort_id,sort_key,sort_freq,sort_tag,        &
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
                             sd_itmp1(1:sd_num),sd_itmp2(1:sd_num),  &
@@ -3800,6 +3818,7 @@ contains
     read(fid_sd_i) (sdliqice_s2c(n),n=1,sdnum_s2c)
     read(fid_sd_i) (sdid_s2c(n),n=1,sdnum_s2c)
     read(fid_sd_i) (dmid_s2c(n),n=1,sdnum_s2c)
+    read(fid_sd_i) (if_coal_s2c(n),n=1,sdnum_s2c)
     if( sdm_cold ) then
        read(fid_sd_i) (sdice_s2c%re(n),n=1,sdnum_s2c)
        read(fid_sd_i) (sdice_s2c%rp(n),n=1,sdnum_s2c)
@@ -3874,6 +3893,7 @@ contains
     write(fid_sd_o) (sdliqice_s2c_restart(n),n=1,sdnum_s2c)
     write(fid_sd_o) (sdid_s2c_restart(n),n=1,sdnum_s2c)
     write(fid_sd_o) (dmid_s2c_restart(n),n=1,sdnum_s2c)
+    write(fid_sd_o) (ifcoal_s2c_restart(n),n=1,sdnum_s2c)
     if( sdm_cold ) then
        write(fid_sd_o) (sdice_s2c_restart%re(n),n=1,sdnum_s2c)
        write(fid_sd_o) (sdice_s2c_restart%rp(n),n=1,sdnum_s2c)

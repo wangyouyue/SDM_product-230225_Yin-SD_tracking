@@ -152,7 +152,7 @@ contains
 
     bufsiz2_r8 = 7 + sdnumasl_s2c    !! x,y,rk,u,v,wc(vz),r,asl
     bufsiz2_i8 = 1                   !! n,ID
-    bufsiz2_i2 = 1                   !! liqice
+    bufsiz2_i2 = 2                   !! liqice and coal flag
     bufsiz2_i4 = 2                   !! save and domain index
 
     if( sdm_cold ) then
