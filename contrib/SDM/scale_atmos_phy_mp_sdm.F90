@@ -1007,9 +1007,9 @@ contains
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                &
             &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        !! Evaluate diagnostic variables
@@ -1071,7 +1071,7 @@ contains
                    lsdmup,ni_s2c,nj_s2c,nk_s2c,                   &
                    sdnum_s2c,sdnumasl_s2c,                        &
                    sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,    &
-                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c),&
+                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,&
                    sdice_s2c,sdrkl_s2c,sdrku_s2c,                        &
                    rng_s2c,rand_s2c,sortid_s2c,sortkey_s2c,       &
                    sortfreq_s2c,sorttag_s2c,                      &
@@ -1290,9 +1290,9 @@ contains
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                &
             &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        if( do_puthist_0 )then
@@ -3818,7 +3818,7 @@ contains
     read(fid_sd_i) (sdliqice_s2c(n),n=1,sdnum_s2c)
     read(fid_sd_i) (sdid_s2c(n),n=1,sdnum_s2c)
     read(fid_sd_i) (dmid_s2c(n),n=1,sdnum_s2c)
-    read(fid_sd_i) (if_coal_s2c(n),n=1,sdnum_s2c)
+    read(fid_sd_i) (ifcoal_s2c(n),n=1,sdnum_s2c)
     if( sdm_cold ) then
        read(fid_sd_i) (sdice_s2c%re(n),n=1,sdnum_s2c)
        read(fid_sd_i) (sdice_s2c%rp(n),n=1,sdnum_s2c)

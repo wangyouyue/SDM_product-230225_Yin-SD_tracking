@@ -93,7 +93,7 @@ module m_sdm_common
   integer(DP), allocatable, save :: sdn_s2c(:)   ! multipilicity
   integer, allocatable, save :: sdid_s2c(:)  ! save index
   integer, allocatable, save :: dmid_s2c(:)  ! domain index
-  integer(i2), allocatable, save :: if_coal(:)   ! coal flag
+  integer(i2), allocatable, save :: ifcoal_s2c(:)   ! coal flag
   real(RP), allocatable, save :: sdri_s2c(:)     ! index-i(real) of s.d.
   real(RP), allocatable, save :: sdrj_s2c(:)     ! index-j(real) of s.d.
   real(RP), allocatable, save :: sdrk_s2c(:)     ! index-k(real) of s.d.

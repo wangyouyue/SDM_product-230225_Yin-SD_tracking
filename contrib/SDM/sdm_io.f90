@@ -721,7 +721,7 @@ contains
     !!! pre_dmid
     call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid) )
     !!! sd_liqice
-    call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal_) )
+    call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal) )
 
     if( sdm_cold ) then
        !!! sdi_re
