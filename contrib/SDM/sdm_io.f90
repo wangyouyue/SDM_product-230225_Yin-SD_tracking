@@ -155,7 +155,8 @@ contains
                pre_dmid(m) = mype
        end do
 
-
+    ! Initialize coalescence flag
+    if_coal(1:sd_num) = 0
     end if
 
     close(fid_sdm_o)
@@ -409,6 +410,9 @@ contains
        pre_sdid(n) = n
        pre_dmid(n) = mype
     end do
+
+    ! Initialize coalescence flag
+    if_coal(1:sd_num) = 0
 
     return
 
@@ -747,6 +751,9 @@ contains
        pre_sdid(n) = n
        pre_dmid(n) = mype
     end do
+
+    ! Initialize coalescence flag
+    if_coal(1:sd_num) = 0
 
     return
 

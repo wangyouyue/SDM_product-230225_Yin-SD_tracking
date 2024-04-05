@@ -2470,9 +2470,6 @@ contains
                            sd_itmp1,'no_interpolation' )
             end if
 
-            ! Initialize coalescence flag
-            if_coal(1:sd_num) = 0
-
             ! { coalescence } in SDM
             if( sdm_cold )then
                ! get density of solid-water before riming

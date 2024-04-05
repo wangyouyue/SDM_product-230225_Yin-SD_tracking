@@ -953,6 +953,8 @@ contains
           !### coalescence procudure ###!
 
           num_pair = num_pair + 1
+          if_coal( icptp ) = 1
+          if_coal( icptc ) = 1
           if( sd_n(icptc) > sd_n(icptp) ) then
 
              sd_n1  = sd_n( icptc )
@@ -1071,7 +1073,6 @@ contains
              sd_n( icptp )  = sd_n2
              sd_r( icptp )  = sd_r2
              sd_liqice( icptp ) = sd_li2
-             if_coal( icptp ) = 1
 
              do k=1,22
                 s = idx_nasl(k)
@@ -1091,7 +1092,6 @@ contains
              sd_n( icptc )  = sd_n2
              sd_r( icptc )  = sd_r2
              sd_liqice( icptc ) = sd_li2
-             if_coal( icptc ) = 1
 
              do k=1,22
                 s = idx_nasl(k)
