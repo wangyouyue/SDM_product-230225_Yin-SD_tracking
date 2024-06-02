@@ -500,6 +500,7 @@ module m_sdm_common
                                                ! 5:precipitation rate, 6:precipitation accumulation
   real(RP), allocatable, save  :: zph_crs(:,:,:), dxiv_sdm(:), dyiv_sdm(:)!, dziv_sdm(:)
   real(RP), allocatable, save  :: dx_sdm(:), dy_sdm(:)!, dz_sdm(:)   ! Dx, Dy, Dz for SDM (normally they are equal to those of SCALE)
+  real(RP), save :: sdm_noise_amp = 1.E-4_RP ! amplitude of random noise [m^1.5 * s^-0.5]
 !  integer, parameter :: nqw = QQA
   integer, save :: sdfmnum_s2c
   real(RP), save:: sdininum_s2c
@@ -611,6 +612,7 @@ module m_sdm_common
        sdm_dmpnskip,        &
        sdm_dmpitvb,         &
        sdm_dmpitvl,         &
-       sdm_dmpsdsiz
+       sdm_dmpsdsiz,        &
+       sdm_noise_amp
 
 end module m_sdm_common

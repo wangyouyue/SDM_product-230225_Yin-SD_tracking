@@ -1081,7 +1081,7 @@ contains
                    sd_itmp1,sd_itmp2,sd_itmp3,sd_dtmp1,sd_dtmp2,sd_dtmp3,sd_dtmp4,     &
                    crs_dtmp1,crs_dtmp2,crs_dtmp3,crs_dtmp4,       &
                    crs_dtmp5,crs_dtmp6,                           &
-                   rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
+                   rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4,sdm_noise_amp) 
 
      !== convert updated contravariant velocity of ==!
      !== super-droplets to {u,v,w} at future       ==!
@@ -1967,7 +1967,7 @@ contains
                       sd_itmp1,sd_itmp2,sd_itmp3,sd_dtmp1,sd_dtmp2,sd_dtmp3,sd_dtmp4,   &
                       crs_val1p,crs_val1c,crs_val2p,crs_val2c,    &
                       crs_val3p,crs_val3c,                        &
-                      rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
+                      rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4,sdm_noise_amp)
    use scale_process, only: &
        PRC_MPIstop
    use scale_time, only: &
@@ -1999,6 +1999,8 @@ contains
         sdm_subldep, sdm_subldep_updatefluid
     use m_sdm_io, only: &
         sdm_coal_outnetcdf
+    use scale_grid, only: &
+        DZ
 
    real(RP), intent(inout) :: DENS(KA,IA,JA)        !! Density [kg/m3]
    real(RP), intent(inout) :: MOMZ(KA,IA,JA)        !! Momentum [kg/s/m2]
@@ -2025,6 +2027,7 @@ contains
    integer, intent(in) :: bufsiz2_i8 ! buffer size for MPI (int8)
    integer, intent(in) :: bufsiz2_i2 ! buffer size for MPI (int2)
    integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
+   real(RP), intent(in) :: sdm_noise_amp ! amplitude of random noise [m^1.5 * s^-0.5]
    ! Input and output variables
    integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
@@ -2148,6 +2151,7 @@ contains
    integer, allocatable :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
    integer, allocatable :: num_col(:)     ! number of coalesence of pairs of SDs
    integer :: num_pair    ! number of super-droplet pairs
+   real(RP) :: dz_inv
   !---------------------------------------------------------------------
 
       ! Initialize and rename variables
@@ -2272,6 +2276,34 @@ contains
             sd_dtmp6(:) = 0.5_RP*(sd_vz(:)+sd_dtmp6(:))
             call sdm_move(sdm_dtadv,                         &
                           sd_num,sd_dtmp4,sd_dtmp5,sd_dtmp6,sd_x,sd_y,sd_rk)
+
+            !!!  random force to SDs mimicking SGS flcutuations of velocity [for
+            !test]
+            ! Random perturbation to super-droplets
+            if( sdm_noise_amp > 0.0_RP ) then
+                call gen_rand_array( sd_rng, sd_rand(1:sd_num) )
+                do n=1,sd_num
+                   !### skip invalid super-droplets ###!
+                   if( sd_rk(n)<VALID2INVALID ) cycle
+                   !### move super-droplets (explicit) ###!
+                   sd_x(n)  = sd_x(n)  + (sd_rand(n)-0.5_RP)  * sqrt(real(sdm_dtadv,kind=RP)) * sdm_noise_amp / sqrt(sd_r(n))
+                end do
+                call gen_rand_array( sd_rng, sd_rand(1:sd_num) )
+                do n=1,sd_num
+                   !### skip invalid super-droplets ###!
+                   if( sd_rk(n)<VALID2INVALID ) cycle
+                   !### move super-droplets (explicit) ###!
+                   sd_y(n)  = sd_y(n)  + (sd_rand(n)-0.5_RP)  * sqrt(real(sdm_dtadv,kind=RP)) * sdm_noise_amp / sqrt(sd_r(n))
+                end do
+                call gen_rand_array( sd_rng, sd_rand(1:sd_num) )
+                dz_inv=1.0_RP/DZ
+                do n=1,sd_num
+                   !### skip invalid super-droplets ###!
+                   if( sd_rk(n)<VALID2INVALID ) cycle
+                   !### move super-droplets (explicit) ###!
+                   sd_rk(n) = sd_rk(n) + (sd_rand(n)-0.5_RP) * sqrt(real(sdm_dtadv,kind=RP)) * dz_inv * sdm_noise_amp / sqrt(sd_r(n))
+                end do
+            end if
 
             ! lateral boundary routine in SDM
             !! judge super-droplets as invalid or valid in horizontal
