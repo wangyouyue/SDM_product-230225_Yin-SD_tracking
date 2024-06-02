@@ -40,7 +40,7 @@ contains
                         ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl, &
                         sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,&
                         pre_sdid, pre_dmid, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, num_pair,&
-                        if_coal,sort_id,sort_key,sort_freq,sort_tag,   &
+                        sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,sort_id,sort_key,sort_freq,sort_tag,  &
                         sd_rng,sd_rand,                        &
                         sort_tag0,fsort_id,icp,sd_perm,c_rate  )
     use gadg_algorithm, only: &
@@ -113,6 +113,10 @@ contains
     integer, allocatable, intent(out) :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
     integer, allocatable, intent(out) :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
     integer, allocatable, intent(out) :: num_col(:)     ! number of coalesence of pairs of SDs
+    real(RP), allocatable, intent(out) :: sdr1_out(:)
+    real(RP), allocatable, intent(out) :: sdr2_out(:)
+    integer(DP), allocatable, intent(out) :: sdn1_out(:)
+    integer(DP), allocatable, intent(out) :: sdn2_out(:)
  
     ! Internal shared variables
     real(RP) :: sd_aslrho(1:22) ! Density of chemical material contained as water-soluble aerosol in super droplets
@@ -180,6 +184,10 @@ contains
     integer, allocatable :: pre_dmid1_temp(:)
     integer, allocatable :: pre_dmid2_temp(:)
     integer, allocatable :: num_col_temp(:)    ! temporary
+    real(RP), allocatable :: sdr1_temp(:)
+    real(RP), allocatable :: sdr2_temp(:)
+    integer(DP), allocatable :: sdn1_temp(:)
+    integer(DP), allocatable :: sdn2_temp(:)
 
     integer, allocatable :: fsort_tag(:) ! buffer for sorting
     integer, allocatable :: fsort_freq(:) ! buffer for sorting
@@ -922,6 +930,10 @@ contains
     allocate(pre_dmid1_temp(sd_num/2))
     allocate(pre_dmid2_temp(sd_num/2))
     allocate(num_col_temp(sd_num/2))
+    allocate(sdr1_temp(sd_num/2))
+    allocate(sdr2_temp(sd_num/2))
+    allocate(sdn1_temp(sd_num/2))
+    allocate(sdn2_temp(sd_num/2))
 
     num_pair = 0
     do m=1,gnum
@@ -1101,6 +1113,11 @@ contains
 
           end if
 
+          sdr1_temp( num_pair ) = sd_r1
+          sdn1_temp( num_pair ) = sd_n1
+          sdr2_temp( num_pair ) = sd_r2
+          sdn2_temp( num_pair ) = sd_n2
+
        end do
 
     end do
@@ -1111,11 +1128,19 @@ contains
         allocate(pre_sdid1( num_pair ))
         allocate(pre_sdid2( num_pair ))
         allocate(num_col( num_pair ))
+        allocate(sdr1_out( num_pair ))
+        allocate(sdr2_out( num_pair ))
+        allocate(sdn1_out( num_pair ))
+        allocate(sdn2_out( num_pair ))
         pre_dmid1 = pre_dmid1_temp( :num_pair )
         pre_dmid2 = pre_dmid2_temp( :num_pair )
         pre_sdid1 = pre_sdid1_temp( :num_pair )
         pre_sdid2 = pre_sdid2_temp( :num_pair )
         num_col = num_col_temp( :num_pair )
+        sdr1_out = sdr1_temp( :num_pair )
+        sdr2_out = sdr2_temp( :num_pair )
+        sdn1_out = sdn1_temp( :num_pair )
+        sdn2_out = sdn2_temp( :num_pair )
     end if
 
     ! Deallocate
@@ -1126,6 +1151,10 @@ contains
     deallocate( pre_sdid1_temp )
     deallocate( pre_sdid2_temp )
     deallocate( num_col_temp )
+    deallocate( sdr1_temp )
+    deallocate( sdr2_temp )
+    deallocate( sdn1_temp )
+    deallocate( sdn2_temp )
 
 #ifdef _FAPP_
     ! Section specification for fapp profiler

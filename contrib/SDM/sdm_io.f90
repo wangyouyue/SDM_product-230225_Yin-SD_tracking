@@ -50,7 +50,7 @@ contains
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
     integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
     integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
-    integer(kind=i2), intent(in) :: if_coal(1:sd_num)
+    integer(kind=i2), intent(inout) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
@@ -184,7 +184,7 @@ contains
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
     integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
     integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
-    integer(kind=i2), intent(in) :: if_coal(1:sd_num)
+    integer(kind=i2), intent(inout) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
@@ -437,7 +437,7 @@ contains
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
     integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
     integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
-    integer(kind=i2), intent(in) :: if_coal(1:sd_num)
+    integer(kind=i2), intent(inout) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
@@ -772,7 +772,7 @@ contains
     end if
   end subroutine check_netcdf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_coal_outnetcdf(otime, num_pair, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col)
+  subroutine sdm_coal_outnetcdf(otime, num_pair, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
     use netcdf
     use scale_precision
     use scale_stdio
@@ -791,6 +791,10 @@ contains
     integer, allocatable, intent(in) :: pre_sdid2(:) ! save index of super-droplets
     integer, allocatable, intent(in) :: pre_dmid2(:) ! domain index of super-droplets
     integer, allocatable, intent(in) :: num_col(:)   ! number of coalesence of pairs of SDs
+    real(RP), allocatable, intent(in) :: sdr1_out(:)
+    real(RP), allocatable, intent(in) :: sdr2_out(:)
+    integer(DP), allocatable, intent(in) :: sdn1_out(:)
+    integer(DP), allocatable, intent(in) :: sdn2_out(:)
 
     character(len=17) :: fmt2="(A, '.', A, I*.*)"
     character(len=H_LONG) :: ftmp
@@ -799,7 +803,7 @@ contains
     integer :: fid_sdm_o
     integer :: ierr
     integer :: nf90_real_precision
-    integer :: ncid, num_pair_id
+    integer :: ncid, num_pair_id, sdr1_out_id, sdr2_out_id, sdn1_out_id, sdn2_out_id
     integer :: pre_sdid1_id, pre_sdid2_id, pre_dmid1_id, pre_dmid2_id, num_col_id
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
@@ -836,26 +840,50 @@ contains
     call check_netcdf( nf90_def_var(ncid, "pre_sdid1", NF90_INT, num_pair_id,pre_sdid1_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid1_id, &
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'long_name', 'previous index of large SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'long_name', 'previous index of large SDs') )
     call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'units', '') )
     !!! pre_dmid1
     call check_netcdf( nf90_def_var(ncid, "pre_dmid1", NF90_INT, num_pair_id, pre_dmid1_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid1_id, &
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'long_name', 'previous domain of large SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'long_name', 'previous domain of large SDs') )
     call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'units', '') )
+    !!! sd_r1
+    call check_netcdf( nf90_def_var(ncid, "sd_r1", nf90_real_precision, num_pair_id, sdr1_out_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, sdr1_out_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, sdr1_out_id, 'long_name', 'equivalent radius of large SDs') )
+    call check_netcdf( nf90_put_att(ncid, sdr1_out_id, 'units', 'm') )
+    !!! sd_n1
+    call check_netcdf( nf90_def_var(ncid, "sd_n1", NF90_INT64, num_pair_id, sdn1_out_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, sdn1_out_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, sdn1_out_id, 'long_name', 'multiplicity of large SDs') )
+    call check_netcdf( nf90_put_att(ncid, sdn1_out_id, 'units', '') )
     !!! pre_sdid2
     call check_netcdf( nf90_def_var(ncid, "pre_sdid2", NF90_INT, num_pair_id,pre_sdid2_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid2_id, &
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'long_name', 'previous index of small SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'long_name', 'previous index of small SDs') )
     call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'units', '') )
     !!! pre_dmid2
     call check_netcdf( nf90_def_var(ncid, "pre_dmid2", NF90_INT, num_pair_id, pre_dmid2_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid2_id, &
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'long_name', 'previous domain of small SD') )
+    call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'long_name', 'previous domain of small SDs') )
     call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'units', '') )
+    !!! sd_r2
+    call check_netcdf( nf90_def_var(ncid, "sd_r2", nf90_real_precision, num_pair_id, sdr2_out_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, sdr2_out_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, sdr2_out_id, 'long_name', 'equivalent radius of small SDs') )
+    call check_netcdf( nf90_put_att(ncid, sdr2_out_id, 'units', 'm') )
+    !!! sd_n2
+    call check_netcdf( nf90_def_var(ncid, "sd_n2", NF90_INT64, num_pair_id, sdn2_out_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, sdn2_out_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, sdn2_out_id, 'long_name', 'multiplicity of small SDs') )
+    call check_netcdf( nf90_put_att(ncid, sdn2_out_id, 'units', '') )
     !!! num_col
     call check_netcdf( nf90_def_var(ncid, "num_col", NF90_INT, num_pair_id, num_col_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, num_col_id, &
@@ -875,10 +903,18 @@ contains
     call check_netcdf( nf90_put_var(ncid, pre_sdid1_id, pre_sdid1) )
     !!! pre_dmid1
     call check_netcdf( nf90_put_var(ncid, pre_dmid1_id, pre_dmid1) )
+    !!! sd_r1
+    call check_netcdf( nf90_put_var(ncid, sdr1_out_id, sdr1_out) )
+    !!! sd_n1
+    call check_netcdf( nf90_put_var(ncid, sdn1_out_id, sdn1_out) )
     !!! pre_sdid2
     call check_netcdf( nf90_put_var(ncid, pre_sdid2_id, pre_sdid2) )
     !!! pre_dmid2
     call check_netcdf( nf90_put_var(ncid, pre_dmid2_id, pre_dmid2) )
+    !!! sd_r2
+    call check_netcdf( nf90_put_var(ncid, sdr2_out_id, sdr2_out) )
+    !!! sd_n2
+    call check_netcdf( nf90_put_var(ncid, sdn2_out_id, sdn2_out) )
     !!! num_col
     call check_netcdf( nf90_put_var(ncid, num_col_id, num_col) )
 

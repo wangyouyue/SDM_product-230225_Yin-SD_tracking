@@ -2150,6 +2150,10 @@ contains
    integer, allocatable :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
    integer, allocatable :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
    integer, allocatable :: num_col(:)     ! number of coalesence of pairs of SDs
+   real(RP), allocatable :: sdr1_out(:)
+   real(RP), allocatable :: sdr2_out(:)
+   integer(DP), allocatable :: sdn1_out(:)
+   integer(DP), allocatable :: sdn2_out(:)
    integer :: num_pair    ! number of super-droplet pairs
    real(RP) :: dz_inv
   !---------------------------------------------------------------------
@@ -2543,7 +2547,7 @@ contains
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
                             pre_sdid, pre_dmid, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, num_pair,&
-                            if_coal,sort_id,sort_key,sort_freq,sort_tag,        &
+                            sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,sort_id,sort_key,sort_freq,sort_tag,&
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
                             sd_itmp1(1:sd_num),sd_itmp2(1:sd_num),  &
@@ -2551,13 +2555,17 @@ contains
 
                if (allocated(num_col)) then
                    ! output sdm_coalesence SD pairs
-                   call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,           &
-                                pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col)
+                   call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2,&
+                                 num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
                    deallocate(pre_dmid1)
                    deallocate(pre_dmid2)
                    deallocate(pre_sdid1)
                    deallocate(pre_sdid2)
                    deallocate(num_col)
+                   deallocate(sdr1_out)
+                   deallocate(sdr2_out)
+                   deallocate(sdn1_out)
+                   deallocate(sdn2_out)
                end if
             end if
 
