@@ -1015,6 +1015,11 @@ contains
 
           end if
 
+          sdr1_temp( num_pair ) = sd_r1
+          sdn1_temp( num_pair ) = sd_n1
+          sdr2_temp( num_pair ) = sd_r2
+          sdn2_temp( num_pair ) = sd_n2
+
           sd_ncol = min( sd_ncol, int(sd_n1/sd_n2,kind=DP) )
           num_col_temp( num_pair ) = sd_ncol
 
@@ -1080,7 +1085,6 @@ contains
              sd_r( icptc )  = sd_r1
              sd_rk( icptc ) = sd_rk1
              sd_liqice( icptc ) = sd_li1
-             if_coal( icptc ) = 1
 
              sd_n( icptp )  = sd_n2
              sd_r( icptp )  = sd_r2
@@ -1099,7 +1103,6 @@ contains
              sd_r( icptp )  = sd_r1
              sd_rk( icptp ) = sd_rk1
              sd_liqice( icptp ) = sd_li1
-             if_coal( icptp ) = 1
 
              sd_n( icptc )  = sd_n2
              sd_r( icptc )  = sd_r2
@@ -1112,11 +1115,6 @@ contains
              end do
 
           end if
-
-          sdr1_temp( num_pair ) = sd_r1
-          sdn1_temp( num_pair ) = sd_n1
-          sdr2_temp( num_pair ) = sd_r2
-          sdn2_temp( num_pair ) = sd_n2
 
        end do
 
