@@ -21,6 +21,66 @@
 !!
 !<
 !-------------------------------------------------------------------------------
+module sdm_sorting_module
+  use scale_precision
+  implicit none
+contains
+  recursive subroutine quicksort(array, left, right, sd_rand, layer_indices)
+    integer, intent(inout) :: array(:)
+    integer, intent(in) :: left, right
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+
+    integer :: pivot_index
+
+    if (left < right) then
+      pivot_index = partition(array, left, right, sd_rand, layer_indices)
+      call quicksort(array, left, pivot_index - 1, sd_rand, layer_indices)
+      call quicksort(array, pivot_index + 1, right, sd_rand, layer_indices)
+    end if
+  end subroutine quicksort
+!---------------------------------------------------------------------------------------------------------------------------------
+  integer function partition(array, left, right, sd_rand, layer_indices)
+    implicit none
+    integer, intent(inout) :: array(:)
+    integer, intent(in) :: left, right
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+
+    integer :: i, j, temp
+    real(RP) :: pivot
+
+    pivot = sd_rand(layer_indices(array(right)))
+    i = left - 1
+
+    do j = left, right - 1
+      if (sd_rand(layer_indices(array(j))) <= pivot) then
+        i = i + 1
+        temp = array(i)
+        array(i) = array(j)
+        array(j) = temp
+      end if
+    end do
+
+    temp = array(i + 1)
+    array(i + 1) = array(right)
+    array(right) = temp
+
+    partition = i + 1
+  end function partition
+!---------------------------------------------------------------------------------------------------------------------------------
+  subroutine sort_index_array_by_sd_rand(index_array, sd_rand, layer_indices, count)
+    implicit none
+    integer, intent(inout) :: index_array(:)
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+    integer, intent(in) :: count
+
+    call quicksort(index_array, 1, count, sd_rand, layer_indices)
+  end subroutine sort_index_array_by_sd_rand
+end module sdm_sorting_module
+!---------------------------------------------------------------------------------------------------------------------------------
+
 module m_sdm_idutil
   use scale_precision
 
@@ -400,7 +460,7 @@ contains
 
     else if (sdtype == 'selected') then
        do n=1,sd_num
-          if( sd_id(n)<INVALID_i4 ) cycle
+          if( sd_id(n)<=INVALID_i4 ) cycle
 
           cnt = cnt + 1
           ilist(cnt) = n
@@ -470,6 +530,7 @@ contains
     use scale_grid, only: DZ
     use m_sdm_common, only: VALID2INVALID
     use scale_process, only: mype => PRC_myrank
+    use sdm_sorting_module  ! Use the module containing the sorting subroutines
 
     implicit none
 
@@ -484,7 +545,7 @@ contains
     integer, intent(inout) :: sd_id(1:sd_num)
     integer, intent(inout) :: dm_id(1:sd_num)
 
-    integer :: i, j, layer, count, total_count, selected_count, min_layer, max_layer, num_layers
+    integer :: i, j, layer, count, total_count, selected_count, min_layer, max_layer, num_layers, selected_particle_index
     integer, allocatable :: layer_indices(:), layer_counts(:), layer_selected_counts(:)
     logical, allocatable :: selected(:)
     integer, allocatable :: index_array(:)
@@ -570,7 +631,7 @@ contains
       do i = 1, layer_selected_counts(layer - min_layer + 1)
         j = index_array(i)
         selected_particle_index = layer_indices(j)
-        sd_id(selected_particle_index) = selected_count + i
+        sd_id(selected_particle_index) = selected_particle_index
         dm_id(selected_particle_index) = mype
       end do
 
@@ -584,59 +645,5 @@ contains
 
     return
   end subroutine sdm_select_stratified_random_particles
-!---------------------------------------------------------------------------------------------------------------------------------
-  subroutine sort_index_array_by_sd_rand(index_array, sd_rand, layer_indices, count)
-    implicit none
-    integer, intent(inout) :: index_array(:)
-    real(RP), intent(in) :: sd_rand(:)
-    integer, intent(in) :: layer_indices(:)
-    integer, intent(in) :: count
 
-    call quicksort(index_array, 1, count, sd_rand, layer_indices)
-  end subroutine sort_index_array_by_sd_rand
-!---------------------------------------------------------------------------------------------------------------------------------
-  subroutine quicksort(array, left, right, sd_rand, layer_indices)
-    implicit none
-    integer, intent(inout) :: array(:)
-    integer, intent(in) :: left, right
-    real(RP), intent(in) :: sd_rand(:)
-    integer, intent(in) :: layer_indices(:)
-
-    integer :: pivot_index
-
-    if (left < right) then
-      pivot_index = partition(array, left, right, sd_rand, layer_indices)
-      call quicksort(array, left, pivot_index - 1, sd_rand, layer_indices)
-      call quicksort(array, pivot_index + 1, right, sd_rand, layer_indices)
-    end if
-  end subroutine quicksort
-!---------------------------------------------------------------------------------------------------------------------------------
-  integer function partition(array, left, right, sd_rand, layer_indices)
-    implicit none
-    integer, intent(inout) :: array(:)
-    integer, intent(in) :: left, right
-    real(RP), intent(in) :: sd_rand(:)
-    integer, intent(in) :: layer_indices(:)
-
-    integer :: i, j, temp
-    real(RP) :: pivot
-
-    pivot = sd_rand(layer_indices(array(right)))
-    i = left - 1
-
-    do j = left, right - 1
-      if (sd_rand(layer_indices(array(j))) <= pivot) then
-        i = i + 1
-        temp = array(i)
-        array(i) = array(j)
-        array(j) = temp
-      end if
-    end do
-
-    temp = array(i + 1)
-    array(i + 1) = array(right)
-    array(right) = temp
-
-    partition = i + 1
-  end function partition
 end module m_sdm_idutil

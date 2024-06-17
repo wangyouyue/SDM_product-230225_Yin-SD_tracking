@@ -970,7 +970,7 @@ contains
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c, &
+                        sdice_s2c,sdid_s2c,dmid_s2c, &
                         sdm_dmpnskip,filetag='all')
        else if( (mod(sdm_dmpvar,100))/10==2) then
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
@@ -1066,7 +1066,7 @@ contains
                    lsdmup,ni_s2c,nj_s2c,nk_s2c,                   &
                    sdnum_s2c,sdnumasl_s2c,                        &
                    sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,    &
-                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,sdice_s2c,&
+                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdice_s2c,sdid_s2c,dmid_s2c,&
                    sdrkl_s2c,sdrku_s2c,                           &
                    rng_s2c,rand_s2c,sortid_s2c,sortkey_s2c,       &
                    sortfreq_s2c,sorttag_s2c,                      &
@@ -1432,7 +1432,7 @@ contains
       integer :: i, j, k, n, iq, np             ! index
       real(RP) :: crs_dtmp1(KA,IA,JA), crs_dtmp2(KA,IA,JA), crs_dtmp3(KA,IA,JA)
       integer :: sd_str, sd_end, sd_valid
-      real(RP) :: rand_s2c(1:sd_num) ! random numbers
+      real(RP) :: rand_s2c(1:sdnum_s2c) ! random numbers
 
       real(RP) :: pres_scale(KA,IA,JA)  ! Pressure
       real(RP) :: t_scale(KA,IA,JA)    ! Temperature
