@@ -26,7 +26,7 @@ module m_sdm_idutil
 
   implicit none
   private
-  public :: sdm_sort,sdm_getperm,sdm_copy_selected_sd
+  public :: sdm_sort,sdm_getperm,sdm_copy_selected_sd,sdm_select_stratified_random_particles
 
 contains
   subroutine sdm_getperm(freq_max,ni_sdm,nj_sdm,nk_sdm,sd_num,    &
@@ -186,9 +186,9 @@ contains
   end subroutine sdm_sort
   !---------------------------------------------------------------------------------------------------------------------------------
   subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,    sd_ri,    sd_rj,    sd_rk,     &
-       &                          sd_liqice,    sd_asl,    sd_r,    sdi,                                             &
+       &                          sd_liqice,    sd_asl,    sd_r,    sdi,     sd_id,   dm_id,                         &
        &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
-       &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,                                         &
+       &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,dm_id_tmp,                     &
        &                          TEMP0,ilist,sdtype)
     use scale_process, only: &
          & PRC_MPIstop
@@ -196,7 +196,8 @@ contains
          & IA,JA,KA
     use m_sdm_common, only: &
          & i2, sdicedef, sdm_cold, num_threads, VALID2INVALID, STAT_LIQ, STAT_ICE, &
-         & sdm_aslset, mass_amsul, ion_amsul, mass_nacl, ion_nacl, CurveF, ASL_FF 
+         & sdm_aslset, mass_amsul, ion_amsul, mass_nacl, ion_nacl, CurveF, ASL_FF, &
+         & INVALID_i4
     use m_sdm_coordtrans, only: &
          & sdm_x2ri, sdm_y2rj
 
@@ -215,6 +216,8 @@ contains
     real(RP), intent(in) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     real(RP), intent(in) :: sd_r(1:sd_num) ! equivalent radius of super-droplets
     type(sdicedef), intent(in) :: sdi   ! ice phase super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)
+    integer, intent(in) :: dm_id(1:sd_num)
 
     integer,  intent(out) :: sd_num_tmp  ! number of super-droplets
     integer,  intent(out)  :: sd_numasl_tmp   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
@@ -228,6 +231,8 @@ contains
     real(RP), intent(out) :: sd_asl_tmp(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     real(RP), intent(out) :: sd_r_tmp(1:sd_num) ! equivalent radius of super-droplets
     type(sdicedef), intent(inout) :: sdi_tmp   ! ice phase super-droplets
+    integer, intent(out) :: sd_id_tmp(1:sd_num)
+    integer, intent(out) :: dm_id_tmp(1:sd_num)
 
     real(RP), intent(in)  :: TEMP0(KA,IA,JA)       ! temperature [K]
 
@@ -393,6 +398,15 @@ contains
           end if
        end do
 
+    else if (sdtype == 'selected') then
+       do n=1,sd_num
+          if( sd_id(n)<INVALID_i4 ) cycle
+
+          cnt = cnt + 1
+          ilist(cnt) = n
+
+       end do
+
     else
        ! stop if unsupported sdtype option is specified
        write(*,*) "sdm_copy_selected_sd: Unsupported sdtype option is specified"
@@ -415,6 +429,8 @@ contains
           sd_rk_tmp(m)     = sd_rk(n)
           sd_liqice_tmp(m) = sd_liqice(n)
           sd_r_tmp(m)      = sd_r(n)
+          sd_id_tmp(m)      = sd_id(n)
+          dm_id_tmp(m)      = dm_id(n)
 
        end do
        end do
@@ -448,4 +464,179 @@ contains
     end if
 
   end subroutine sdm_copy_selected_sd
+!---------------------------------------------------------------------------------------------------------------------------------
+  subroutine sdm_select_stratified_random_particles(sd_num, num_selected, sd_rand, sd_rk, sd_r, height_min, height_max, radius_min, dm_id, sd_id)
+    use scale_precision
+    use scale_grid, only: DZ
+    use m_sdm_common, only: VALID2INVALID
+    use scale_process, only: mype => PRC_myrank
+
+    implicit none
+
+    integer, intent(in) :: sd_num            ! Total number of super-droplets
+    integer, intent(in) :: num_selected      ! Number of super-droplets to select
+    real(RP), intent(in) :: sd_rand(1:sd_num)  ! Array of random numbers
+    real(RP), intent(in) :: sd_rk(1:sd_num)    ! z-coordinates (heights) of super-droplets
+    real(RP), intent(in) :: sd_r(1:sd_num)     ! Radii of super-droplets
+    real(RP), intent(in) :: height_min         ! Minimum height for selection
+    real(RP), intent(in) :: height_max         ! Maximum height for selection
+    real(RP), intent(in) :: radius_min         ! Minimum radius for selection
+    integer, intent(inout) :: sd_id(1:sd_num)
+    integer, intent(inout) :: dm_id(1:sd_num)
+
+    integer :: i, j, layer, count, total_count, selected_count, min_layer, max_layer, num_layers
+    integer, allocatable :: layer_indices(:), layer_counts(:), layer_selected_counts(:)
+    logical, allocatable :: selected(:)
+    integer, allocatable :: index_array(:)
+
+    ! Calculate minimum and maximum layers
+    min_layer = int(height_min / DZ)
+    max_layer = int(height_max / DZ)
+    num_layers = max_layer - min_layer + 1
+
+    ! Initialize counters
+    total_count = 0
+    allocate(layer_counts(num_layers))
+    layer_counts = 0
+    allocate(selected(sd_num))
+    selected = .false.
+
+    ! Count super-droplets in each layer that meet the criteria
+    do i = 1, sd_num
+      if (sd_rk(i) < VALID2INVALID) cycle
+      layer = floor(sd_rk(i))
+      if (layer >= min_layer .and. layer <= max_layer .and. sd_r(i) >= radius_min) then
+        layer_counts(layer - min_layer + 1) = layer_counts(layer - min_layer + 1) + 1
+        total_count = total_count + 1
+      else
+        selected(i) = .true.  ! Mark super-droplets that do not meet the criteria as selected
+      end if
+    end do
+
+    ! Check if there are enough super-droplets to select from
+    if (total_count < num_selected) then
+      print *, "Error: Not enough particles meet the criteria"
+      deallocate(layer_counts, selected)
+      return
+    end if
+
+    ! Calculate number of super-droplets to select from each layer
+    allocate(layer_selected_counts(num_layers))
+    layer_selected_counts = 0
+
+    do layer = 1, num_layers
+      layer_selected_counts(layer) = int(num_selected * layer_counts(layer) / total_count)
+    end do
+
+    ! Adjust the selection counts to match exactly num_selected
+    selected_count = sum(layer_selected_counts)
+    if (selected_count < num_selected) then
+      do i = 1, num_selected - selected_count
+        layer_selected_counts(i) = layer_selected_counts(i) + 1
+      end do
+    else if (selected_count > num_selected) then
+      do i = 1, selected_count - num_selected
+        layer_selected_counts(i) = layer_selected_counts(i) - 1
+      end do
+    end if
+
+    ! Allocate temporary arrays
+    allocate(layer_indices(sd_num))
+
+    ! Select particles from each layer
+    do layer = min_layer, max_layer
+      if (layer_selected_counts(layer - min_layer + 1) == 0) cycle
+
+      count = 0
+      selected_count = 0
+      do i = 1, sd_num
+        if (selected(i)) cycle
+        if (floor(sd_rk(i)) == layer .and. sd_r(i) >= radius_min) then
+          count = count + 1
+          layer_indices(count) = i
+          selected(i) = .true.  ! Mark the super-droplets as selected
+        end if
+      end do
+
+      ! Create index array and sort by random numbers
+      allocate(index_array(count))
+      do i = 1, count
+        index_array(i) = i
+      end do
+
+      call sort_index_array_by_sd_rand(index_array, sd_rand, layer_indices, count)
+
+      ! Select super-droplets based on sorted indices
+      do i = 1, layer_selected_counts(layer - min_layer + 1)
+        j = index_array(i)
+        selected_particle_index = layer_indices(j)
+        sd_id(selected_particle_index) = selected_count + i
+        dm_id(selected_particle_index) = mype
+      end do
+
+      selected_count = selected_count + layer_selected_counts(layer - min_layer + 1)
+
+      deallocate(index_array)
+    end do
+
+    ! Deallocate arrays
+    deallocate(layer_counts, layer_selected_counts, layer_indices, selected)
+
+    return
+  end subroutine sdm_select_stratified_random_particles
+!---------------------------------------------------------------------------------------------------------------------------------
+  subroutine sort_index_array_by_sd_rand(index_array, sd_rand, layer_indices, count)
+    implicit none
+    integer, intent(inout) :: index_array(:)
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+    integer, intent(in) :: count
+
+    call quicksort(index_array, 1, count, sd_rand, layer_indices)
+  end subroutine sort_index_array_by_sd_rand
+!---------------------------------------------------------------------------------------------------------------------------------
+  subroutine quicksort(array, left, right, sd_rand, layer_indices)
+    implicit none
+    integer, intent(inout) :: array(:)
+    integer, intent(in) :: left, right
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+
+    integer :: pivot_index
+
+    if (left < right) then
+      pivot_index = partition(array, left, right, sd_rand, layer_indices)
+      call quicksort(array, left, pivot_index - 1, sd_rand, layer_indices)
+      call quicksort(array, pivot_index + 1, right, sd_rand, layer_indices)
+    end if
+  end subroutine quicksort
+!---------------------------------------------------------------------------------------------------------------------------------
+  integer function partition(array, left, right, sd_rand, layer_indices)
+    implicit none
+    integer, intent(inout) :: array(:)
+    integer, intent(in) :: left, right
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+
+    integer :: i, j, temp
+    real(RP) :: pivot
+
+    pivot = sd_rand(layer_indices(array(right)))
+    i = left - 1
+
+    do j = left, right - 1
+      if (sd_rand(layer_indices(array(j))) <= pivot) then
+        i = i + 1
+        temp = array(i)
+        array(i) = array(j)
+        array(j) = temp
+      end if
+    end do
+
+    temp = array(i + 1)
+    array(i + 1) = array(right)
+    array(right) = temp
+
+    partition = i + 1
+  end function partition
 end module m_sdm_idutil

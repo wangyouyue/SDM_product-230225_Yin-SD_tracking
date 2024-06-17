@@ -152,7 +152,7 @@ contains
 
   end subroutine sdm_outasci
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,sdn_dmpnskip,filetag)
+  subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,sd_id,dm_id,sdn_dmpnskip,filetag)
     use netcdf
     use scale_precision
     use scale_stdio
@@ -179,6 +179,8 @@ contains
     real(RP), intent(in) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     real(RP), intent(in) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
     type(sdicedef), intent(in) :: sdi   ! ice phase super-droplets
+    integer, intent(in) :: sd_id(1:sd_num) ! save index of super-droplets
+    integer, intent(in) :: dm_id(1:sd_num) ! domain index of super-droplets
     integer, intent(in) :: sdn_dmpnskip ! Base skip to store super droplets in text format
     character(len=*),intent(in),optional :: filetag ! user defined text string tag to be added to the filenames
 
@@ -192,7 +194,7 @@ contains
     character(len=5)  :: cstat   ! status character
     integer :: nf90_real_precision
     integer :: ncid, sd_num_id, sd_numasl_id
-    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id
+    integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id,sd_id_id, domain_id
     integer :: sdi_re_id, sdi_rp_id, sdi_rho_id, sdi_tf_id, sdi_mrime_id, sdi_nmono_id
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
@@ -281,6 +283,19 @@ contains
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'long_name', 'status of droplets: 01=liquid, 10=ice, 11=mixture') )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'units', '') )
 
+    !!! sd_id
+    call check_netcdf( nf90_def_var(ncid, "sd_id", NF90_INT, sd_num_id, sd_id_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, sd_id_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'SD ID') )
+    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'units', '') )
+    !!! dm_id
+    call check_netcdf( nf90_def_var(ncid, "dm_id", NF90_INT, sd_num_id, domain_id) )
+    call check_netcdf( nf90_def_var_deflate(ncid, domain_id, &
+         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+    call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'domain ID') )
+    call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
+
     if( sdm_cold ) then
        !!! sdi%re
        call check_netcdf( nf90_def_var(ncid, "sdi_re", nf90_real_precision, sd_num_id, sdi_re_id) )
@@ -341,6 +356,11 @@ contains
     call check_netcdf( nf90_put_var(ncid, sd_n_id, sd_n) )
     !!! sd_liqice
     call check_netcdf( nf90_put_var(ncid, sd_liqice_id, sd_liqice) )
+
+    !!! sd_id
+    call check_netcdf( nf90_put_var(ncid, sd_id_id, sd_id) )
+    !!! pre_dmid
+    call check_netcdf( nf90_put_var(ncid, domain_id, dm_id) )
 
     if( sdm_cold ) then
        !!! sdi_re

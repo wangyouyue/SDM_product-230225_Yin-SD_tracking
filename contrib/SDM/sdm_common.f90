@@ -90,6 +90,8 @@ module m_sdm_common
   !
   !------------------------------------------------------------------------------
   integer(DP), allocatable, save :: sdn_s2c(:)   ! multipilicity
+  integer, allocatable, save :: sdid_s2c(:)  ! save index
+  integer, allocatable, save :: dmid_s2c(:)  ! domain index
   real(RP), allocatable, save :: sdri_s2c(:)     ! index-i(real) of s.d.
   real(RP), allocatable, save :: sdrj_s2c(:)     ! index-j(real) of s.d.
   real(RP), allocatable, save :: sdrk_s2c(:)     ! index-k(real) of s.d.
@@ -105,6 +107,8 @@ module m_sdm_common
   real(RP), allocatable, save :: sdrku_s2c(:,:)  ! index-k(real) at 'sdm_upper'
   ! SDM for aerosol formation
   integer(DP), allocatable, save :: sdn_fm(:)    ! multiplicity of super-droplets
+  integer, allocatable, save :: sdid_fm(:)   ! save index of super-droplets
+  integer, allocatable, save :: dmid_fm(:)   ! domain index of super-droplets
   real(RP), allocatable, save :: sdri_fm(:)      ! index-i(real) of super-droplets
   real(RP), allocatable, save :: sdrj_fm(:)      ! index-j(real) of super-droplets
   real(RP), allocatable, save :: sdrk_fm(:)      ! index-k(real) of super-droplets
@@ -153,11 +157,11 @@ module m_sdm_common
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable :: rbuf_i4(:,:,:)
                        ! reciving buffer for MPI (int4)
-                       ! dim02 = 1 number of monomers (ice)
+                       ! dim02 = 2/3 number of monomers (ice), save and domain index
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable :: sbuf_i4(:,:,:)
                        ! sending buffer for MPI (int4)
-                       ! dim02 = 1 number of monomers
+                       ! dim02 = 2/3 number of monomers (ice), save and domain index
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable, save :: sdm_itmp1(:)
   integer, allocatable, save :: sdm_itmp2(:)
@@ -166,6 +170,8 @@ module m_sdm_common
   integer, allocatable, save :: sd_itmp2(:)
   integer, allocatable, save :: sd_itmp3(:)
   integer(i2), allocatable, target :: sd_i2tmp1(:)
+  integer, allocatable, target :: sd_i4tmp1(:)
+  integer, allocatable, target :: sd_i4tmp2(:)
   integer(DP), allocatable, target :: sd_i8tmp1(:)
   real(RP), allocatable, target, save :: sd_dtmp1(:)
   real(RP), allocatable, target, save :: sd_dtmp2(:)
@@ -205,6 +211,8 @@ module m_sdm_common
 
   !! These working arrays are needed due to the scale restart output timimg. Could be removed in the future scale version.  
   integer(DP), allocatable, save :: sdn_s2c_restart(:)      ! multipilicity
+  integer, allocatable, save     :: sdid_s2c_restart(:)     ! save index
+  integer, allocatable, save     :: dmid_s2c_restart(:)     ! domain index
   real(RP), allocatable, save    :: sdrk_s2c_restart(:)     ! index-k(real) of s.d.
   real(RP), allocatable, save    :: sdx_s2c_restart(:)      ! x-cordinate of s.d.
   real(RP), allocatable, save    :: sdy_s2c_restart(:)      ! y-cordinate of s.d.
@@ -271,6 +279,7 @@ module m_sdm_common
   real(RP), parameter :: INVALID = -999.999_RP ! value indicated as invalid super-droplets
   integer(DP), parameter :: INVALID_i8 = -999_DP ! value indicated as invalid super-droplets
   integer(i2), parameter :: INVALID_i2 = -999_i2 ! value indicated as invalid super-droplets
+  integer, parameter :: INVALID_i4 = -999 ! value indicated as invalid super-droplets
 
   !------------------------------------------------------------------------------
   !
@@ -465,6 +474,10 @@ module m_sdm_common
   real(RP), save :: sdm_dmpitvb  = 0.e0  ! Time interval of binary output of all droplets [s]
   real(RP), save :: sdm_dmpitvl  = 0.e0  ! Time interval of binary output of large droplets [s]
   real(RP), save :: sdm_dmpsdsiz = 0.e0  ! Threshold radius to store large super droplets in binary format [m]
+  integer, save :: num_selected = 1000   ! Number of super-droplets per domain to select
+  real(RP), save :: height_min = 400     ! Minimum height for selection
+  real(RP), save :: height_max = 800     ! Maximum height for selection
+  real(RP), save :: radius_min = 1.E-6_RP   ! Minimum radius for selection
 
   data sdm_dtcmph / 0.1_RP,0.1_RP,0.1_RP,0.1_RP,0.1_RP /
   data sdm_calvar / .false.,.false.,.false.,.false.,.false. /
@@ -597,6 +610,10 @@ module m_sdm_common
        sdm_dmpnskip,        &
        sdm_dmpitvb,         &
        sdm_dmpitvl,         &
-       sdm_dmpsdsiz
+       sdm_dmpsdsiz,        &
+       num_selected,        &
+       height_min,          &
+       height_max,          &
+       radius_min
 
 end module m_sdm_common

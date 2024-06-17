@@ -150,7 +150,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_boundary(wbc,ebc,sbc,nbc,                         &
                          sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,   &
-                         sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,           &
+                         sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,       &
                          bufsiz1,                               &
                          bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                          sd_itmp1,                              &
@@ -183,6 +183,8 @@ contains
     integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
     ! Input and output variables
     integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
+    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: dm_id(1:sd_num)   ! domain id of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -232,16 +234,16 @@ contains
                        ! dim02 = 1 (status(liq/ice) of super-droplets)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer, intent(inout) ::                                &
-         &                             rbuf_i4(1:,1:,1:)
-                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2) 
+         &                             rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2)
                        ! reciving buffer for MPI (int4)
-                       ! dim02 = 1 (sdi_nmono of super-droplets)
+                       ! dim02 = 2/3 (sdi_nmono of super-droplets, domain and save index)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer, intent(inout) ::                                &
-         &                             sbuf_i4(1:,1:,1:)
-                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2) 
+         &                             sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2)
                        ! sending buffer for MPI (int4)
-                       ! dim02 = 1 (sdi_nmono of super-droplets)
+                       ! dim02 = 2/3 (sdi_nmono of super-droplets, domain and save index)
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
 
     ! Output variables
@@ -265,7 +267,7 @@ contains
        
        call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,dm_id,       &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -277,7 +279,7 @@ contains
 
        call sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,dm_id,       &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -301,7 +303,7 @@ contains
 
        call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,dm_id,       &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -313,7 +315,7 @@ contains
        
        call sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,                               &
+            sd_r,sd_asl,sdi,sd_id,dm_id,       &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -344,7 +346,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                           &
+       sd_r,sd_asl,sdi,sd_id,dm_id,       &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -353,7 +355,7 @@ contains
     use scale_grid_index, only: &
          IS,IE
     use m_sdm_common, only: &
-         nisub,INVALID,INVALID_i8,INVALID_i2,VALID2INVALID,i2,sdm_cold,sdicedef
+         nisub,INVALID,INVALID_i8,INVALID_i2,INVALID_i4,VALID2INVALID,i2,sdm_cold,sdicedef
 
     ! Input variables
     integer, intent(in) :: wbc    ! Option for west boundary conditions
@@ -361,6 +363,8 @@ contains
     integer, intent(in) :: sd_num ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
+    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: dm_id(1:sd_num)   ! domain id of super-droplets
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -399,10 +403,10 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : west, 2: east
     integer, intent(out) ::                                  &
-     &                              sbuf_i4(1:,1:,1:)
-                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2) 
+     &                              sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 =  2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : west, 2: east
     integer, intent(out) :: ilist(1:sd_num)
     ! buffer for list vectorization
@@ -426,6 +430,7 @@ contains
     sbuf_r8(1:bufsiz1,1:bufsiz2_r8,1:2) = INVALID
     sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2) = INVALID_i8
     sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2) = INVALID_i2
+    sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) = INVALID_i4
 
     ! Put the sending buffer in x direction.
 
@@ -466,6 +471,8 @@ contains
 
              sbuf_i8(m,1,1) = sd_n(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
+             sbuf_i4(m,1,1) = sd_id(n)
+             sbuf_i4(m,2,1) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -488,7 +495,7 @@ contains
                 sbuf_r8(m,nwsdm+3,1) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,1) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,1) = sdi%mrime(n)
-                sbuf_i4(m,1,1)       = sdi%nmono(n)
+                sbuf_i4(m,3,1)       = sdi%nmono(n)
 
              end do
 
@@ -538,6 +545,8 @@ contains
 
              sbuf_i8(m,1,2) = sd_n(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
+             sbuf_i4(m,1,2) = sd_id(n)
+             sbuf_i4(m,2,2) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -560,7 +569,7 @@ contains
                 sbuf_r8(m,nwsdm+3,2) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,2) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,2) = sdi%mrime(n)
-                sbuf_i4(m,1,2)       = sdi%nmono(n)
+                sbuf_i4(m,3,2)       = sdi%nmono(n)
 
              end do
 
@@ -588,7 +597,7 @@ contains
     use m_sdm_common, only: &
          nisub, &
          dstw_sub, dste_sub, srcw_sub, srce_sub, &
-         INVALID,INVALID_i8,INVALID_i2, &
+         INVALID,INVALID_i8,INVALID_i2,INVALID_i4, &
          tag,i2,sdm_cold
     ! Input variables
     integer, intent(in) :: wbc      ! Option for west boundary conditions
@@ -616,10 +625,10 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : west, 2: east
     integer, intent(in)                                      &
-     &                      :: sbuf_i4(1:,1:,1:)
-                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2) 
+     &                      :: sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 = 2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : west, 2: east
     ! Output variable
     real(DP), intent(out)                                        &
@@ -640,10 +649,10 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : west, 2: east
     integer, intent(out)                                     &
-     &                      :: rbuf_i4(1:,1:,1:)
-                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2) 
+     &                      :: rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 = 2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : west, 2: east
 
     integer :: dstw     ! West sending distnation
@@ -666,6 +675,7 @@ contains
     rbuf_r8(1:bufsiz1,1:bufsiz2_r8,1:2) = INVALID
     rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2) = INVALID_i8
     rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2) = INVALID_i2
+    rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) = INVALID_i4
 
     ! Exchange the value in x direction.
 
@@ -677,9 +687,9 @@ contains
        siz_i8 = bufsiz1 * bufsiz2_i8
        siz_i2 = bufsiz1 * bufsiz2_i2
        siz_i4 = 0
-       if( sdm_cold ) then
+       !if( sdm_cold ) then
           siz_i4 = bufsiz1 * bufsiz2_i4
-       end if
+       !end if
 
        !### Set the processor element number for sending ###!
        !### distination and receiving source             ###!
@@ -790,7 +800,7 @@ contains
 
        !### Send/Receive int4 ###!
 
-       if( sdm_cold ) then
+       !if( sdm_cold ) then
 
           !### Incliment the message tag ###!
 
@@ -823,7 +833,7 @@ contains
           call mpi_wait(statrw,stat,ierr)
           call mpi_wait(statre,stat,ierr)
 
-       end if
+       !end if
 
     end if
 
@@ -832,7 +842,7 @@ contains
   !--------------------------------------------------------------------------
   subroutine sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                            &
+       sd_r,sd_asl,sdi,sd_id,dm_id,            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -842,7 +852,7 @@ contains
     use scale_grid_index, only: &
          IS,IE
     use m_sdm_common, only: &
-         nisub,VALID2INVALID,VALID2INVALID_i8,i2,sdm_cold,sdicedef
+         nisub,VALID2INVALID,VALID2INVALID_i8,INVALID_i4,i2,sdm_cold,sdicedef
     ! Input variables
     integer, intent(in) :: wbc       ! Option for west boundary conditions
     integer, intent(in) :: ebc       ! Option for east boundaty conditions
@@ -870,13 +880,15 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : west, 2: east
     integer, intent(in) ::                                  &
-     &                              rbuf_i4(1:,1:,1:)
-                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2) 
+     &                              rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 = 2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
+    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: dm_id(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -959,6 +971,8 @@ contains
 
              sd_n(n)      = rbuf_i8(m,1,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
+             sd_id(n)  = rbuf_i4(m,1,1)
+             dm_id(n)  = rbuf_i4(m,2,1)
           end do
 
           do nasl=1,sd_numasl
@@ -981,7 +995,7 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,1)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,1)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,1)
-                sdi%nmono(n)  = rbuf_i4(m,1,1)
+                sdi%nmono(n)  = rbuf_i4(m,3,1)
 
              end do
 
@@ -1031,6 +1045,8 @@ contains
 
              sd_n(n)      = rbuf_i8(m,1,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
+             sd_id(n)  = rbuf_i4(m,1,2)
+             dm_id(n)  = rbuf_i4(m,2,2)
 
           end do
 
@@ -1054,7 +1070,7 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,2)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,2)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,2)
-                sdi%nmono(n)  = rbuf_i4(m,1,2)
+                sdi%nmono(n)  = rbuf_i4(m,3,2)
 
              end do
 
@@ -1069,7 +1085,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                           &
+       sd_r,sd_asl,sdi,sd_id,dm_id,            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -1079,13 +1095,15 @@ contains
     use scale_grid_index, only: &
          JS,JE
     use m_sdm_common, only: &
-         njsub,INVALID,INVALID_i8,INVALID_i2,VALID2INVALID,i2,sdm_cold,sdicedef
+         njsub,INVALID,INVALID_i8,INVALID_i2,INVALID_i4,VALID2INVALID,i2,sdm_cold,sdicedef
     ! Input variables
     integer, intent(in) :: sbc   ! Option for west boundary conditions
     integer, intent(in) :: nbc   ! Option for east boundaty conditions
     integer, intent(in) :: sd_num  ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical materia contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(in) :: dm_id(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1124,10 +1142,10 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : south, 2: north
     integer, intent(out) ::                                  &
-     &                              sbuf_i4(1:,1:,1:)
-                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2) 
+     &                              sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 = 2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : south, 2: north
     ! dim03 = 1 : south, 2: north
     integer, intent(out) :: ilist(1:sd_num)  ! buffer for list vectorization
@@ -1150,6 +1168,7 @@ contains
     sbuf_r8(1:bufsiz1,1:bufsiz2_r8,1:2) = INVALID
     sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2) = INVALID_i8
     sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2) = INVALID_i2
+    sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) = INVALID_i4
 
     ! Put the sending buffer in y direction.
     
@@ -1191,6 +1210,8 @@ contains
 
              sbuf_i8(m,1,1) = sd_n(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
+             sbuf_i4(m,1,1) = sd_id(n)
+             sbuf_i4(m,2,1) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -1213,7 +1234,7 @@ contains
                 sbuf_r8(m,nwsdm+3,1) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,1) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,1) = sdi%mrime(n)
-                sbuf_i4(m,1,1) = sdi%nmono(n)
+                sbuf_i4(m,3,1) = sdi%nmono(n)
 
              end do
           end if
@@ -1263,6 +1284,8 @@ contains
 
              sbuf_i8(m,1,2) = sd_n(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
+             sbuf_i4(m,1,2) = sd_id(n)
+             sbuf_i4(m,2,2) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -1285,7 +1308,7 @@ contains
                 sbuf_r8(m,nwsdm+3,2) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,2) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,2) = sdi%mrime(n)
-                sbuf_i4(m,1,2) = sdi%nmono(n)
+                sbuf_i4(m,3,2) = sdi%nmono(n)
 
              end do
           end if
@@ -1310,7 +1333,7 @@ contains
     use m_sdm_common, only: &
          njsub, &
          dsts_sub, dstn_sub, srcs_sub, srcn_sub, &
-         INVALID,INVALID_i8,INVALID_i2, &
+         INVALID,INVALID_i8,INVALID_i2,INVALID_i4, &
          tag,i2,sdm_cold
 
     ! Input variables
@@ -1339,10 +1362,10 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : south, 2: north
     integer, intent(in)                                      &
-     &                      :: sbuf_i4(1:,1:,1:)
-                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2) 
+     &                      :: sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 = 2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : south, 2: north
     ! Output variable
     real(DP), intent(out)                                        &
@@ -1363,10 +1386,10 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : south, 2: north
     integer, intent(out)                                     &
-     &                      :: rbuf_i4(1:,1:,1:)
-                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2) 
+     &                      :: rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 = 2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : south, 2: north
 
     ! Internal shared variables
@@ -1391,6 +1414,7 @@ contains
     rbuf_r8(1:bufsiz1,1:bufsiz2_r8,1:2) = INVALID
     rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2) = INVALID_i8
     rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2) = INVALID_i2
+    rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) = INVALID_i4
 
     ! Exchange the value in y direction.
 
@@ -1402,9 +1426,9 @@ contains
        siz_i8 = bufsiz1 * bufsiz2_i8
        siz_i2 = bufsiz1 * bufsiz2_i2
        siz_i4 = 0
-       if( sdm_cold ) then
+       !if( sdm_cold ) then
           siz_i4 = bufsiz1 * bufsiz2_i4
-       end if
+       !end if
 
        !### Set the processor element number for sending ###!
        !### distination and receiving source             ###!
@@ -1515,7 +1539,7 @@ contains
 
        !### Send/Receive int4 ###!
 
-       if( sdm_cold ) then
+       !if( sdm_cold ) then
 
           !### Incliment the message tag ###!
 
@@ -1548,7 +1572,7 @@ contains
           call mpi_wait(statrs,stat,ierr)
           call mpi_wait(statrn,stat,ierr)
 
-       end if
+       !end if
 
     end if
 
@@ -1557,7 +1581,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,                            &
+       sd_r,sd_asl,sdi,sd_id,dm_id,                    &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -1595,13 +1619,15 @@ contains
                        ! dim02 = 1 : status (liq/ice)
                        ! dim03 = 1 : west, 2: east
     integer, intent(in) ::                                  &
-     &                              rbuf_i4(1:,1:,1:)
-                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2) 
+     &                              rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
+                       ! rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or rbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 1 : nmono (ice)
+                       ! dim02 = 2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat  ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
+    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: dm_id(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1684,6 +1710,8 @@ contains
 
              sd_n(n)      = rbuf_i8(m,1,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
+             sd_id(n)  = rbuf_i4(m,1,1)
+             dm_id(n)  = rbuf_i4(m,2,1)
           end do
 
           do nasl=1,sd_numasl
@@ -1706,7 +1734,7 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,1)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,1)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,1)
-                sdi%nmono(n)  = rbuf_i4(m,1,1)
+                sdi%nmono(n)  = rbuf_i4(m,3,1)
 
              end do
 
@@ -1752,6 +1780,8 @@ contains
              sd_v(n)    = rbuf_r8(m,5,2)
              sd_vz(n)   = rbuf_r8(m,6,2)
              sd_r(n)    = rbuf_r8(m,7,2)
+             sd_id(n)  = rbuf_i4(m,1,2)
+             dm_id(n)  = rbuf_i4(m,2,2)
 
              sd_n(n)      = rbuf_i8(m,1,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
@@ -1777,7 +1807,7 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,2)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,2)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,2)
-                sdi%nmono(n)  = rbuf_i4(m,1,2)
+                sdi%nmono(n)  = rbuf_i4(m,3,2)
 
              end do
 
