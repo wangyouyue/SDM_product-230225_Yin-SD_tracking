@@ -151,7 +151,7 @@ contains
   subroutine sdm_boundary(wbc,ebc,sbc,nbc,                         &
                          sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,   &
                          sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,       &
-                         bufsiz1,                               &
+                         if_coal,bufsiz1,                                  &
                          bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                          sd_itmp1,                              &
                          rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
@@ -185,6 +185,10 @@ contains
     integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
     integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
     integer, intent(inout) :: dm_id(1:sd_num)   ! domain id of super-droplets
+    integer(i2), intent(inout) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -226,12 +230,12 @@ contains
     integer(i2), intent(inout) ::                                &
          &                             rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! reciving buffer for MPI (int2)
-                       ! dim02 = 1 (status(liq/ice) of super-droplets)
+                       ! dim02 = 2 (status(liq/ice) of super-droplets) and coalescence flag
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer(i2), intent(inout) ::                                &
          &                             sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! sending buffer for MPI (int2)
-                       ! dim02 = 1 (status(liq/ice) of super-droplets)
+                       ! dim02 = 2 (status(liq/ice) of super-droplets) and coalescence flag
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
     integer, intent(inout) ::                                &
          &                             rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -267,7 +271,7 @@ contains
        
        call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,sd_id,dm_id,       &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -279,7 +283,7 @@ contains
 
        call sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,sd_id,dm_id,       &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -303,7 +307,7 @@ contains
 
        call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,sd_id,dm_id,       &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -315,7 +319,7 @@ contains
        
        call sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
-            sd_r,sd_asl,sdi,sd_id,dm_id,       &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -346,7 +350,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,sd_id,dm_id,       &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -363,8 +367,12 @@ contains
     integer, intent(in) :: sd_num ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
-    integer, intent(inout) :: dm_id(1:sd_num)   ! domain id of super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(in) :: dm_id(1:sd_num)   ! domain id of super-droplets
+    integer(i2), intent(in) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -400,7 +408,7 @@ contains
     integer(i2), intent(out) ::                                  &
      &                              sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : west, 2: east
     integer, intent(out) ::                                  &
      &                              sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -471,6 +479,7 @@ contains
 
              sbuf_i8(m,1,1) = sd_n(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
+             sbuf_i2(m,2,1) = if_coal(n)
              sbuf_i4(m,1,1) = sd_id(n)
              sbuf_i4(m,2,1) = dm_id(n)
           end do
@@ -545,6 +554,7 @@ contains
 
              sbuf_i8(m,1,2) = sd_n(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
+             sbuf_i2(m,2,2) = if_coal(n)
              sbuf_i4(m,1,2) = sd_id(n)
              sbuf_i4(m,2,2) = dm_id(n)
           end do
@@ -622,7 +632,7 @@ contains
     integer(i2), intent(in)                                      &
      &                      :: sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : west, 2: east
     integer, intent(in)                                      &
      &                      :: sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -646,7 +656,7 @@ contains
     integer(i2), intent(out)                                     &
      &                      :: rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : west, 2: east
     integer, intent(out)                                     &
      &                      :: rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -842,7 +852,7 @@ contains
   !--------------------------------------------------------------------------
   subroutine sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,sd_id,dm_id,            &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -877,7 +887,7 @@ contains
     integer(i2), intent(in) ::                                  &
      &                              rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : west, 2: east
     integer, intent(in) ::                                  &
      &                              rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -889,6 +899,10 @@ contains
     integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
     integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
     integer, intent(inout) :: dm_id(1:sd_num)   ! domain index of super-droplets
+    integer(i2), intent(inout) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -971,6 +985,7 @@ contains
 
              sd_n(n)      = rbuf_i8(m,1,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
+             if_coal(n)   = rbuf_i2(m,2,1)
              sd_id(n)  = rbuf_i4(m,1,1)
              dm_id(n)  = rbuf_i4(m,2,1)
           end do
@@ -1045,6 +1060,7 @@ contains
 
              sd_n(n)      = rbuf_i8(m,1,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
+             if_coal(n)   = rbuf_i2(m,2,2)
              sd_id(n)  = rbuf_i4(m,1,2)
              dm_id(n)  = rbuf_i4(m,2,2)
 
@@ -1085,7 +1101,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,sd_id,dm_id,            &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -1104,6 +1120,10 @@ contains
     integer(DP), intent(in) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
     integer, intent(in) :: sd_id(1:sd_num)   ! save index of super-droplets
     integer, intent(in) :: dm_id(1:sd_num)   ! domain index of super-droplets
+    integer(i2), intent(in) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1139,7 +1159,7 @@ contains
     integer(i2), intent(out) ::                                  &
      &                              sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : south, 2: north
     integer, intent(out) ::                                  &
      &                              sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -1210,6 +1230,7 @@ contains
 
              sbuf_i8(m,1,1) = sd_n(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
+             sbuf_i2(m,2,1) = if_coal(n)
              sbuf_i4(m,1,1) = sd_id(n)
              sbuf_i4(m,2,1) = dm_id(n)
           end do
@@ -1284,6 +1305,7 @@ contains
 
              sbuf_i8(m,1,2) = sd_n(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
+             sbuf_i2(m,2,2) = if_coal(n)
              sbuf_i4(m,1,2) = sd_id(n)
              sbuf_i4(m,2,2) = dm_id(n)
           end do
@@ -1359,7 +1381,7 @@ contains
     integer(i2), intent(in)                                      &
      &                      :: sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : south, 2: north
     integer, intent(in)                                      &
      &                      :: sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -1383,7 +1405,7 @@ contains
     integer(i2), intent(out)                                     &
      &                      :: rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : south, 2: north
     integer, intent(out)                                     &
      &                      :: rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -1581,7 +1603,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
-       sd_r,sd_asl,sdi,sd_id,dm_id,                    &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,                    &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -1616,7 +1638,7 @@ contains
     integer(i2), intent(in) ::                                  &
      &                              rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
                        ! Sending buffer in x direction (int2)
-                       ! dim02 = 1 : status (liq/ice)
+                       ! dim02 = 2 : status (liq/ice) and coal flag
                        ! dim03 = 1 : west, 2: east
     integer, intent(in) ::                                  &
      &                              rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
@@ -1628,6 +1650,10 @@ contains
     integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
     integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
     integer, intent(inout) :: dm_id(1:sd_num)   ! domain index of super-droplets
+    integer(i2), intent(inout) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1710,6 +1736,7 @@ contains
 
              sd_n(n)      = rbuf_i8(m,1,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
+             if_coal(n)   = rbuf_i2(m,2,1)
              sd_id(n)  = rbuf_i4(m,1,1)
              dm_id(n)  = rbuf_i4(m,2,1)
           end do
@@ -1780,11 +1807,12 @@ contains
              sd_v(n)    = rbuf_r8(m,5,2)
              sd_vz(n)   = rbuf_r8(m,6,2)
              sd_r(n)    = rbuf_r8(m,7,2)
-             sd_id(n)  = rbuf_i4(m,1,2)
-             dm_id(n)  = rbuf_i4(m,2,2)
 
              sd_n(n)      = rbuf_i8(m,1,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
+             if_coal(n)   = rbuf_i2(m,2,2)
+             sd_id(n)  = rbuf_i4(m,1,2)
+             dm_id(n)  = rbuf_i4(m,2,2)
           end do
 
           do nasl=1,sd_numasl

@@ -92,6 +92,7 @@ module m_sdm_common
   integer(DP), allocatable, save :: sdn_s2c(:)   ! multipilicity
   integer, allocatable, save :: sdid_s2c(:)  ! save index
   integer, allocatable, save :: dmid_s2c(:)  ! domain index
+  integer(i2), allocatable, save :: ifcoal_s2c(:)   ! coal flag
   real(RP), allocatable, save :: sdri_s2c(:)     ! index-i(real) of s.d.
   real(RP), allocatable, save :: sdrj_s2c(:)     ! index-j(real) of s.d.
   real(RP), allocatable, save :: sdrk_s2c(:)     ! index-k(real) of s.d.
@@ -109,6 +110,7 @@ module m_sdm_common
   integer(DP), allocatable, save :: sdn_fm(:)    ! multiplicity of super-droplets
   integer, allocatable, save :: sdid_fm(:)   ! save index of super-droplets
   integer, allocatable, save :: dmid_fm(:)   ! domain index of super-droplets
+  integer(i2), allocatable, save :: ifcoal_fm(:) ! coal flag
   real(RP), allocatable, save :: sdri_fm(:)      ! index-i(real) of super-droplets
   real(RP), allocatable, save :: sdrj_fm(:)      ! index-j(real) of super-droplets
   real(RP), allocatable, save :: sdrk_fm(:)      ! index-k(real) of super-droplets
@@ -149,11 +151,11 @@ module m_sdm_common
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer(i2), allocatable :: rbuf_i2(:,:,:)
                        ! reciving buffer for MPI (int2)
-                       ! dim02 = 1 (status of super-droplets)
+                       ! dim02 = 2 (status of super-droplets) and coal flag
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer(i2), allocatable :: sbuf_i2(:,:,:)
                        ! sending buffer for MPI (int2)
-                       ! dim02 = 1 (status of super-droplets)
+                       ! dim02 = 2 (status of super-droplets) and coal flag
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable :: rbuf_i4(:,:,:)
                        ! reciving buffer for MPI (int4)
@@ -170,6 +172,7 @@ module m_sdm_common
   integer, allocatable, save :: sd_itmp2(:)
   integer, allocatable, save :: sd_itmp3(:)
   integer(i2), allocatable, target :: sd_i2tmp1(:)
+  integer(i2), allocatable, target :: sd_i2tmp2(:)
   integer, allocatable, target :: sd_i4tmp1(:)
   integer, allocatable, target :: sd_i4tmp2(:)
   integer(DP), allocatable, target :: sd_i8tmp1(:)
@@ -213,6 +216,7 @@ module m_sdm_common
   integer(DP), allocatable, save :: sdn_s2c_restart(:)      ! multipilicity
   integer, allocatable, save     :: sdid_s2c_restart(:)     ! save index
   integer, allocatable, save     :: dmid_s2c_restart(:)     ! domain index
+  integer(i2), allocatable, save :: ifcoal_s2c_restart(:)   ! coal flag
   real(RP), allocatable, save    :: sdrk_s2c_restart(:)     ! index-k(real) of s.d.
   real(RP), allocatable, save    :: sdx_s2c_restart(:)      ! x-cordinate of s.d.
   real(RP), allocatable, save    :: sdy_s2c_restart(:)      ! y-cordinate of s.d.
@@ -475,9 +479,11 @@ module m_sdm_common
   real(RP), save :: sdm_dmpitvl  = 0.e0  ! Time interval of binary output of large droplets [s]
   real(RP), save :: sdm_dmpsdsiz = 0.e0  ! Threshold radius to store large super droplets in binary format [m]
   integer, save :: num_selected = 1000   ! Number of super-droplets per domain to select
-  real(RP), save :: height_min = 400     ! Minimum height for selection
-  real(RP), save :: height_max = 800     ! Maximum height for selection
-  real(RP), save :: radius_min = 1.E-6_RP   ! Minimum radius for selection
+  real(RP), save :: height_min = 400     ! Minimum height for selection [m]
+  real(RP), save :: height_max = 800     ! Maximum height for selection [m]
+  real(RP), save :: radius_min = 1.E-6_RP   ! Minimum radius for selection [m]
+  real(RP), save :: sdm_noise_amp = 1.E-4_RP ! amplitude of random noise [m^1.5 * s^-0.5]
+  integer(i2), save :: coal_output = 1        ! Control flag to output coalescence events. 0: off, 1: on
 
   data sdm_dtcmph / 0.1_RP,0.1_RP,0.1_RP,0.1_RP,0.1_RP /
   data sdm_calvar / .false.,.false.,.false.,.false.,.false. /
@@ -614,6 +620,8 @@ module m_sdm_common
        num_selected,        &
        height_min,          &
        height_max,          &
-       radius_min
+       radius_min,          &
+       sdm_noise_amp,       &
+       coal_output
 
 end module m_sdm_common

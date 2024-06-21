@@ -525,7 +525,7 @@ contains
 
   end subroutine sdm_copy_selected_sd
 !---------------------------------------------------------------------------------------------------------------------------------
-  subroutine sdm_select_stratified_random_particles(sd_num, num_selected, sd_rand, sd_rk, sd_r, height_min, height_max, radius_min, dm_id, sd_id)
+  subroutine sdm_select_stratified_random_particles(sd_num, num_selected, sd_rand, sd_rk, sd_r, height_min, height_max, radius_min, dm_id, sd_id, if_coal)
     use scale_precision
     use scale_grid, only: DZ
     use m_sdm_common, only: VALID2INVALID
@@ -544,6 +544,7 @@ contains
     real(RP), intent(in) :: radius_min         ! Minimum radius for selection
     integer, intent(inout) :: sd_id(1:sd_num)
     integer, intent(inout) :: dm_id(1:sd_num)
+    integer(i2), intent(inout) :: if_coal(1:sd_num)
 
     integer :: i, j, layer, count, total_count, selected_count, min_layer, max_layer, num_layers, selected_particle_index
     integer, allocatable :: layer_indices(:), layer_counts(:), layer_selected_counts(:)
@@ -633,6 +634,7 @@ contains
         selected_particle_index = layer_indices(j)
         sd_id(selected_particle_index) = selected_particle_index
         dm_id(selected_particle_index) = mype
+        if_coal(selected_particle_index) = 0
       end do
 
       selected_count = selected_count + layer_selected_counts(layer - min_layer + 1)
