@@ -246,9 +246,9 @@ contains
   end subroutine sdm_sort
   !---------------------------------------------------------------------------------------------------------------------------------
   subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,    sd_ri,    sd_rj,    sd_rk,     &
-       &                          sd_liqice,    sd_asl,    sd_r,    sdi,     sd_id,   dm_id,                         &
+       &                          sd_liqice,    sd_asl,    sd_r,    sdi,     sd_id,   dm_id,    if_coal,             &
        &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
-       &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,dm_id_tmp,                     &
+       &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,dm_id_tmp,if_coal_tmp,         &
        &                          TEMP0,ilist,sdtype)
     use scale_process, only: &
          & PRC_MPIstop
@@ -269,6 +269,10 @@ contains
     real(RP), intent(inout) :: sd_ri(1:sd_num)   ! index[i/real] of super-droplets
     real(RP), intent(inout) :: sd_rj(1:sd_num)   ! index[j/real] of super-droplets
     real(RP), intent(in)  :: sd_rk(1:sd_num) ! face index-k(real) of super-droplets
+    integer(i2), intent(in) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -293,6 +297,7 @@ contains
     type(sdicedef), intent(inout) :: sdi_tmp   ! ice phase super-droplets
     integer, intent(out) :: sd_id_tmp(1:sd_num)
     integer, intent(out) :: dm_id_tmp(1:sd_num)
+    integer(i2), intent(out) :: if_coal_tmp(1:sd_num)
 
     real(RP), intent(in)  :: TEMP0(KA,IA,JA)       ! temperature [K]
 
@@ -491,6 +496,7 @@ contains
           sd_r_tmp(m)      = sd_r(n)
           sd_id_tmp(m)      = sd_id(n)
           dm_id_tmp(m)      = dm_id(n)
+          if_coal_tmp(m)      = if_coal(n)
 
        end do
        end do
@@ -528,7 +534,7 @@ contains
   subroutine sdm_select_stratified_random_particles(sd_num, num_selected, sd_rand, sd_rk, sd_r, height_min, height_max, radius_min, dm_id, sd_id, if_coal)
     use scale_precision
     use scale_grid, only: DZ
-    use m_sdm_common, only: VALID2INVALID
+    use m_sdm_common, only: VALID2INVALID, i2
     use scale_process, only: mype => PRC_myrank
     use sdm_sorting_module  ! Use the module containing the sorting subroutines
 

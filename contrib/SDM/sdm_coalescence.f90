@@ -55,7 +55,7 @@ contains
          cp => CONST_CPdry, &
          p0 => CONST_PRE00       ! Reference Pressure [Pa]
     use m_sdm_common, only: &
-         VALID2INVALID,INVALID,knum_sdm, &
+         VALID2INVALID,INVALID,knum_sdm,INVALID_i4, &
          rho_amsul,rho_nacl,ONE_PI,m2micro,r0col,ratcol,ecoll,micro2m,dxiv_sdm,dyiv_sdm,F_THRD,O_THRD,rrst,boltz,mass_air,i2
     use m_sdm_coordtrans, only: &
          sdm_x2ri, sdm_y2rj
