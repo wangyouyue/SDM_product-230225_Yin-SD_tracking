@@ -283,7 +283,7 @@ module m_sdm_common
   real(RP), parameter :: INVALID = -999.999_RP ! value indicated as invalid super-droplets
   integer(DP), parameter :: INVALID_i8 = -999_DP ! value indicated as invalid super-droplets
   integer(i2), parameter :: INVALID_i2 = -999_i2 ! value indicated as invalid super-droplets
-  integer, parameter :: INVALID_i4 = -990 ! value indicated as invalid super-droplets
+  integer, parameter :: INVALID_i4 = -999 ! value indicated as invalid super-droplets
 
   !------------------------------------------------------------------------------
   !

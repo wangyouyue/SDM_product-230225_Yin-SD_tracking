@@ -696,7 +696,7 @@ contains
        siz_r8 = bufsiz1 * bufsiz2_r8
        siz_i8 = bufsiz1 * bufsiz2_i8
        siz_i2 = bufsiz1 * bufsiz2_i2
-       siz_i4 = 0
+       !siz_i4 = 0
        !if( sdm_cold ) then
           siz_i4 = bufsiz1 * bufsiz2_i4
        !end if
@@ -1447,7 +1447,7 @@ contains
        siz_r8 = bufsiz1 * bufsiz2_r8
        siz_i8 = bufsiz1 * bufsiz2_i8
        siz_i2 = bufsiz1 * bufsiz2_i2
-       siz_i4 = 0
+       !siz_i4 = 0
        !if( sdm_cold ) then
           siz_i4 = bufsiz1 * bufsiz2_i4
        !end if

@@ -960,7 +960,7 @@ contains
           if( sd_ncol<=0 ) cycle  !! no coalesecense
 
           !### coalescence procudure ###!
-          if( (sd_id(icptc)>INVALID_i4) .or. (sd_id(icptp)>INVALID_i4) ) then
+          if( (sd_id(icptc)>0) .or. (sd_id(icptp)>0) ) then
              num_pair = num_pair + 1
              if_coal( icptp ) = 1
              if_coal( icptc ) = 1
@@ -979,7 +979,7 @@ contains
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptp )
 
-             if( (sd_id(icptc)>INVALID_i4) .or. (sd_id(icptp)>INVALID_i4) ) then
+             if( (sd_id(icptc)>0) .or. (sd_id(icptp)>0) ) then
                 sd_id1_temp( num_pair ) = sd_id( icptc )
                 dm_id1_temp( num_pair ) = dm_id( icptc )
                 sd_id2_temp( num_pair ) = sd_id( icptp )
@@ -1005,7 +1005,7 @@ contains
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptc )
 
-             if( (sd_id(icptc)>INVALID_i4) .or. (sd_id(icptp)>INVALID_i4) ) then
+             if( (sd_id(icptc)>0) .or. (sd_id(icptp)>0) ) then
                 sd_id1_temp( num_pair ) = sd_id( icptc )
                 dm_id1_temp( num_pair ) = dm_id( icptc )
                 sd_id2_temp( num_pair ) = sd_id( icptp )
@@ -1022,7 +1022,7 @@ contains
 
           sd_ncol = min( sd_ncol, int(sd_n1/sd_n2,kind=DP) )
 
-          if( (sd_id(icptc)>INVALID_i4) .or. (sd_id(icptp)>INVALID_i4) ) then
+          if( (sd_id(icptc)>0) .or. (sd_id(icptp)>0) ) then
              sdr1_temp( num_pair ) = sd_r1
              sdn1_temp( num_pair ) = sd_n1
              sdr2_temp( num_pair ) = sd_r2

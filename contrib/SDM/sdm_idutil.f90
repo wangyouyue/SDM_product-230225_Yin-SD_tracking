@@ -465,7 +465,7 @@ contains
 
     else if (sdtype == 'selected') then
        do n=1,sd_num
-          if( sd_id(n)<=INVALID_i4 ) cycle
+          if( dm_id(n)<0 ) cycle
 
           cnt = cnt + 1
           ilist(cnt) = n
