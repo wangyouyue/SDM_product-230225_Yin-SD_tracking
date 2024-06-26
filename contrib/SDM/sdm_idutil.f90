@@ -465,7 +465,7 @@ contains
 
     else if (sdtype == 'selected') then
        do n=1,sd_num
-          if( dm_id(n)<0 ) cycle
+          if( dm_id(n)<0 .or. sd_rk(n)<VALID2INVALID ) cycle
 
           cnt = cnt + 1
           ilist(cnt) = n
