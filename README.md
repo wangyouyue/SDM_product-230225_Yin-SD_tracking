@@ -11,7 +11,7 @@ This repository integrates SDM into SCALE version 5.2.6, leveraging both SDM’s
 ## SD Tracking in SCALE-SDM
 To enhance the analytical capabilities of the SCALE-SDM model, we have implemented a **Super-Droplet (SD)** backward tracking algorithm, which enables the tracing of super-droplet lifecycles and interactions throughout the simulation. This feature is essential for investigating the intricate microphysical processes governing cloud and precipitation formation. Specifically, the tracking mechanism records the “previous” state (`pre_id` and `pre_dmid`) of each SD at user-defined output intervals, thus facilitating detailed analysis of SD trajectories and their interactions over time.
 
-# Super-Droplet Tracking Method
+# Super-Droplet Backward Tracking Method
 
 ## Overview
 The SD tracking method is designed to trace the lifecycle and interactions of super-droplets within cloud microphysics simulations. By capturing the evolution of SDs, including their growth, transport, and interaction, this method provides a unique perspective on the underlying microphysical processes in clouds.
@@ -62,6 +62,8 @@ The tracking of coalescence events follows a structured approach designed to cap
 2. **Event Recording:** For each coalescence event, the following information is recorded:
 - **pre_sdid1 and pre_sdid2:** The unique identifiers of the colliding SDs before the coalescence event.
 - **pre_dmid1 and pre_dmid2:** The domain identifiers of the colliding SDs, indicating their location within the simulation domain.
+- **sd_r1/sd_r2:** The radii of the two SDs before the collision-coalescence.
+- **sd_n1/sd_n2:** The multiplicities of the two SDs before the collision-coalescence.
 - **num_col:** The number of coalescence events occurring between the pair of SDs within a coalescence time step.
 3. **Dynamic Data Management:** Given the stochastic nature of coalescence events, the model employs dynamic memory allocation to manage the varying number of coalescence events that occur during each simulation time step. This approach ensures computational efficiency and prevents unnecessary memory allocation when coalescence events are infrequent.
 4. **Output Generation:** The coalescence data is output using the `sdm_coal_outnetcdf` subroutine, which writes detailed information about each event to **NetCDF** files (only NetCDF format is supported currently). This output format includes not only the identifiers and domain information of the colliding SDs but also the frequency of their interactions, enabling post-simulation analysis of the collision dynamics in a standardized and accessible format.
