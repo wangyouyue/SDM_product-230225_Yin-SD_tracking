@@ -112,11 +112,40 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
    - **Run a batch job on Hokudai supercomputer:**
      Modify the job script according to your system. The job scheduler on Hokudai supercomputer is [PJM](https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/). Run `$ pjsub hokudai_run.sh` to submit the job.
 
-5. **Run analysis program:**
+5. **Running analysis program:**
   ```
   $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
   $ pjsub --step --sparam "sn=1" ncl.sh
   $ pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh
+  ```
+  
+## Running the 2D Test on Supercomputer at University of Hyogo
+1. **Clean:**
+  ```
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward
+  $ module purge
+  $ module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1
+  $ make allclean
+  $ make allclean SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+  ```
+
+2. **Compilation:**
+  ```
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward
+  $ make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+  $ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
+  ```
+
+3. **Running Simulations:**
+  `$ qsub UoH_run.sh`
+
+4. **Running analysis program:**
+  Before submitting the job, ensure that the grid resolution (`DX`, `DY`, and `DZ`) and the output interval of super-droplets (`TIME_STEP_INTERVAL` in milliseconds) in the [Python script](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/tree/SDM_SD_tracking/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/results/sd_output.py) `sd_output.py` match the settings in `init.conf` and `run.conf`. Additionally, note that `sdm_dmpitvb` (the time interval for binary output of all droplets) in `run.conf` is specified in seconds.
+
+  You can adjust the processing duration in the Python script by modifying `start_time` and `end_time` (in the format “HHMMSS.sss”). Since this is a backward tracking process, `end_time` should be earlier than `start_time`. Finally, `num_blocks` represents the number of parallel processes, so ensure it is consistent with the job script `run_py.pbs`.
+    ```
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/results
+  $ qsub run_py.pbs
   ```
 
 ## Support and Community
