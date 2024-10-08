@@ -120,7 +120,7 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   Before submitting the job, ensure that the output interval of super-droplets (`TIME_STEP_INTERVAL` in seconds) in the [Python script](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/blob/SDM_selected_SD/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results/sd_output.py) `sd_output.py` match the settings in `init.conf` and `run.conf`. Additionally, note that `sdm_dmpitvl` (the time interval for binary output of selected droplets) in `run.conf` is also specified in seconds.
 
   You can adjust the processing duration in the Python script by modifying `time_str` and `end_time_str` (in the format “HHMMSS.sss”). Since this is a forward tracking process, `time_str` should be earlier than `end_time_str`. Finally, `num_processes` represents the number of parallel processes, so ensure it is consistent with the job script `run_py.pbs`.
-    ```
+  ```
   $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results
   $ qsub run_py.pbs
   ```
