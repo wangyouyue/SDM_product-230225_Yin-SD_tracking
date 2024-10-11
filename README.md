@@ -137,7 +137,7 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   ```
 
 3. **Running Simulations:**
-  `$ qsub UoH_run.sh`
+  `$ qsub UoH_run.pbs`
 
 4. **Running analysis program:**
   Before submitting the job, ensure that the grid resolution (`DX`, `DY`, and `DZ`) and the output interval of super-droplets (`TIME_STEP_INTERVAL` in milliseconds) in the [Python script](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/tree/SDM_SD_tracking/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/results/sd_output.py) `sd_output.py` match the settings in `init.conf` and `run.conf`. Additionally, note that `sdm_dmpitvb` (the time interval for binary output of all droplets) in `run.conf` is specified in seconds.

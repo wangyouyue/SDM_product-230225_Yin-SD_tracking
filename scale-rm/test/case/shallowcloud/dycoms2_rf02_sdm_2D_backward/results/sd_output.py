@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from multiprocessing import Pool
 
 DX, DY, DZ = 50, 50, 5  # Grid dimensions
-TIME_STEP_INTERVAL = 100  # Time step interval in milliseconds
+TIME_STEP_INTERVAL = 60000  # Time step interval in milliseconds
 
 def initialize_netcdf(output_file, time_steps, num_sd):
     with Dataset(output_file, 'w', format='NETCDF4') as nc:
@@ -387,7 +387,7 @@ def split_particles(particle_infos, num_blocks):
 
 def main(input_directory, output_dir, output_file):
     start_time = "001000.000"
-    end_time = "000000.100"
+    end_time = "000000.000"
     time_steps = generate_time_steps(start_time, end_time)
 
     particles, particle_infos = initialize_particles(input_directory, time_steps)
