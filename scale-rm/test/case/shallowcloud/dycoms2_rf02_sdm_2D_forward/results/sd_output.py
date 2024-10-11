@@ -139,8 +139,8 @@ def create_or_append_to_file(output_file, variable_names, combined_vars, time_st
             var[time_step, :] = combined_vars[var_name]
 
 def main():
-    TIME_STEP_INTERVAL = Decimal('0.1')  # Time step (in seconds)
-    time_str = "010000.100"
+    TIME_STEP_INTERVAL = Decimal('60.0')  # Time step (in seconds)
+    time_str = "010000.000"
     end_time_str = "011000.000"
     input_directory = "../"  # Input directory
     variable_names = ['sd_x', 'sd_y', 'sd_z', 'sd_r', 'sd_n', 'dm_id', 'sd_id', 'if_coal']

@@ -89,7 +89,7 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
    - **Run a batch job on Hokudai supercomputer:**
      Modify the job script according to your system. The job scheduler on Hokudai supercomputer is [PJM](https://www.hucc.hokudai.ac.jp/en_supercomputer/basic/en_job_execution/). Run `$ pjsub hokudai_run.sh` to submit the job.
 
-5. **Running analysis program:**
+5. **Running Analysis Program:**
   ```
   $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_hokudai/
   $ pjsub --step --sparam "sn=1" ncl.sh
@@ -97,7 +97,11 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   ```
 
 ## Running the 2D Test on Supercomputer at University of Hyogo
-1. **Clean:**
+1. **Switching the Branch:**
+  `$ git checkout SDM_seleted_SD`
+  
+2. **Clean:**
+   Please clean up past compilation files before compiling.
   ```
   $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward
   $ module purge
@@ -106,20 +110,18 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   $ make allclean SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
   ```
 
-2. **Compilation:**
+3. **Compilation:**
   ```
   $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward
   $ make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
   $ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
   ```
 
-3. **Running Simulations:**
-  `$ qsub UoH_run.sh`
+4. **Running Simulations:**
+  `$ qsub UoH_run.pbs`
 
-4. **Running analysis program:**
-  Before submitting the job, ensure that the output interval of super-droplets (`TIME_STEP_INTERVAL` in seconds) in the [Python script](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/blob/SDM_selected_SD/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results/sd_output.py) `sd_output.py` match the settings in `init.conf` and `run.conf`. Additionally, note that `sdm_dmpitvl` (the time interval for binary output of selected droplets) in `run.conf` is also specified in seconds.
-
-  You can adjust the processing duration in the Python script by modifying `time_str` and `end_time_str` (in the format “HHMMSS.sss”). Since this is a forward tracking process, `time_str` should be earlier than `end_time_str`. Finally, `num_processes` represents the number of parallel processes, so ensure it is consistent with the job script `run_py.pbs`.
+5. **Running Analysis Program:**
+  Before submitting the job, ensure that the output interval of super-droplets (`TIME_STEP_INTERVAL` in seconds) in the [Python script](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/blob/SDM_selected_SD/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results/sd_output.py) `sd_output.py` match the settings in `init.conf` and `run.conf`. Additionally, note that `sdm_dmpitvl` (the time interval for binary output of selected droplets) in `run.conf` is also specified in seconds. You can adjust the processing duration in the Python script by modifying `time_str` and `end_time_str` (in the format “HHMMSS.sss”). Since this is a forward tracking process, `time_str` should be earlier than `end_time_str`. Finally, `num_processes` represents the number of parallel processes, so ensure it is consistent with the job script `run_py.pbs`.
   ```
   $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results
   $ qsub run_py.pbs
