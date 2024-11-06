@@ -9,7 +9,7 @@ from decimal import Decimal, getcontext
 # Set floating-point precision to avoid precision issues
 getcontext().prec = 20
 
-num_processes = 40  # Set the number of processes
+num_processes = 4  # Set the number of processes
 
 def time_str_to_seconds(time_str):
     hours = int(time_str[0:2])
@@ -140,8 +140,8 @@ def create_or_append_to_file(output_file, variable_names, combined_vars, time_st
 
 def main():
     TIME_STEP_INTERVAL = Decimal('60.0')  # Time step (in seconds)
-    time_str = "010000.000"
-    end_time_str = "011000.000"
+    time_str = "000000.000"
+    end_time_str = "001000.000"
     input_directory = "../"  # Input directory
     variable_names = ['sd_x', 'sd_y', 'sd_z', 'sd_r', 'sd_n', 'dm_id', 'sd_id', 'if_coal']
     output_file = 'combined_sorted_output.nc'
