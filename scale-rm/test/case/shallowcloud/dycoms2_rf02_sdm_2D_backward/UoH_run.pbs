@@ -1,10 +1,11 @@
 #!/bin/bash
-#PBS -l select=1:ncpus=40:mpiprocs=40
+#PBS -l select=1:ncpus=4:mpiprocs=4
 #PBS -q S
 #PBS -N SDM64
 #PBS -o $PBS_O_WORKDIR/log.txt
 #PBS -e $PBS_O_WORKDIR/error.txt
 
+module purge
 module use --append /home/s274s011/modules
 source /etc/profile.d/modules.sh
 cd ${PBS_O_WORKDIR}

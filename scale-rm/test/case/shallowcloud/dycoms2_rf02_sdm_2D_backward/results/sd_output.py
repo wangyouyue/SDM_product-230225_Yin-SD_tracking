@@ -4,8 +4,29 @@ import numpy as np
 from netCDF4 import Dataset
 from datetime import datetime, timedelta
 from multiprocessing import Pool
+import re
 
-DX, DY, DZ = 50, 50, 5  # Grid dimensions
+def read_value_from_config(key_to_find, file_path):
+    with open(file_path, 'r') as file:
+        for line in file:
+            if key_to_find in line:
+                parts = line.split('=')
+                if len(parts) > 1:
+                    value_part = parts[1].split(',')[0]
+                    match = re.search(r'[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?', value_part)
+                    if match:
+                        return float(match.group(0))
+                    else:
+                        print("No valid number found after the key.")
+                        return None
+        print(f"Key '{key_to_find}' not found in the file.")
+        return None
+
+config_path = '../run.conf'
+DX = read_value_from_config('DX', config_path)
+DY = read_value_from_config('DY', config_path)
+DZ = read_value_from_config('DZ', config_path)
+
 TIME_STEP_INTERVAL = 60000  # Time step interval in milliseconds
 
 def initialize_netcdf(output_file, time_steps, num_sd):
@@ -269,7 +290,7 @@ def process_single_particle_block(particle_block, input_directory, time_steps, n
                         other_particle_data = get_particle_data(other_file, other_pre_sdid)
 
                         if other_particle_data:
-                            if (particle_data['sd_r'] < other_particle_data['sd_r'] & np.max(particle_data['sd_r'], other_particle_data['sd_r']) < particles['sd_r'][t-1]):
+                            if ((particle_data['sd_r'] < other_particle_data['sd_r']) and (np.max(particle_data['sd_r'], other_particle_data['sd_r']) < particles['sd_r'][t-1])):
                                 particles['other_pre_dmid'][t] = particle_data['pre_dmid']
                                 particles['other_pre_sdid'][t] = particle_data['pre_sdid']
                                 particles['pre_dmid'][t], particles['pre_sdid'][t] = other_particle_data['pre_dmid'], other_particle_data['pre_sdid']
@@ -394,7 +415,7 @@ def main(input_directory, output_dir, output_file):
 
     num_times = len(time_steps)
     num_sd = len(particle_infos)
-    num_blocks = 40  # Number of blocks for parallel processing
+    num_blocks = 4  # Number of blocks for parallel processing
 
     if num_blocks > num_sd:
        raise ValueError("Number of blocks (num_blocks) cannot be greater than the number of particles (num_sd)")

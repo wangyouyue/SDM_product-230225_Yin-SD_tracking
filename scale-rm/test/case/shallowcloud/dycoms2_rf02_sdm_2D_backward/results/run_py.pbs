@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l select=1:ncpus=40:mpiprocs=40
+#PBS -l select=1:ncpus=4:mpiprocs=4
 #PBS -q S
 #PBS -N python
 #PBS -o $PBS_O_WORKDIR/log.txt
