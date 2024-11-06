@@ -27,7 +27,8 @@ DX = read_value_from_config('DX', config_path)
 DY = read_value_from_config('DY', config_path)
 DZ = read_value_from_config('DZ', config_path)
 
-TIME_STEP_INTERVAL = 60000  # Time step interval in milliseconds
+# Time step interval in milliseconds.
+TIME_STEP_INTERVAL = 60000  # Please set TIME_STEP_INTERVAL = 100 to trace the coalescence events.
 
 def initialize_netcdf(output_file, time_steps, num_sd):
     with Dataset(output_file, 'w', format='NETCDF4') as nc:
@@ -47,7 +48,7 @@ def initialize_netcdf(output_file, time_steps, num_sd):
                 dtype = 'i2'
             nc.createVariable(key, dtype, ('time', 'num_sd'))
 
-def generate_time_steps(start_time, end_time, step_ms=100):
+def generate_time_steps(start_time, end_time, step_ms=TIME_STEP_INTERVAL):
     time_format = "%H%M%S.%f"
     current_time = datetime.strptime(start_time, time_format)
     end_time = datetime.strptime(end_time, time_format)
