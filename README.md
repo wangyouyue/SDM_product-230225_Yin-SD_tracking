@@ -118,11 +118,23 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   $ pjsub --step --sparam "sn=1" ncl.sh
   $ pjsub --step --sparam "jid=JOB_ID, sn=2, sd=ec!=0:after:1" merge.sh
   ```
-  
-## Running the 2D Test on Supercomputer at University of Hyogo
+
+## Basic Setup of the 2D Simulation
+   The 2D simulation is set up with the following configurations:
+1. **Large-scale horizontal winds are disabled:** The wind velocities in the model are set to zero to prevent horizontal transport. To set the horizontal winds to zero, modify the following files:
+	- In [mod_mkinit.f90](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/tree/SDM_SD_tracking/scale-rm/src/preprocess/mod_mkinit.f90#L3577-L3578), set `velx` and `vely` to `0.0_RP`.
+	- In [mod_user.f90](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/tree/SDM_SD_tracking/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/code/mod_user.f90#L179-L180), set `U_GEOS` and `V_GEOS` to `0.0_RP`.
+
+2. **Simulation Area and SD Settings:**
+	- The simulation area has been set to a horizontal extent of 6000 m, and 40 SDs are initialized per grid.
+	- The simulation time is set to 1 hour and 10 minutes, with SD and history variables output every second.
+
+3. **Collision-Coalescence Process Disabled:** In this test case, the collision-coalescence process is turned off. To ensure this, set `doautoconversion = .false.` in [run.conf](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/tree/SDM_SD_tracking/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/run.conf#L107).
+
+## Running the 2D Simulation on Supercomputer at University of Hyogo
 1. **Clean:**
   ```
-  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv
   $ module purge
   $ module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1
   $ make allclean
@@ -131,7 +143,7 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
 
 2. **Compilation:**
   ```
-  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv
   $ make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
   $ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
   ```
@@ -140,12 +152,19 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   `$ qsub UoH_run.pbs`
 
 4. **Running analysis program:**
-  Before submitting the job, ensure that the grid resolution (`DX`, `DY`, and `DZ`) and the output interval of super-droplets (`TIME_STEP_INTERVAL` in milliseconds) in the [Python script](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/tree/SDM_SD_tracking/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/results/sd_output.py) `sd_output.py` match the settings in `init.conf` and `run.conf`. Additionally, note that `sdm_dmpitvb` (the time interval for binary output of all droplets) in `run.conf` is specified in seconds.
+   Before submitting the job, ensure that the output interval of super-droplets (`TIME_STEP_INTERVAL` in milliseconds) in the [Python script](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/tree/SDM_SD_tracking/scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/results/sd_output.py) `sd_output.py` match the settings in `init.conf` and `run.conf`. Additionally, note that `sdm_dmpitvb` (the time interval for binary output of all droplets) in `run.conf` is specified in seconds.
 
-  You can adjust the processing duration in the Python script by modifying `start_time` and `end_time` (in the format “HHMMSS.sss”). Since this is a backward tracking process, `end_time` should be earlier than `start_time`. Finally, `num_blocks` represents the number of parallel processes, so ensure it is consistent with the job script `run_py.pbs`.
+   You can adjust the processing duration in the Python script by modifying `start_time` and `end_time` (in the format “HHMMSS.sss”). Since this is a backward tracking process, `end_time` should be earlier than `start_time`. Finally, `num_blocks` represents the number of parallel processes, so ensure it is consistent with the job script `run_py.pbs`.
   ```
-  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/results
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/results
   $ qsub run_py.pbs
+  ```
+
+5. **Plotting the Results:**
+   After completing the analysis, you can plot the historical trajectories of randomly selected SDs. A script has been added to the repository to randomly select SDs and visualize their paths. This can help analyze the collective movement and vertical transport of SDs in the simulation. You can run the plotting script by executing the following:
+  ```
+  $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/results
+  $ python traj_plot.py
   ```
 
 ## Support and Community
