@@ -3574,8 +3574,8 @@ contains
        qc_sfc(1,i,j) = 0.0_RP
 
        do k = KS, KE
-          velx(k,i,j) =  3.0_RP + 4.3 * GRID_CZ(k)*1.E-3_RP
-          vely(k,i,j) = -9.0_RP + 5.6 * GRID_CZ(k)*1.E-3_RP
+          velx(k,i,j) = 0.0_RP ! 3.0_RP + 4.3 * GRID_CZ(k)*1.E-3_RP
+          vely(k,i,j) = 0.0_RP !-9.0_RP + 5.6 * GRID_CZ(k)*1.E-3_RP
 
           if ( GRID_CZ(k) < 775.0_RP ) then ! below initial cloud top
              potl(k,i,j) = 288.3_RP ! [K]
