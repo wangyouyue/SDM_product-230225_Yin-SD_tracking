@@ -1430,7 +1430,6 @@ contains
       integer,intent(inout) :: sdid_s2c(1:sdnum_s2c)
       integer,intent(inout) :: dmid_s2c(1:sdnum_s2c)
       integer(i2),intent(inout) :: ifcoal_s2c(1:sdnum_s2c)
-      integer,intent(out) :: status_rdm
       ! Work variables
       real(RP) :: n0                            ! number of real droplets per unit volume and per aerosol radius
       real(RP) :: dry_r                         ! aerosol radius
@@ -1455,6 +1454,7 @@ contains
       real(RP) :: sdm_dtadv  ! time step of {motion of super-droplets} process
       real(RP) :: sdm_dtmlt  ! time step of {melt/freeze of super-droplets} process
       real(RP) :: sdm_dtsbl  ! time step of {sublimation/deposition of super-droplets} process
+      integer :: status_rdm
 
      !
       real(RP) :: area, INAS_max, prob_INIA, INAS_tf, probdens_tf
