@@ -1430,6 +1430,7 @@ contains
       integer,intent(inout) :: sdid_s2c(1:sdnum_s2c)
       integer,intent(inout) :: dmid_s2c(1:sdnum_s2c)
       integer(i2),intent(inout) :: ifcoal_s2c(1:sdnum_s2c)
+      integer,intent(out) :: status_rdm
       ! Work variables
       real(RP) :: n0                            ! number of real droplets per unit volume and per aerosol radius
       real(RP) :: dry_r                         ! aerosol radius
@@ -1941,7 +1942,7 @@ contains
       end if
 
       call gen_rand_array( rng_s2c, rand_s2c )
-      call sdm_select_stratified_random_particles(sdnum_s2c, num_selected, rand_s2c, sdrk_s2c, sdr_s2c, height_min, height_max, radius_min, dmid_s2c, sdid_s2c, ifcoal_s2c, status)
+      call sdm_select_stratified_random_particles(sdnum_s2c, num_selected, rand_s2c, sdrk_s2c, sdr_s2c, height_min, height_max, radius_min, dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
 
       ! Output logfile about SDM
       if( mype==0 ) then
