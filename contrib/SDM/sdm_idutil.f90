@@ -531,7 +531,7 @@ contains
 
   end subroutine sdm_copy_selected_sd
 !---------------------------------------------------------------------------------------------------------------------------------
-  subroutine sdm_select_stratified_random_particles(sd_num, num_selected, sd_rand, sd_rk, sd_r, height_min, height_max, radius_min, dm_id, sd_id, if_coal)
+  subroutine sdm_select_stratified_random_particles(sd_num, num_selected, sd_rand, sd_rk, sd_r, height_min, height_max, radius_min, dm_id, sd_id, if_coal, status)
     use scale_precision
     use scale_grid, only: DZ
     use m_sdm_common, only: VALID2INVALID, i2
@@ -551,15 +551,29 @@ contains
     integer, intent(inout) :: sd_id(1:sd_num)
     integer, intent(inout) :: dm_id(1:sd_num)
     integer(i2), intent(inout) :: if_coal(1:sd_num)
+    integer, intent(out) :: status
 
     integer :: i, j, layer, count, total_count, selected_count, min_layer, max_layer, num_layers, selected_particle_index
     integer, allocatable :: layer_indices(:), layer_counts(:), layer_selected_counts(:)
     logical, allocatable :: selected(:)
     integer, allocatable :: index_array(:)
 
+    ! Initialize status
+    status = 0
+
+    if (height_min >= height_max .or. height_min < 0.0_RP) then
+        print *, "Error: Invalid height range"
+        status = -1
+        return
+    end if
+
     ! Calculate minimum and maximum layers
-    min_layer = int(height_min / DZ)
-    max_layer = int(height_max / DZ)
+    min_layer = ceiling(height_min / DZ)
+    max_layer = floor(height_max / DZ)
+    if (min_layer > max_layer) then
+        status = -1
+        return
+    end if
     num_layers = max_layer - min_layer + 1
 
     ! Initialize counters
@@ -585,6 +599,7 @@ contains
     if (total_count < num_selected) then
       print *, "Error: Not enough particles meet the criteria"
       deallocate(layer_counts, selected)
+      status = -1
       return
     end if
 
@@ -593,13 +608,13 @@ contains
     layer_selected_counts = 0
 
     do layer = 1, num_layers
-      layer_selected_counts(layer) = int(num_selected * layer_counts(layer) / total_count)
+      layer_selected_counts(layer) = nint(real(num_selected,RP) * real(layer_counts(layer),RP) / real(total_count,RP))
     end do
 
     ! Adjust the selection counts to match exactly num_selected
     selected_count = sum(layer_selected_counts)
     if (selected_count < num_selected) then
-      do i = 1, num_selected - selected_count
+      do i = 1, min(num_layers, num_selected - selected_count)
         layer_selected_counts(i) = layer_selected_counts(i) + 1
       end do
     else if (selected_count > num_selected) then
@@ -648,8 +663,11 @@ contains
       deallocate(index_array)
     end do
 
-    ! Deallocate arrays
-    deallocate(layer_counts, layer_selected_counts, layer_indices, selected)
+    ! Clean up
+    if (allocated(layer_counts)) deallocate(layer_counts)
+    if (allocated(selected)) deallocate(selected)
+    if (allocated(layer_selected_counts)) deallocate(layer_selected_counts)
+    if (allocated(layer_indices)) deallocate(layer_indices)
 
     return
   end subroutine sdm_select_stratified_random_particles
