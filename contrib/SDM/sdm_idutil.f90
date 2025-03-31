@@ -598,8 +598,9 @@ contains
     ! Check if there are enough super-droplets to select from
     if (total_count < num_selected) then
       print *, "Error: Not enough particles meet the criteria"
+      print *, "Required:", num_selected, " Available:", total_count
       deallocate(layer_counts, selected)
-      status_rdm = -1
+      status_rdm = -2
       return
     end if
 
@@ -609,14 +610,45 @@ contains
 
     do layer = 1, num_layers
       layer_selected_counts(layer) = nint(real(num_selected,RP) * real(layer_counts(layer),RP) / real(total_count,RP))
+      
+      ! Check if there are enough particles in the layer
+      if (layer_selected_counts(layer) > layer_counts(layer)) then
+          print *, "Error: Not enough particles in layer", layer + min_layer - 1
+          print *, "Required:", layer_selected_counts(layer), &
+                   " Available:", layer_counts(layer)
+          deallocate(layer_counts, selected, layer_selected_counts)
+          status_rdm = -3
+          return
+      end if
     end do
 
     ! Adjust the selection counts to match exactly num_selected
     selected_count = sum(layer_selected_counts)
     if (selected_count < num_selected) then
-      do i = 1, min(num_layers, num_selected - selected_count)
-        layer_selected_counts(i) = layer_selected_counts(i) + 1
-      end do
+      print *, "Warning: Adjusting layer counts to match required total"
+      print *, "Current total:", selected_count, " Required:", num_selected
+      
+      if (selected_count < num_selected) then
+          ! Find the layer with the most available particles to allocate extra particles
+          do i = 1, num_selected - selected_count
+              do layer = 1, num_layers
+                  if (layer_selected_counts(layer) < layer_counts(layer)) then
+                      layer_selected_counts(layer) = layer_selected_counts(layer) + 1
+                      exit
+                  end if
+              end do
+          end do
+      else
+          ! Reduce the selection count from the layers with extra particles
+          do i = 1, selected_count - num_selected
+              do layer = num_layers, 1, -1
+                  if (layer_selected_counts(layer) > 0) then
+                      layer_selected_counts(layer) = layer_selected_counts(layer) - 1
+                      exit
+                  end if
+              end do
+          end do
+      end if
     else if (selected_count > num_selected) then
       do i = 1, selected_count - num_selected
         layer_selected_counts(i) = layer_selected_counts(i) - 1
