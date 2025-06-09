@@ -190,25 +190,25 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
     `$ qsub squid_run.sh`
 
   3. **Compile and run the Fortran post-processing script:**
-    - Purge existing modules:
-      `$ module purge`
-    - Load the required modules:
-      `$ module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1`
-    - Compile the Fortran script:
-      `$ ifort -o particle_tracer_opt particle_tracer_opt.f90 $(nf-config --fflags) $(nf-config --flibs)`
-    - Run the script:
-      `$ ./particle_tracer_opt`
-      or submit as a job:
-      `$ qsub serial.sh`
+  - Purge existing modules:
+    `$ module purge`
+  - Load the required modules:
+    `$ module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1`
+  - Compile the Fortran script:
+    `$ ifort -o particle_tracer_opt particle_tracer_opt.f90 $(nf-config --fflags) $(nf-config --flibs)`
+  - Run the script:
+    `$ ./particle_tracer_opt`
+    or submit as a job:
+    `$ qsub serial.sh`
 
   4. **Python plotting test (SD trajectories):**
-    - Purge existing modules:
-      `$ module purge`
-    - Load Python environment:
-      `$ $ module load BasePy/2021`
-    - Install required libraries if needed
-    - Run the plotting script:
-      `$ python3 random_traj.py`
+  - Purge existing modules:
+    `$ module purge`
+  - Load Python environment:
+    `$ $ module load BasePy/2021`
+  - Install required libraries if needed
+  - Run the plotting script:
+    `$ python3 random_traj.py`
 
 ## Support and Community
 Questions, issues, and discussions about SCALE-SDM can be directed here. Contributions and feedback are highly encouraged to enhance the model's capabilities and user experience. Please feel free to contact me: yinchongzhi@gmail.com. :grin:
