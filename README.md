@@ -39,7 +39,7 @@ These collision event files are **output at each microphysical time step**. If n
 5. **Random Perturbations in SD Motion**
 Random perturbations are applied to the displacement of each SD during its motion. The magnitude of the displacement perturbation is proportional to the square root of the time step and inversely proportional to the square root of the SD radius. The displacement formula is:
 
-$$\Delta x = (random \ number - 0.5) \times \sqrt{\frac{\Delta t}{r}} \times \text{sdm}\textunderscore\text{noise}\textunderscore\text{amp}$$
+$$\Delta x = (\text{random number} - 0.5) \times \sqrt{\frac{\Delta t}{r}} \times \text{sdm\_noise\_amp}$$
 
 where the **random number** is between 0 and 1 (the same for all three directions), $\Delta x$ is the displacement, $\Delta t$ is the time step, $r$ is the SD radius, and **sdm_noise_amp** is the user-specified noise amplitude.
 
@@ -126,6 +126,28 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results
   $ qsub run_py.pbs
   ```
+
+  ## Running the 2D Simulation on SQUID Supercomputer at Osaka University
+
+1. **Compilation using the Intel compilers and Intel MPI:**
+   
+  - Set the SCALE system environment variable for your session:
+    ` $ export SCALE_SYS=Linux64-intel-impi`
+  - Purge existing modules:
+    ` $ module purge` 
+  - Load the required modules:
+    ` $ module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1`
+  - After completing these steps, your environment should be ready. You can then compile SCALE-SDM:
+    ```
+    $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results
+    $ make allclean
+    $ make allclean SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+    $ make SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
+    $ ln -fsv  `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
+    ```
+  
+  2. **Submit the job:**
+    `$ qsub squid_run.sh`
 
 ## Support and Community
 Questions, issues, and discussions about SCALE-SDM can be directed here. Contributions and feedback are highly encouraged to enhance the model's capabilities and user experience. Please feel free to contact me: yinchongzhi@gmail.com. :grin:

@@ -1,0 +1,226 @@
+Algorithm: Super-Droplet Forward Tracking Algorithm
+
+// Initialization phase
+Procedure INITIALIZE_SD_FORWARD_TRACKING()
+    // Initialize tracking variables
+    FOR each super-droplet i DO
+        sd_id[i] ← INVALID_VALUE      // Initialize SD ID as invalid
+        dm_id[i] ← INVALID_VALUE      // Initialize domain ID as invalid
+        if_coal[i] ← 0               // Initialize coalescence flag
+    END FOR
+    
+    // Select super-droplets for tracking using stratified random sampling
+    CALL SELECT_SD_FOR_TRACKING()
+END PROCEDURE
+
+// Main tracking loop
+Procedure SD_FORWARD_TRACKING(time_step)
+    // 1. Super-droplet motion (updates all SD positions)
+    CALL SD_MOTION_ALL()
+    
+    // 2. Add random perturbation to all super-droplets (alternative)
+    CALL ADD_RANDOM_PERTURBATION_ALL()
+    
+    // 3. Coalescence process tracking (same algorithm as backward tracking)
+    //    Note: All coalescence events are output (including unselected SDs)
+    CALL SD_COALESCENCE_TRACKING()  // See backward tracking algorithm
+    
+    // 4. Boundary condition handling
+    CALL SD_BOUNDARY_HANDLING()
+    
+    // 5. Output tracking data
+    IF (output_time) THEN
+        CALL OUTPUT_SD_STATE_DATA()  // Output at specified intervals
+    END IF
+END PROCEDURE
+
+// Select super-droplets for tracking (Stratified Random Sampling)
+Procedure SELECT_SD_FOR_TRACKING()    
+    // Stratified random sampling strategy implementation
+    CALL SDM_SELECT_STRATIFIED_RANDOM_PARTICLES()
+    
+    // Copy selected SD data using sdm_copy_selected_sd functionality
+    CALL SDM_COPY_SELECTED_SD(sdtype='selected')
+END PROCEDURE
+
+// Detailed stratified random sampling implementation
+Procedure SDM_SELECT_STRATIFIED_RANDOM_PARTICLES()
+    // This procedure implements the core stratified random sampling strategy
+    // Based on height layers and radius conditions
+    
+    // Step 1: Initialize layer statistics
+    FOR each height_layer k DO
+        layer_count[k] ← 0
+        layer_valid_count[k] ← 0
+    END FOR
+    
+    // Step 2: Count valid super-droplets in each layer
+    FOR each super-droplet n DO
+        IF (sd_rk[n] >= VALID2INVALID) THEN  // Only valid SDs
+            k ← GET_HEIGHT_LAYER(sd_rk[n])
+            layer_count[k] ← layer_count[k] + 1
+            
+            // Apply selection criteria (e.g., activated droplets)
+            IF (MEETS_SELECTION_CRITERIA(n)) THEN
+                layer_valid_count[k] ← layer_valid_count[k] + 1
+                ADD_TO_CANDIDATE_LIST(n, k)
+            END IF
+        END IF
+    END FOR
+    
+    // Step 3: Calculate selection ratio for each layer
+    FOR each height_layer k DO
+        IF (layer_valid_count[k] > 0) THEN
+            selection_ratio[k] ← MIN(target_ratio, max_selection / layer_valid_count[k])
+            target_count[k] ← ROUND(layer_valid_count[k] * selection_ratio[k])
+        ELSE
+            target_count[k] ← 0
+        END IF
+    END FOR
+    
+    // Step 4: Random selection within each layer
+    FOR each height_layer k DO
+        IF (target_count[k] > 0) THEN
+            candidate_list ← GET_CANDIDATES_IN_LAYER(k)
+            
+            // Generate random permutation for fair selection
+            CALL GENERATE_RANDOM_PERMUTATION(candidate_list)
+            
+            // Select first target_count[k] candidates
+            FOR i = 1 TO target_count[k] DO
+                selected_sd ← candidate_list[i]
+                sd_id[selected_sd] ← ASSIGN_UNIQUE_ID()
+                dm_id[selected_sd] ← current_domain_id
+                MARK_AS_SELECTED(selected_sd)
+            END FOR
+        END IF
+    END FOR
+END PROCEDURE
+
+// Check if super-droplet meets selection criteria
+Function MEETS_SELECTION_CRITERIA(n)
+    // Implementation based on 'selected' criteria from sdm_copy_selected_sd
+    // This represents super-droplets that have been marked for tracking
+    // through the stratified random sampling process
+    
+    // Check if super-droplet is valid
+    IF (sd_rk[n] < VALID2INVALID) THEN
+        RETURN FALSE
+    END IF
+    
+    // Check if super-droplet has been selected for tracking
+    // This could be based on:
+    // 1. Pre-assigned tracking flags (selected_sd_flags[n] = true)
+    // 2. Tracking ID assignment (sd_id[n] != INVALID_VALUE)
+    // 3. Domain-specific selection criteria
+    
+    IF (sd_id[n] != INVALID_VALUE) THEN
+        RETURN TRUE  // Already selected and assigned tracking ID
+    ELSE IF (selected_sd_flags[n] == TRUE) THEN
+        RETURN TRUE  // Marked as selected through sampling process
+    END IF
+    
+    RETURN FALSE
+END Function
+
+// Add random perturbation to all super-droplets
+Procedure ADD_RANDOM_PERTURBATION_ALL()
+    // Note: Applies to all valid super-droplets, not just selected ones
+    // All three directions (x, y, z) use the same perturbation formula
+    
+    IF (sdm_noise_amp > 0.0) THEN
+        // Apply perturbation in all three directions
+        FOR direction IN [x, y, z] DO
+            GENERATE_RANDOM_ARRAY(sd_rand)
+            FOR each super-droplet n DO
+                IF (sd_rk[n] >= VALID2INVALID) THEN
+                    // Unified perturbation formula for all directions
+                    perturbation ← (sd_rand[n] - 0.5) * sqrt(sdm_dtadv) * sdm_noise_amp / sqrt(sd_r[n])
+                    
+                    // Apply direction-specific scaling
+                    IF (direction == z) THEN
+                        perturbation ← perturbation / DZ  // Scale for vertical direction
+                    END IF
+                    
+                    // Update position
+                    sd_position[n][direction] ← sd_position[n][direction] + perturbation
+                END IF
+            END FOR
+        END FOR
+    END IF
+END PROCEDURE
+
+// Super-droplet motion (updates all SD positions)
+Procedure SD_MOTION_ALL()
+    // Call standard SDM motion module to update all super-droplet positions
+    CALL sdm_move(sdm_dtadv, sd_num, sd_u, sd_v, sd_vz, sd_x, sd_y, sd_rk)
+END PROCEDURE
+
+// Coalescence process tracking
+Procedure SD_COALESCENCE_TRACKING()
+    // Algorithm identical to backward tracking (see backward tracking algorithm)
+    // Key difference: ALL coalescence events are output, including those
+    // involving unselected super-droplets
+    
+    // Sort super-droplets by grid
+    CALL SORT_SD_BY_GRID()
+    
+    FOR each grid_cell DO
+        sd_list ← GET_SD_IN_CELL()
+        pairs ← RANDOM_PAIRING(sd_list)
+        
+        FOR each pair (i, j) in pairs DO
+            prob_collision ← CALCULATE_COLLISION_PROBABILITY(i, j)
+            
+            IF (RANDOM() < prob_collision) THEN
+                // Record coalescence event for ALL pairs (selected or not)
+                RECORD_COALESCENCE_EVENT(i, j)
+                
+                // Set coalescence flags
+                if_coal[i] ← 1
+                if_coal[j] ← 1
+                
+                // Output coalescence event immediately
+                CALL OUTPUT_COALESCENCE_EVENT(i, j)
+                
+                // Perform coalescence operation
+                PERFORM_COALESCENCE(i, j)
+            END IF
+        END FOR
+    END FOR
+END PROCEDURE
+
+// Boundary condition handling
+Procedure SD_BOUNDARY_HANDLING()
+    // Call standard boundary handling with MPI communication of tracking info
+    CALL sdm_boundary(
+        boundary_conditions,
+        sd_num, sd_numasl, sd_n, sd_liqice, sd_x, sd_y, sd_rk,
+        sd_u, sd_v, sd_vz, sd_r, sd_asl, sdi,
+        sd_id, dm_id, if_coal,  // Pass tracking variables
+        buffer_sizes, temporary_arrays)
+END PROCEDURE
+
+// Output super-droplet state data
+Procedure OUTPUT_SD_STATE_DATA()
+    // Output state variables for selected super-droplets:
+    // - Spatial coordinates: sd_x, sd_y, sd_z
+    // - Physical properties: sd_r (radius), sd_n (multiplicity)
+    // - Tracking variables: sd_id, dm_id, if_coal
+    CALL sdm_outasci(sd_x, sd_y, sd_z, sd_r, sd_n, sd_id, dm_id, if_coal)
+    CALL sdm_outnetcdf(sd_x, sd_y, sd_z, sd_r, sd_n, sd_id, dm_id, if_coal)
+    
+    // Reset coalescence flags but keep IDs unchanged
+    FOR each super-droplet i DO
+        if_coal[i] ← 0
+    END FOR
+END PROCEDURE
+
+// Main program entry
+Procedure MAIN()
+    CALL INITIALIZE_SD_FORWARD_TRACKING()
+    
+    FOR time_step = 1 TO max_time_steps DO
+        CALL SD_FORWARD_TRACKING(time_step)
+    END FOR
+END PROCEDURE
