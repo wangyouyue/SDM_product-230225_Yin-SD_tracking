@@ -39,7 +39,7 @@ These collision event files are **output at each microphysical time step**. If n
 5. **Random Perturbations in SD Motion**
 Random perturbations are applied to the displacement of each SD during its motion. The magnitude of the displacement perturbation is proportional to the square root of the time step and inversely proportional to the square root of the SD radius. The displacement formula is:
 
-$$\Delta x = (\text{random number} - 0.5) \times \sqrt{\frac{\Delta t}{r}} \times \text{sdm\_noise\_amp}$$
+$$\Delta x = (\text{random number} - 0.5) \times \sqrt{\frac{\Delta t}{r}} \times \text{sdm\\_noise\\_amp}$$
 
 where the **random number** is between 0 and 1 (the same for all three directions), $\Delta x$ is the displacement, $\Delta t$ is the time step, $r$ is the SD radius, and **sdm_noise_amp** is the user-specified noise amplitude.
 
