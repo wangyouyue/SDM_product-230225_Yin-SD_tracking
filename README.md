@@ -176,7 +176,7 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   - Purge existing modules:
     ` $ module purge` 
   - Load the required modules:
-    ` $ module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1`
+    ` $ module load BaseCPU/2024 inteloneAPI/2023.2 hdf5/1.12.3.mpi netcdf-c/4.9.2 netcdf-fortran/4.6.1`
   - After completing these steps, your environment should be ready. You can then compile SCALE-SDM:
     ```
     $ cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/results
@@ -193,7 +193,7 @@ For more details, please see [the official user guide of SACLE](https://scale.ri
   - Purge existing modules:
     `$ module purge`
   - Load the required modules:
-    `$ module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1`
+    `$ module load BaseCPU/2024 inteloneAPI/2023.2 hdf5/1.12.3.mpi netcdf-c/4.9.2 netcdf-fortran/4.6.1`
   - Compile the Fortran script:
     `$ ifort -o particle_tracer_opt particle_tracer_opt.f90 $(nf-config --fflags) $(nf-config --flibs)`
   - Run the script:
