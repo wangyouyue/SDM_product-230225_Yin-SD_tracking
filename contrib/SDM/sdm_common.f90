@@ -473,12 +473,26 @@ module m_sdm_common
                                        ! 2nd digit (10^1) corresponds to binary output
                                        ! 3rd digit (10^2) corresponds to binary output of large droplets 
                                        ! 0: off, 1: on, 2: output with sort data (only for binary output)
+                                       ! 100 enables SD_selected_NetCDF output path
                                        ! currently only 001 is supported   
   real(RP), save :: sdm_dmpitva  = 0.e0 ! Time interval of text output [s]
   integer, save :: sdm_dmpnskip = 1     ! Base skip to store super droplets in text format
   real(RP), save :: sdm_dmpitvb  = 0.e0  ! Time interval of binary output of all droplets [s]
   real(RP), save :: sdm_dmpitvl  = 0.e0  ! Time interval of binary output of large droplets [s]
   real(RP), save :: sdm_dmpsdsiz = 0.e0  ! Threshold radius to store large super droplets in binary format [m]
+  logical, save :: backward_tracking_enable = .true. ! Master switch for backward tracking
+  logical, save :: coalescence_output_enable = .true. ! Master switch for coalescence event output files and variables (default ON)
+  real(RP), save :: tracking_fraction = 1.0_RP ! Fraction of SDs to keep tracked (0-1]
+  integer, save :: max_tracked_sds = 0 ! Hard cap of tracked SDs, 0 means unlimited
+  real(RP), save :: tracked_radius_threshold = 0.0_RP ! Output filter threshold radius [m], 0 disables this filter and keeps full backward chain
+  logical, save :: tracked_grid_coal_only = .false. ! Output only SD histories with coalescence flag when true, default off to keep full backward chain
+  logical, save :: tracking_sample_initialized = .false. ! Track subset is sampled only once to keep a consistent backward-tracked population
+  real(DP), save :: tracking_time_id_assign = 0.0_DP ! Accumulated wall-time for ID (re)assignment
+  real(DP), save :: tracking_time_boundary_x = 0.0_DP ! Accumulated wall-time for x-direction boundary transfer
+  real(DP), save :: tracking_time_boundary_y = 0.0_DP ! Accumulated wall-time for y-direction boundary transfer
+  integer, save :: tracking_count_id_assign = 0 ! Number of ID (re)assignment timing samples
+  integer, save :: tracking_count_boundary_x = 0 ! Number of x-direction boundary timing samples
+  integer, save :: tracking_count_boundary_y = 0 ! Number of y-direction boundary timing samples
 
   data sdm_dtcmph / 0.1_RP,0.1_RP,0.1_RP,0.1_RP,0.1_RP /
   data sdm_calvar / .false.,.false.,.false.,.false.,.false. /
@@ -613,6 +627,13 @@ module m_sdm_common
        sdm_dmpitvb,         &
        sdm_dmpitvl,         &
        sdm_dmpsdsiz,        &
-       sdm_noise_amp
+       sdm_noise_amp,       &
+       backward_tracking_enable, &
+       coalescence_output_enable, &
+       tracking_fraction,   &
+       max_tracked_sds,     &
+       tracked_radius_threshold, &
+       tracked_grid_coal_only, &
+       tracking_sample_initialized
 
 end module m_sdm_common

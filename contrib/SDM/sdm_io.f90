@@ -167,6 +167,8 @@ contains
   end subroutine sdm_outasci
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,if_coal,sdn_dmpnskip,filetag)
+    use mpi, only: &
+         mpi_wtime
     use netcdf
     use scale_precision
     use scale_stdio
@@ -174,7 +176,11 @@ contains
     use scale_process, only: &
          mype => PRC_myrank
     use m_sdm_common, only: &
-         i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef
+         i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
+         INVALID_i4, backward_tracking_enable, coalescence_output_enable, tracking_fraction, max_tracked_sds, &
+         tracked_radius_threshold, tracked_grid_coal_only, &
+         tracking_time_id_assign, tracking_count_id_assign, &
+         tracking_sample_initialized
 
     implicit none
 
@@ -214,6 +220,12 @@ contains
     integer :: ncid, sd_num_id, sd_numasl_id
     integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id, if_coal_id
     integer :: sdi_re_id, sdi_rp_id, sdi_rho_id, sdi_tf_id, sdi_mrime_id, sdi_nmono_id
+    integer :: tracked_cnt
+    real(DP) :: t0_id_assign, t1_id_assign
+    logical :: do_track, pass_filter, write_tracking, write_coal
+    real(RP) :: rand_tracking
+    integer, allocatable :: pre_sdid_out(:), pre_dmid_out(:)
+    integer(kind=i2), allocatable :: if_coal_out(:)
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
     integer,parameter :: nc_deflate       = .true. ! turn on NetCDF compresion
@@ -241,6 +253,8 @@ contains
     else
        nf90_real_precision = NF90_DOUBLE
     end if
+    write_tracking = backward_tracking_enable
+    write_coal = coalescence_output_enable
 
     ! Open the output file
     call check_netcdf( nf90_create(trim(basename_sd_out),NF90_NETCDF4, ncid) )
@@ -300,24 +314,25 @@ contains
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'long_name', 'status of droplets: 01=liquid, 10=ice, 11=mixture') )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'units', '') )
-    !!! pre_sdid
-    call check_netcdf( nf90_def_var(ncid, "pre_sdid", NF90_INT, sd_num_id, sd_id_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, sd_id_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'previous index') )
-    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'units', '') )
-    !!! pre_dmid
-    call check_netcdf( nf90_def_var(ncid, "pre_dmid", NF90_INT, sd_num_id, domain_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, domain_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
-    call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
-    !!! if_coal
-    call check_netcdf( nf90_def_var(ncid, "if_coal", NF90_SHORT, sd_num_id, if_coal_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, if_coal_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'long_name', 'coalescence flag: 0=has not occurred, 1=occurred') )
-    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'units', '') )
+    if( write_tracking ) then
+       call check_netcdf( nf90_def_var(ncid, "pre_sdid", NF90_INT, sd_num_id, sd_id_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, sd_id_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'previous index') )
+       call check_netcdf( nf90_put_att(ncid, sd_id_id, 'units', '') )
+       call check_netcdf( nf90_def_var(ncid, "pre_dmid", NF90_INT, sd_num_id, domain_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, domain_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
+       call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
+    end if
+    if( write_coal ) then
+       call check_netcdf( nf90_def_var(ncid, "if_coal", NF90_SHORT, sd_num_id, if_coal_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, if_coal_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, if_coal_id, 'long_name', 'coalescence flag: 0=has not occurred, 1=occurred') )
+       call check_netcdf( nf90_put_att(ncid, if_coal_id, 'units', '') )
+    end if
 
     if( sdm_cold ) then
        !!! sdi%re
@@ -379,12 +394,42 @@ contains
     call check_netcdf( nf90_put_var(ncid, sd_n_id, sd_n) )
     !!! sd_liqice
     call check_netcdf( nf90_put_var(ncid, sd_liqice_id, sd_liqice) )
-    !!! pre_sdid
-    call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid) )
-    !!! pre_dmid
-    call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid) )
-    !!! if_coal
-    call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal) )
+    if( write_tracking .or. write_coal ) then
+       allocate(pre_sdid_out(1:sd_num), pre_dmid_out(1:sd_num), if_coal_out(1:sd_num))
+       if( write_tracking ) then
+          pre_sdid_out(1:sd_num) = pre_sdid(1:sd_num)
+          pre_dmid_out(1:sd_num) = pre_dmid(1:sd_num)
+       end if
+       if( write_coal ) then
+          if_coal_out(1:sd_num)  = if_coal(1:sd_num)
+       end if
+       do n=1,sd_num
+          pass_filter = .true.
+          if( tracked_radius_threshold > 0.0_RP ) then
+             if( sd_r(n) < tracked_radius_threshold ) pass_filter = .false.
+          end if
+          if( tracked_grid_coal_only .and. write_coal ) then
+             if( if_coal_out(n) == 0_i2 ) pass_filter = .false.
+          end if
+          if( .not. pass_filter ) then
+             if( write_tracking ) then
+                pre_sdid_out(n) = INVALID_i4
+                pre_dmid_out(n) = INVALID_i4
+             end if
+             if( write_coal ) then
+                if_coal_out(n)  = 0_i2
+             end if
+          end if
+       end do
+       if( write_tracking ) then
+          call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid_out) )
+          call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid_out) )
+       end if
+       if( write_coal ) then
+          call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal_out) )
+       end if
+       deallocate(pre_sdid_out, pre_dmid_out, if_coal_out)
+    end if
 
     if( sdm_cold ) then
        !!! sdi_re
@@ -406,19 +451,67 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF) of Super Droplet'
 
-    do n=1,sd_num
-       pre_sdid(n) = n
-       pre_dmid(n) = mype
-    end do
-
-    ! Initialize coalescence flag
-    if_coal(1:sd_num) = 0
+    t0_id_assign = mpi_wtime()
+    if( (.not. backward_tracking_enable) .or. (tracking_fraction <= 0.0_RP) ) then
+       do n=1,sd_num
+          pre_sdid(n) = INVALID_i4
+          pre_dmid(n) = INVALID_i4
+          if_coal(n)  = 0_i2
+       end do
+       tracking_sample_initialized = .false.
+    else
+       tracked_cnt = 0
+       ! Track subset is sampled only once, then reused every output cycle to avoid time-varying chain truncation.
+       if( .not. tracking_sample_initialized ) then
+          do n=1,sd_num
+             do_track = .true.
+             if( tracking_fraction < 1.0_RP ) then
+                call random_number(rand_tracking)
+                if( rand_tracking > tracking_fraction ) do_track = .false.
+             end if
+             if( max_tracked_sds > 0 ) then
+                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
+             end if
+             if( do_track ) then
+                tracked_cnt = tracked_cnt + 1
+                pre_sdid(n) = n
+                pre_dmid(n) = mype
+             else
+                pre_sdid(n) = INVALID_i4
+                pre_dmid(n) = INVALID_i4
+             end if
+             if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+       else
+          do n=1,sd_num
+             do_track = ( pre_sdid(n) > INVALID_i4 .and. pre_dmid(n) > INVALID_i4 )
+             if( do_track .and. max_tracked_sds > 0 ) then
+                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
+             end if
+             if( do_track ) then
+                tracked_cnt = tracked_cnt + 1
+                pre_sdid(n) = n
+                pre_dmid(n) = mype
+             else
+                pre_sdid(n) = INVALID_i4
+                pre_dmid(n) = INVALID_i4
+             end if
+             if_coal(n) = 0_i2
+          end do
+       end if
+    end if
+    t1_id_assign = mpi_wtime()
+    tracking_time_id_assign = tracking_time_id_assign + (t1_id_assign - t0_id_assign)
+    tracking_count_id_assign = tracking_count_id_assign + 1
 
     return
 
   end subroutine sdm_outnetcdf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_outnetcdf_hist(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,if_coal,sdn_dmpnskip,filetag)
+    use mpi, only: &
+         mpi_wtime
     use netcdf
     use scale_precision
     use scale_stdio
@@ -427,7 +520,11 @@ contains
          mype => PRC_myrank, &
          PRC_MPIstop
     use m_sdm_common, only: &
-         i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef
+         i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
+         INVALID_i4, backward_tracking_enable, coalescence_output_enable, tracking_fraction, max_tracked_sds, &
+         tracked_radius_threshold, tracked_grid_coal_only, &
+         tracking_time_id_assign, tracking_count_id_assign, &
+         tracking_sample_initialized
 
     implicit none
 
@@ -482,6 +579,12 @@ contains
     character(len=100), save :: ftag_list(1:max_filenum)
     integer, save :: time_count(1:max_filenum)
     integer :: nf, fileid
+    integer :: tracked_cnt
+    real(DP) :: t0_id_assign, t1_id_assign
+    logical :: do_track, pass_filter, write_tracking, write_coal
+    real(RP) :: rand_tracking
+    integer, allocatable :: pre_sdid_out(:), pre_dmid_out(:)
+    integer(kind=i2), allocatable :: if_coal_out(:)
 
     !--- output Super Droplets in NetCDF format
     call TIME_gettimelabel(basename_time)
@@ -527,6 +630,8 @@ contains
     else
        nf90_real_precision = NF90_DOUBLE
     end if
+    write_tracking = backward_tracking_enable
+    write_coal = coalescence_output_enable
 
     ! Create or Open the output file
     if(newfile) then
@@ -626,24 +731,25 @@ contains
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'long_name', 'status of droplets: 01=liquid, 10=ice, 11=mixture') )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'units', '') )
-    !!! pre_sdid
-    call check_netcdf( nf90_def_var(ncid, "pre_sdid", NF90_INT, sd_num_id, sd_id_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, sd_id_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'previous index') )
-    call check_netcdf( nf90_put_att(ncid, sd_id_id, 'units', '') )
-    !!! pre_dmid
-    call check_netcdf( nf90_def_var(ncid, "pre_dmid", NF90_INT, sd_num_id, domain_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, domain_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
-    call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
-    !!! if_coal
-    call check_netcdf( nf90_def_var(ncid, "if_coal", NF90_SHORT, sd_num_id, if_coal_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, if_coal_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'long_name', 'coalescence flag: 0=has not occurred, 1=occurred') )
-    call check_netcdf( nf90_put_att(ncid, if_coal_id, 'units', '') )
+    if( write_tracking ) then
+       call check_netcdf( nf90_def_var(ncid, "pre_sdid", NF90_INT, sd_num_id, sd_id_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, sd_id_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, sd_id_id, 'long_name', 'previous index') )
+       call check_netcdf( nf90_put_att(ncid, sd_id_id, 'units', '') )
+       call check_netcdf( nf90_def_var(ncid, "pre_dmid", NF90_INT, sd_num_id, domain_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, domain_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, domain_id, 'long_name', 'previous domain') )
+       call check_netcdf( nf90_put_att(ncid, domain_id, 'units', '') )
+    end if
+    if( write_coal ) then
+       call check_netcdf( nf90_def_var(ncid, "if_coal", NF90_SHORT, sd_num_id, if_coal_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, if_coal_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, if_coal_id, 'long_name', 'coalescence flag: 0=has not occurred, 1=occurred') )
+       call check_netcdf( nf90_put_att(ncid, if_coal_id, 'units', '') )
+    end if
 
     if( sdm_cold ) then
        !!! sdi%re
@@ -720,12 +826,42 @@ contains
     call check_netcdf( nf90_put_var(ncid, sd_n_id, sd_n) )
     !!! sd_liqice
     call check_netcdf( nf90_put_var(ncid, sd_liqice_id, sd_liqice) )
-    !!! pre_sdid
-    call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid) )
-    !!! pre_dmid
-    call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid) )
-    !!! sd_liqice
-    call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal) )
+    if( write_tracking .or. write_coal ) then
+       allocate(pre_sdid_out(1:sd_num), pre_dmid_out(1:sd_num), if_coal_out(1:sd_num))
+       if( write_tracking ) then
+          pre_sdid_out(1:sd_num) = pre_sdid(1:sd_num)
+          pre_dmid_out(1:sd_num) = pre_dmid(1:sd_num)
+       end if
+       if( write_coal ) then
+          if_coal_out(1:sd_num)  = if_coal(1:sd_num)
+       end if
+       do n=1,sd_num
+          pass_filter = .true.
+          if( tracked_radius_threshold > 0.0_RP ) then
+             if( sd_r(n) < tracked_radius_threshold ) pass_filter = .false.
+          end if
+          if( tracked_grid_coal_only .and. write_coal ) then
+             if( if_coal_out(n) == 0_i2 ) pass_filter = .false.
+          end if
+          if( .not. pass_filter ) then
+             if( write_tracking ) then
+                pre_sdid_out(n) = INVALID_i4
+                pre_dmid_out(n) = INVALID_i4
+             end if
+             if( write_coal ) then
+                if_coal_out(n)  = 0_i2
+             end if
+          end if
+       end do
+       if( write_tracking ) then
+          call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid_out) )
+          call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid_out) )
+       end if
+       if( write_coal ) then
+          call check_netcdf( nf90_put_var(ncid, if_coal_id, if_coal_out) )
+       end if
+       deallocate(pre_sdid_out, pre_dmid_out, if_coal_out)
+    end if
 
     if( sdm_cold ) then
        !!! sdi_re
@@ -747,13 +883,59 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF_HIST) of Super Droplet'
 
-    do n=1,sd_num
-       pre_sdid(n) = n
-       pre_dmid(n) = mype
-    end do
-
-    ! Initialize coalescence flag
-    if_coal(1:sd_num) = 0
+    t0_id_assign = mpi_wtime()
+    if( (.not. backward_tracking_enable) .or. (tracking_fraction <= 0.0_RP) ) then
+       do n=1,sd_num
+          pre_sdid(n) = INVALID_i4
+          pre_dmid(n) = INVALID_i4
+          if_coal(n)  = 0_i2
+       end do
+       tracking_sample_initialized = .false.
+    else
+       tracked_cnt = 0
+       ! Track subset is sampled only once, then reused every output cycle to avoid time-varying chain truncation.
+       if( .not. tracking_sample_initialized ) then
+          do n=1,sd_num
+             do_track = .true.
+             if( tracking_fraction < 1.0_RP ) then
+                call random_number(rand_tracking)
+                if( rand_tracking > tracking_fraction ) do_track = .false.
+             end if
+             if( max_tracked_sds > 0 ) then
+                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
+             end if
+             if( do_track ) then
+                tracked_cnt = tracked_cnt + 1
+                pre_sdid(n) = n
+                pre_dmid(n) = mype
+             else
+                pre_sdid(n) = INVALID_i4
+                pre_dmid(n) = INVALID_i4
+             end if
+             if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+       else
+          do n=1,sd_num
+             do_track = ( pre_sdid(n) > INVALID_i4 .and. pre_dmid(n) > INVALID_i4 )
+             if( do_track .and. max_tracked_sds > 0 ) then
+                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
+             end if
+             if( do_track ) then
+                tracked_cnt = tracked_cnt + 1
+                pre_sdid(n) = n
+                pre_dmid(n) = mype
+             else
+                pre_sdid(n) = INVALID_i4
+                pre_dmid(n) = INVALID_i4
+             end if
+             if_coal(n) = 0_i2
+          end do
+       end if
+    end if
+    t1_id_assign = mpi_wtime()
+    tracking_time_id_assign = tracking_time_id_assign + (t1_id_assign - t0_id_assign)
+    tracking_count_id_assign = tracking_count_id_assign + 1
 
     return
 
@@ -772,7 +954,8 @@ contains
     end if
   end subroutine check_netcdf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_coal_outnetcdf(otime, num_pair, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
+  subroutine sdm_coal_outnetcdf(otime, num_pair, num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out, &
+       pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2)
     use netcdf
     use scale_precision
     use scale_stdio
@@ -786,15 +969,15 @@ contains
 
     real(DP), intent(in) :: otime
     integer, intent(in) :: num_pair    ! number of super-droplet pairs
-    integer, allocatable, intent(in) :: pre_sdid1(:) ! save index of super-droplets
-    integer, allocatable, intent(in) :: pre_dmid1(:) ! domain index of super-droplets
-    integer, allocatable, intent(in) :: pre_sdid2(:) ! save index of super-droplets
-    integer, allocatable, intent(in) :: pre_dmid2(:) ! domain index of super-droplets
     integer, allocatable, intent(in) :: num_col(:)   ! number of coalesence of pairs of SDs
     real(RP), allocatable, intent(in) :: sdr1_out(:)
     real(RP), allocatable, intent(in) :: sdr2_out(:)
     integer(DP), allocatable, intent(in) :: sdn1_out(:)
     integer(DP), allocatable, intent(in) :: sdn2_out(:)
+    integer, allocatable, optional, intent(in) :: pre_sdid1(:) ! save index of super-droplets
+    integer, allocatable, optional, intent(in) :: pre_dmid1(:) ! domain index of super-droplets
+    integer, allocatable, optional, intent(in) :: pre_sdid2(:) ! save index of super-droplets
+    integer, allocatable, optional, intent(in) :: pre_dmid2(:) ! domain index of super-droplets
 
     character(len=17) :: fmt2="(A, '.', A, I*.*)"
     character(len=H_LONG) :: ftmp
@@ -805,6 +988,7 @@ contains
     integer :: nf90_real_precision
     integer :: ncid, num_pair_id, sdr1_out_id, sdr2_out_id, sdn1_out_id, sdn2_out_id
     integer :: pre_sdid1_id, pre_sdid2_id, pre_dmid1_id, pre_dmid2_id, num_col_id
+    logical :: write_pair_tracking
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
     integer,parameter :: nc_deflate       = .true. ! turn on NetCDF compresion
@@ -832,22 +1016,24 @@ contains
     ! Open the output file
     call check_netcdf( nf90_create(trim(basename_sd_out),NF90_NETCDF4, ncid) )
 
+    write_pair_tracking = present(pre_sdid1) .and. present(pre_sdid2) .and. present(pre_dmid1) .and. present(pre_dmid2)
+
     ! Definition of dimensions and variables
     !!! num_pair
     call check_netcdf( nf90_def_dim(ncid, "num_pair", num_pair, num_pair_id) )
 
-    !!! pre_sdid1
-    call check_netcdf( nf90_def_var(ncid, "pre_sdid1", NF90_INT, num_pair_id,pre_sdid1_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid1_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'long_name', 'previous index of large SDs') )
-    call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'units', '') )
-    !!! pre_dmid1
-    call check_netcdf( nf90_def_var(ncid, "pre_dmid1", NF90_INT, num_pair_id, pre_dmid1_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid1_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'long_name', 'previous domain of large SDs') )
-    call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'units', '') )
+    if( write_pair_tracking ) then
+       call check_netcdf( nf90_def_var(ncid, "pre_sdid1", NF90_INT, num_pair_id,pre_sdid1_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid1_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'long_name', 'previous index of large SDs') )
+       call check_netcdf( nf90_put_att(ncid, pre_sdid1_id, 'units', '') )
+       call check_netcdf( nf90_def_var(ncid, "pre_dmid1", NF90_INT, num_pair_id, pre_dmid1_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid1_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'long_name', 'previous domain of large SDs') )
+       call check_netcdf( nf90_put_att(ncid, pre_dmid1_id, 'units', '') )
+    end if
     !!! sd_r1
     call check_netcdf( nf90_def_var(ncid, "sd_r1", nf90_real_precision, num_pair_id, sdr1_out_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, sdr1_out_id, &
@@ -860,18 +1046,18 @@ contains
          & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
     call check_netcdf( nf90_put_att(ncid, sdn1_out_id, 'long_name', 'multiplicity of large SDs') )
     call check_netcdf( nf90_put_att(ncid, sdn1_out_id, 'units', '') )
-    !!! pre_sdid2
-    call check_netcdf( nf90_def_var(ncid, "pre_sdid2", NF90_INT, num_pair_id,pre_sdid2_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid2_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'long_name', 'previous index of small SDs') )
-    call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'units', '') )
-    !!! pre_dmid2
-    call check_netcdf( nf90_def_var(ncid, "pre_dmid2", NF90_INT, num_pair_id, pre_dmid2_id) )
-    call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid2_id, &
-         & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
-    call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'long_name', 'previous domain of small SDs') )
-    call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'units', '') )
+    if( write_pair_tracking ) then
+       call check_netcdf( nf90_def_var(ncid, "pre_sdid2", NF90_INT, num_pair_id,pre_sdid2_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, pre_sdid2_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'long_name', 'previous index of small SDs') )
+       call check_netcdf( nf90_put_att(ncid, pre_sdid2_id, 'units', '') )
+       call check_netcdf( nf90_def_var(ncid, "pre_dmid2", NF90_INT, num_pair_id, pre_dmid2_id) )
+       call check_netcdf( nf90_def_var_deflate(ncid, pre_dmid2_id, &
+            & shuffle=nc_shuffle, deflate=nc_deflate, deflate_level=nc_deflate_level) )
+       call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'long_name', 'previous domain of small SDs') )
+       call check_netcdf( nf90_put_att(ncid, pre_dmid2_id, 'units', '') )
+    end if
     !!! sd_r2
     call check_netcdf( nf90_def_var(ncid, "sd_r2", nf90_real_precision, num_pair_id, sdr2_out_id) )
     call check_netcdf( nf90_def_var_deflate(ncid, sdr2_out_id, &
@@ -899,18 +1085,18 @@ contains
     call check_netcdf( nf90_enddef(ncid) )
 
     ! Save data
-    !!! pre_sdid1
-    call check_netcdf( nf90_put_var(ncid, pre_sdid1_id, pre_sdid1) )
-    !!! pre_dmid1
-    call check_netcdf( nf90_put_var(ncid, pre_dmid1_id, pre_dmid1) )
+    if( write_pair_tracking ) then
+       call check_netcdf( nf90_put_var(ncid, pre_sdid1_id, pre_sdid1) )
+       call check_netcdf( nf90_put_var(ncid, pre_dmid1_id, pre_dmid1) )
+    end if
     !!! sd_r1
     call check_netcdf( nf90_put_var(ncid, sdr1_out_id, sdr1_out) )
     !!! sd_n1
     call check_netcdf( nf90_put_var(ncid, sdn1_out_id, sdn1_out) )
-    !!! pre_sdid2
-    call check_netcdf( nf90_put_var(ncid, pre_sdid2_id, pre_sdid2) )
-    !!! pre_dmid2
-    call check_netcdf( nf90_put_var(ncid, pre_dmid2_id, pre_dmid2) )
+    if( write_pair_tracking ) then
+       call check_netcdf( nf90_put_var(ncid, pre_sdid2_id, pre_sdid2) )
+       call check_netcdf( nf90_put_var(ncid, pre_dmid2_id, pre_dmid2) )
+    end if
     !!! sd_r2
     call check_netcdf( nf90_put_var(ncid, sdr2_out_id, sdr2_out) )
     !!! sd_n2

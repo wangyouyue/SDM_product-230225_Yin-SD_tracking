@@ -196,7 +196,7 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
     use scale_grid_index, only: &
          & IA,JA,KA
     use m_sdm_common, only: &
-         & i2, sdicedef, sdm_cold, num_threads, VALID2INVALID, STAT_LIQ, STAT_ICE, &
+         & i2, sdicedef, sdm_cold, num_threads, VALID2INVALID, STAT_LIQ, STAT_ICE, INVALID_i4, &
          & sdm_aslset, mass_amsul, ion_amsul, mass_nacl, ion_nacl, CurveF, ASL_FF 
     use m_sdm_coordtrans, only: &
          & sdm_x2ri, sdm_y2rj
@@ -395,6 +395,15 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
                 cnt = cnt + 1
                 ilist(cnt) = n
              end if
+          end if
+       end do
+
+    else if (sdtype == 'tracked') then
+       do n=1,sd_num
+          if( sd_rk(n)<VALID2INVALID ) cycle
+          if( pre_sdid(n) > INVALID_i4 .and. pre_dmid(n) > INVALID_i4 ) then
+             cnt = cnt + 1
+             ilist(cnt) = n
           end if
        end do
 

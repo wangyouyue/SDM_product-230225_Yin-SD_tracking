@@ -156,6 +156,8 @@ contains
                          bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                          sd_itmp1,                                         &
                          rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4)
+    use mpi, only: &
+         mpi_wtime
     use scale_process, only: &
          PRC_MPIstop, &
          mype => PRC_myrank
@@ -168,7 +170,9 @@ contains
          IS,IE,JS,JE
     use m_sdm_common, only: &
          stat,nisub,njsub, &
-         VALID2INVALID,i2,sdicedef
+         VALID2INVALID,i2,sdicedef, &
+         tracking_time_boundary_x, tracking_time_boundary_y, &
+         tracking_count_boundary_x, tracking_count_boundary_y
 
     ! Input variables
     integer, intent(in) :: wbc ! Option for west boundary conditions
@@ -255,6 +259,7 @@ contains
     integer, intent(out) :: sd_itmp1(1:sd_num) ! temporary array of the size of the number of super-droplets.
 
     integer :: n     ! index
+    real(DP) :: t0_boundary, t1_boundary
     !---------------------------------------------------------------------
     
     if( (wbc/=1).or.(ebc/=1).or.(sbc/=1).or.(nbc/=1))then
@@ -269,7 +274,7 @@ contains
     ! Set the boundary condition of super-droplets in x direction
     if( nisub>=2 ) then
        !== Exchange the value horizontally in x direction ==!
-       
+       t0_boundary = mpi_wtime()
        call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,               &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
             sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
@@ -288,6 +293,9 @@ contains
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                                       &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
+       t1_boundary = mpi_wtime()
+       tracking_time_boundary_x = tracking_time_boundary_x + (t1_boundary - t0_boundary)
+       tracking_count_boundary_x = tracking_count_boundary_x + 1
 
     else if((wbc==1).and.(ebc==1).and.(nisub==1))then
        !### Apply periodic boundary condition
@@ -305,6 +313,7 @@ contains
     ! Set the boundary condition of super-droplets in y direction
     if( njsub>=2 ) then
        !== Exchange the value horizontally in y direction ==!
+       t0_boundary = mpi_wtime()
 
        call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,               &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
@@ -324,6 +333,9 @@ contains
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                                       &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
+       t1_boundary = mpi_wtime()
+       tracking_time_boundary_y = tracking_time_boundary_y + (t1_boundary - t0_boundary)
+       tracking_count_boundary_y = tracking_count_boundary_y + 1
 
     else if((nbc==1).and.(sbc==1).and.(njsub==1))then
        !### Apply periodic boundary condition

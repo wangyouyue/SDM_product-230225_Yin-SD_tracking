@@ -56,7 +56,7 @@ contains
          cp => CONST_CPdry, &
          p0 => CONST_PRE00       ! Reference Pressure [Pa]
     use m_sdm_common, only: &
-         VALID2INVALID,INVALID,knum_sdm, &
+         VALID2INVALID,INVALID,knum_sdm, backward_tracking_enable, &
          rho_amsul,rho_nacl,ONE_PI,m2micro,r0col,ratcol,ecoll,micro2m,dxiv_sdm,dyiv_sdm,F_THRD,O_THRD,rrst,boltz,mass_air,i2
     use m_sdm_coordtrans, only: &
          sdm_x2ri, sdm_y2rj
@@ -207,6 +207,7 @@ contains
     integer :: sort_tag0m
     integer :: sort_freqm
     integer :: icptc, icptp
+    logical :: write_pair_tracking
     !--------------------------------------------------------------------
 #ifdef _FAPP_
     ! Section specification for fapp profiler
@@ -925,10 +926,13 @@ contains
 
 !OCL NORECURRENCE
 
-    allocate(pre_sdid1_temp(sd_num/2))
-    allocate(pre_sdid2_temp(sd_num/2))
-    allocate(pre_dmid1_temp(sd_num/2))
-    allocate(pre_dmid2_temp(sd_num/2))
+    write_pair_tracking = backward_tracking_enable
+    if( write_pair_tracking ) then
+       allocate(pre_sdid1_temp(sd_num/2))
+       allocate(pre_sdid2_temp(sd_num/2))
+       allocate(pre_dmid1_temp(sd_num/2))
+       allocate(pre_dmid2_temp(sd_num/2))
+    end if
     allocate(num_col_temp(sd_num/2))
     allocate(sdr1_temp(sd_num/2))
     allocate(sdr2_temp(sd_num/2))
@@ -974,15 +978,19 @@ contains
              sd_rk1 = sd_rk( icptc )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptc )
-             pre_sdid1_temp( num_pair ) = pre_sdid( icptc )
-             pre_dmid1_temp( num_pair ) = pre_dmid( icptc )
+             if( write_pair_tracking ) then
+                pre_sdid1_temp( num_pair ) = pre_sdid( icptc )
+                pre_dmid1_temp( num_pair ) = pre_dmid( icptc )
+             end if
 
              sd_n2  = sd_n( icptp )
              sd_r2  = sd_r( icptp )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptp )
-             pre_sdid2_temp( num_pair ) = pre_sdid( icptp )
-             pre_dmid2_temp( num_pair ) = pre_dmid( icptp )
+             if( write_pair_tracking ) then
+                pre_sdid2_temp( num_pair ) = pre_sdid( icptp )
+                pre_dmid2_temp( num_pair ) = pre_dmid( icptp )
+             end if
 
              do k=1,22
                 s = idx_nasl(k)
@@ -997,15 +1005,19 @@ contains
              sd_rk1 = sd_rk( icptp )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptp )
-             pre_sdid1_temp( num_pair ) = pre_sdid( icptp )
-             pre_dmid1_temp( num_pair ) = pre_dmid( icptp )
+             if( write_pair_tracking ) then
+                pre_sdid1_temp( num_pair ) = pre_sdid( icptp )
+                pre_dmid1_temp( num_pair ) = pre_dmid( icptp )
+             end if
 
              sd_n2  = sd_n( icptc )
              sd_r2  = sd_r( icptc )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptc )
-             pre_sdid2_temp( num_pair ) = pre_sdid( icptc )
-             pre_dmid2_temp( num_pair ) = pre_dmid( icptc )
+             if( write_pair_tracking ) then
+                pre_sdid2_temp( num_pair ) = pre_sdid( icptc )
+                pre_dmid2_temp( num_pair ) = pre_dmid( icptc )
+             end if
 
              do k=1,22
                 s = idx_nasl(k)
@@ -1121,19 +1133,23 @@ contains
     end do
     if( num_pair > 0 ) then
         ! Allocate
-        allocate(pre_dmid1( num_pair ))
-        allocate(pre_dmid2( num_pair ))
-        allocate(pre_sdid1( num_pair ))
-        allocate(pre_sdid2( num_pair ))
+        if( write_pair_tracking ) then
+           allocate(pre_dmid1( num_pair ))
+           allocate(pre_dmid2( num_pair ))
+           allocate(pre_sdid1( num_pair ))
+           allocate(pre_sdid2( num_pair ))
+        end if
         allocate(num_col( num_pair ))
         allocate(sdr1_out( num_pair ))
         allocate(sdr2_out( num_pair ))
         allocate(sdn1_out( num_pair ))
         allocate(sdn2_out( num_pair ))
-        pre_dmid1 = pre_dmid1_temp( :num_pair )
-        pre_dmid2 = pre_dmid2_temp( :num_pair )
-        pre_sdid1 = pre_sdid1_temp( :num_pair )
-        pre_sdid2 = pre_sdid2_temp( :num_pair )
+        if( write_pair_tracking ) then
+           pre_dmid1 = pre_dmid1_temp( :num_pair )
+           pre_dmid2 = pre_dmid2_temp( :num_pair )
+           pre_sdid1 = pre_sdid1_temp( :num_pair )
+           pre_sdid2 = pre_sdid2_temp( :num_pair )
+        end if
         num_col = num_col_temp( :num_pair )
         sdr1_out = sdr1_temp( :num_pair )
         sdr2_out = sdr2_temp( :num_pair )
@@ -1144,10 +1160,12 @@ contains
     ! Deallocate
     deallocate( fsort_tag  )
     deallocate( fsort_freq )
-    deallocate( pre_dmid1_temp )
-    deallocate( pre_dmid2_temp )
-    deallocate( pre_sdid1_temp )
-    deallocate( pre_sdid2_temp )
+    if( write_pair_tracking ) then
+       deallocate( pre_dmid1_temp )
+       deallocate( pre_dmid2_temp )
+       deallocate( pre_sdid1_temp )
+       deallocate( pre_sdid2_temp )
+    end if
     deallocate( num_col_temp )
     deallocate( sdr1_temp )
     deallocate( sdr2_temp )

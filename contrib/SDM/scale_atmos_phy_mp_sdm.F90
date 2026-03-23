@@ -828,7 +828,14 @@ contains
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
     logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3
+    logical :: did_sdm_dump, sampling_mode
+    integer :: tracking_chain_count
+    real(DP) :: tracking_mem_mb, coal_mem_mb
+    character(len=16) :: selected_sdtype
     integer :: order_n
+    integer :: tracked_cnt
+    logical :: do_track
+    real(RP) :: rand_tracking
 
     !-------------------------------------------------------------------------------------------------------------------------------
 
@@ -925,6 +932,14 @@ contains
     ! Section specification for fapp profiler
     call fapp_start("sdm_out",0,0)
 #endif
+    did_sdm_dump = .false.
+    sampling_mode = backward_tracking_enable .and. &
+         ((tracking_fraction > 0.0_RP .and. tracking_fraction < 1.0_RP) .or. (max_tracked_sds > 0))
+    if( sampling_mode ) then
+       selected_sdtype = 'tracked'
+    else
+       selected_sdtype = 'activated'
+    end if
     if( (mod(sdm_dmpvar,10)==1) .and. sdm_dmpitva>0.0_RP .and. &
          mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
              int(1.E+3_RP*(sdm_dmpitva+0.00010_RP))) == 0 ) then
@@ -948,6 +963,7 @@ contains
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
                         sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip)
+       did_sdm_dump = .true.
     end if
 
     if( ((mod(sdm_dmpvar,100))/10>=1) .and. sdm_dmpitvb>0.0_RP .and. &
@@ -982,6 +998,7 @@ contains
                         sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip,filetag='all')
        end if
+      did_sdm_dump = .true.
     end if
 
     if( ((mod(sdm_dmpvar,1000))/100>=1) .and. sdm_dmpitvl>0.0_RP .and. &
@@ -1005,12 +1022,37 @@ contains
        dmid_tmp => sd_i4tmp2
        ifcoal_tmp => sd_i2tmp2
 
-       call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
+      call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
+      if( sampling_mode .and. .not. tracking_sample_initialized ) then
+         tracked_cnt = 0
+         do n=1,sdnum_s2c
+            do_track = .true.
+            if( tracking_fraction < 1.0_RP ) then
+               call random_number(rand_tracking)
+               if( rand_tracking > tracking_fraction ) do_track = .false.
+            end if
+            if( do_track .and. max_tracked_sds > 0 ) then
+               if( tracked_cnt >= max_tracked_sds ) do_track = .false.
+            end if
+            if( do_track ) then
+               sdid_s2c(n) = n
+               dmid_s2c(n) = mype
+               tracked_cnt = tracked_cnt + 1
+            else
+               sdid_s2c(n) = INVALID_i4
+               dmid_s2c(n) = INVALID_i4
+            end if
+         end do
+         tracking_sample_initialized = .true.
+      end if
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
             &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
             &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                &
-            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
+            &                    t_scale,sd_itmp1,sdtype=selected_sdtype)
+      do n=1,sdnum_tmp
+         ifcoal_tmp(n) = ifcoal_s2c(sd_itmp1(n))
+      end do
 
        !! Evaluate diagnostic variables
        !!! z
@@ -1041,6 +1083,7 @@ contains
                         sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
                         sdm_dmpnskip,filetag='selected')
        end if
+      did_sdm_dump = .true.
 
        nullify(sdx_tmp)
        nullify(sdy_tmp)
@@ -1057,6 +1100,29 @@ contains
        nullify(sdid_tmp)
        nullify(dmid_tmp)
        nullify(ifcoal_tmp)
+    end if
+
+    if( IO_L .and. backward_tracking_enable .and. did_sdm_dump ) then
+       tracking_chain_count = count( (sdid_s2c(1:sdnum_s2c) > INVALID_i4) .and. (dmid_s2c(1:sdnum_s2c) > INVALID_i4) )
+       tracking_mem_mb = real(sdnum_s2c,kind=DP) * 8.0_DP / 1048576.0_DP
+       coal_mem_mb = real(sdnum_s2c,kind=DP) * 2.0_DP / 1048576.0_DP
+       write(IO_FID_LOG,*) '*** tracking_chain_count=', tracking_chain_count, ' / ', sdnum_s2c
+       write(IO_FID_LOG,*) '*** tracking_sample_mode=', sampling_mode, &
+            ' tracking_fraction=', tracking_fraction, ' max_tracked_sds=', max_tracked_sds
+       write(IO_FID_LOG,*) '*** tracking_memory_estimate_MB(pre_sdid+pre_dmid)=', tracking_mem_mb
+       write(IO_FID_LOG,*) '*** coal_flag_memory_estimate_MB(if_coal)=', coal_mem_mb
+       if( tracking_count_id_assign > 0 ) then
+          write(IO_FID_LOG,*) '*** tracking_time_id_assign_avg[s]=', &
+               tracking_time_id_assign / real(tracking_count_id_assign,kind=DP)
+       end if
+       if( tracking_count_boundary_x > 0 ) then
+          write(IO_FID_LOG,*) '*** tracking_time_boundary_x_avg[s]=', &
+               tracking_time_boundary_x / real(tracking_count_boundary_x,kind=DP)
+       end if
+       if( tracking_count_boundary_y > 0 ) then
+          write(IO_FID_LOG,*) '*** tracking_time_boundary_y_avg[s]=', &
+               tracking_time_boundary_y / real(tracking_count_boundary_y,kind=DP)
+       end if
     end if
 
 #ifdef _FAPP_
@@ -1293,7 +1359,10 @@ contains
             &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
             &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                &
-            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
+            &                    t_scale,sd_itmp1,sdtype=selected_sdtype)
+      do n=1,sdnum_tmp
+         ifcoal_tmp(n) = ifcoal_s2c(sd_itmp1(n))
+      end do
 
        if( do_puthist_0 )then
           order_n = 0
@@ -2154,7 +2223,17 @@ contains
    real(RP), allocatable :: sdr2_out(:)
    integer(DP), allocatable :: sdn1_out(:)
    integer(DP), allocatable :: sdn2_out(:)
+  integer, allocatable :: pre_sdid1_sel(:)
+  integer, allocatable :: pre_sdid2_sel(:)
+  integer, allocatable :: pre_dmid1_sel(:)
+  integer, allocatable :: pre_dmid2_sel(:)
+  integer, allocatable :: num_col_sel(:)
+  real(RP), allocatable :: sdr1_out_sel(:)
+  real(RP), allocatable :: sdr2_out_sel(:)
+  integer(DP), allocatable :: sdn1_out_sel(:)
+  integer(DP), allocatable :: sdn2_out_sel(:)
    integer :: num_pair    ! number of super-droplet pairs
+  integer :: num_pair_sel
    real(RP) :: dz_inv
   !---------------------------------------------------------------------
 
@@ -2554,13 +2633,51 @@ contains
                             sd_dtmp1)
 
                if (allocated(num_col)) then
-                   ! output sdm_coalesence SD pairs
-                   call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2,&
-                                 num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
-                   deallocate(pre_dmid1)
-                   deallocate(pre_dmid2)
-                   deallocate(pre_sdid1)
-                   deallocate(pre_sdid2)
+                  if( coalescence_output_enable ) then
+                     if( backward_tracking_enable .and. sampling_mode ) then
+                        num_pair_sel = 0
+                        do n=1,num_pair
+                           if( (pre_sdid1(n) /= INVALID_i4) .or. (pre_sdid2(n) /= INVALID_i4) ) then
+                              num_pair_sel = num_pair_sel + 1
+                           end if
+                        end do
+                        if( num_pair_sel > 0 ) then
+                           allocate(pre_sdid1_sel(num_pair_sel), pre_sdid2_sel(num_pair_sel))
+                           allocate(pre_dmid1_sel(num_pair_sel), pre_dmid2_sel(num_pair_sel))
+                           allocate(num_col_sel(num_pair_sel))
+                           allocate(sdr1_out_sel(num_pair_sel), sdr2_out_sel(num_pair_sel))
+                           allocate(sdn1_out_sel(num_pair_sel), sdn2_out_sel(num_pair_sel))
+                           num_pair_sel = 0
+                           do n=1,num_pair
+                              if( (pre_sdid1(n) /= INVALID_i4) .or. (pre_sdid2(n) /= INVALID_i4) ) then
+                                 num_pair_sel = num_pair_sel + 1
+                                 pre_sdid1_sel(num_pair_sel) = pre_sdid1(n)
+                                 pre_sdid2_sel(num_pair_sel) = pre_sdid2(n)
+                                 pre_dmid1_sel(num_pair_sel) = pre_dmid1(n)
+                                 pre_dmid2_sel(num_pair_sel) = pre_dmid2(n)
+                                 num_col_sel(num_pair_sel) = num_col(n)
+                                 sdr1_out_sel(num_pair_sel) = sdr1_out(n)
+                                 sdr2_out_sel(num_pair_sel) = sdr2_out(n)
+                                 sdn1_out_sel(num_pair_sel) = sdn1_out(n)
+                                 sdn2_out_sel(num_pair_sel) = sdn2_out(n)
+                              end if
+                           end do
+                           call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair_sel, num_col_sel, sdr1_out_sel, sdr2_out_sel, sdn1_out_sel, sdn2_out_sel, &
+                                &                   pre_sdid1_sel, pre_sdid2_sel, pre_dmid1_sel, pre_dmid2_sel)
+                           deallocate(pre_sdid1_sel, pre_sdid2_sel, pre_dmid1_sel, pre_dmid2_sel)
+                           deallocate(num_col_sel, sdr1_out_sel, sdr2_out_sel, sdn1_out_sel, sdn2_out_sel)
+                        end if
+                     else if( backward_tracking_enable ) then
+                        call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair, num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out, &
+                             &                   pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2)
+                     else
+                        call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair, num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
+                     end if
+                   end if
+                  if( allocated(pre_dmid1) ) deallocate(pre_dmid1)
+                  if( allocated(pre_dmid2) ) deallocate(pre_dmid2)
+                  if( allocated(pre_sdid1) ) deallocate(pre_sdid1)
+                  if( allocated(pre_sdid2) ) deallocate(pre_sdid2)
                    deallocate(num_col)
                    deallocate(sdr1_out)
                    deallocate(sdr2_out)

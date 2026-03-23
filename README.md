@@ -37,12 +37,18 @@ This data allows backward tracing of SDs’ paths through the simulation, provid
   - **Solution C:** Employ event-driven outputs, where specific changes in SD properties trigger additional data output.
 
 ## **Output Methods and Compatibility**
-TThe SD tracking method outputs simulation results in several formats:
+The SD tracking method outputs simulation results in several formats:
 - **sdm_outasci:** Outputs all SDs in ASCII format.
 - **sdm_outnetcdf:** Outputs all SDs in netCDF format.
 - **sdm_copy_selected_sd:** Outputs selected SDs in netCDF format (currently incompatible with the SD tracking feature).
 
-   Users must choose between `sdm_outasci` and `sdm_outnetcdf`, as both cannot be used simultaneously. To address this, users can set the `sdm_dmpvar` option in the SDM settings section (`&PARAM_ATMOS_PHY_MP_SDM`) of the run.conf namelist file to either `010` or `001`.
+   Users must choose between `sdm_outasci` and `sdm_outnetcdf`, as both cannot be used simultaneously. For SD tracking workflows, the recommended default is `sdm_dmpvar = 010` (SD_all_NetCDF output). When SD sampling is enabled (`tracking_fraction < 1.0` or `max_tracked_sds > 0`), set `sdm_dmpvar = 100` to output sampled trajectories into `SD_selected_NetCDF_*`.
+
+### Recent Tracking Output Updates
+1. **Decoupled tracking and coalescence output controls:** `coalescence_output_enable` independently controls `SD_coal_output_NetCDF_*` generation and defaults to `.true.`.
+2. **Tracking metadata is conditional:** when `backward_tracking_enable = .false.`, coalescence files do not include `pre_sdid1/pre_sdid2/pre_dmid1/pre_dmid2`.
+3. **Sampling-aware selected output:** selected NetCDF output now initializes the tracked subset before filtering, preventing empty `SD_selected_NetCDF_*` at the first sampled dump.
+4. **Sampling-aware coalescence event export:** under sampling mode, `SD_coal_output_NetCDF_*` exports only coalescence pairs that involve at least one sampled/tracked SD.
 
 ## Conclusion
 The **Super-Droplet tracking method** provides an essential tool for gaining detailed insights into the dynamics and interactions of cloud droplets in Lagrangian cloud microphysics simulations. By allowing researchers to trace individual SDs and record key microphysical events, this method facilitates the investigation of processes such as condensation, evaporation, and collision-coalescence, which are critical to understanding cloud development and precipitation formation. While the method is computationally efficient and straightforward to implement, challenges remain in capturing fine-scale microphysical processes and enabling efficient forward tracking. The proposed solutions, such as event-driven outputs and real-time coalescence event recording, aim to mitigate these limitations, providing a more comprehensive and detailed framework for SD tracking.
@@ -65,6 +71,7 @@ The tracking of coalescence events follows a structured approach designed to cap
 - **sd_r1/sd_r2:** The radii of the two SDs before the collision-coalescence.
 - **sd_n1/sd_n2:** The multiplicities of the two SDs before the collision-coalescence.
 - **num_col:** The number of coalescence events occurring between the pair of SDs within a coalescence time step.
+  - When sampling mode is active, only coalescence pairs involving sampled/tracked SDs are exported to `SD_coal_output_NetCDF_*`.
 3. **Dynamic Data Management:** Given the stochastic nature of coalescence events, the model employs dynamic memory allocation to manage the varying number of coalescence events that occur during each simulation time step. This approach ensures computational efficiency and prevents unnecessary memory allocation when coalescence events are infrequent.
 4. **Output Generation:** The coalescence data is output using the `sdm_coal_outnetcdf` subroutine, which writes detailed information about each event to **NetCDF** files (only NetCDF format is supported currently). This output format includes not only the identifiers and domain information of the colliding SDs but also the frequency of their interactions, enabling post-simulation analysis of the collision dynamics in a standardized and accessible format.
 
