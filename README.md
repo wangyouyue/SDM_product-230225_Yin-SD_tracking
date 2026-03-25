@@ -49,6 +49,9 @@ The SD tracking method outputs simulation results in several formats:
 2. **Tracking metadata is conditional:** when `backward_tracking_enable = .false.`, coalescence files do not include `pre_sdid1/pre_sdid2/pre_dmid1/pre_dmid2`.
 3. **Sampling-aware selected output:** selected NetCDF output now initializes the tracked subset before filtering, preventing empty `SD_selected_NetCDF_*` at the first sampled dump.
 4. **Sampling-aware coalescence event export:** under sampling mode, `SD_coal_output_NetCDF_*` exports only coalescence pairs that involve at least one sampled/tracked SD.
+5. **Full-tracking fast path:** when `tracking_fraction >= 1.0` and `max_tracked_sds = 0`, the model skips random/stratified sampling and directly tracks all SDs.
+6. **Stratified radius upper bound control:** a new namelist parameter `tracking_radius_max` is supported for stratified selection with unit `[m]`.
+7. **Legacy-compatible radius behavior:** when `tracking_radius_max <= tracking_radius_min`, the effective upper radius bound is automatically set to the runtime maximum candidate radius.
 
 ## Conclusion
 The **Super-Droplet tracking method** provides an essential tool for gaining detailed insights into the dynamics and interactions of cloud droplets in Lagrangian cloud microphysics simulations. By allowing researchers to trace individual SDs and record key microphysical events, this method facilitates the investigation of processes such as condensation, evaporation, and collision-coalescence, which are critical to understanding cloud development and precipitation formation. While the method is computationally efficient and straightforward to implement, challenges remain in capturing fine-scale microphysical processes and enabling efficient forward tracking. The proposed solutions, such as event-driven outputs and real-time coalescence event recording, aim to mitigate these limitations, providing a more comprehensive and detailed framework for SD tracking.

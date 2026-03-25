@@ -482,9 +482,17 @@ module m_sdm_common
   real(RP), save :: sdm_dmpsdsiz = 0.e0  ! Threshold radius to store large super droplets in binary format [m]
   logical, save :: backward_tracking_enable = .true. ! Master switch for backward tracking
   logical, save :: coalescence_output_enable = .true. ! Master switch for coalescence event output files and variables (default ON)
+  character(len=32), save :: tracking_selection_mode = 'random'
   real(RP), save :: tracking_fraction = 1.0_RP ! Fraction of SDs to keep tracked (0-1]
   integer, save :: max_tracked_sds = 0 ! Hard cap of tracked SDs, 0 means unlimited
-  real(RP), save :: tracked_radius_threshold = 0.0_RP ! Output filter threshold radius [m], 0 disables this filter and keeps full backward chain
+  real(RP), save :: tracking_height_min = 0.0_RP ! Lower height bound for stratified candidate selection [m]
+  real(RP), save :: tracking_height_max = 1.0E9_RP ! Upper height bound for stratified candidate selection [m]
+  real(RP), save :: tracking_radius_min = 0.0_RP ! Lower radius bound for stratified candidate selection [m]
+  real(RP), save :: tracking_radius_max = 0.0_RP ! Upper radius bound [m]; <= tracking_radius_min means auto-use runtime max radius
+  integer, save :: tracking_nz_bin = 8
+  integer, save :: tracking_nr_bin = 10
+  integer, save :: tracking_min_per_bin = 1
+  logical, save :: tracking_fallback_to_random = .true.
   logical, save :: tracked_grid_coal_only = .false. ! Output only SD histories with coalescence flag when true, default off to keep full backward chain
   logical, save :: tracking_sample_initialized = .false. ! Track subset is sampled only once to keep a consistent backward-tracked population
   real(DP), save :: tracking_time_id_assign = 0.0_DP ! Accumulated wall-time for ID (re)assignment
@@ -630,9 +638,17 @@ module m_sdm_common
        sdm_noise_amp,       &
        backward_tracking_enable, &
        coalescence_output_enable, &
+       tracking_selection_mode, &
        tracking_fraction,   &
        max_tracked_sds,     &
-       tracked_radius_threshold, &
+       tracking_height_min, &
+       tracking_height_max, &
+       tracking_radius_min, &
+       tracking_radius_max, &
+       tracking_nz_bin, &
+       tracking_nr_bin, &
+       tracking_min_per_bin, &
+       tracking_fallback_to_random, &
        tracked_grid_coal_only, &
        tracking_sample_initialized
 

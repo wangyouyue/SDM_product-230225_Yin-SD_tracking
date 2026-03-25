@@ -1,0 +1,15 @@
+#!/bin/bash
+#PBS -l select=1:ncpus=40:mpiprocs=40
+#PBS -q SMP
+#PBS -N sample_stratified_f005_seed10508
+#PBS -o $PBS_O_WORKDIR/log.txt
+#PBS -e $PBS_O_WORKDIR/error.txt
+
+module purge
+module use --append /home/s274s011/modules
+source /etc/profile.d/modules.sh
+cd ${PBS_O_WORKDIR}
+module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1
+
+mpiexec_mpt dplace -s1 ./scale-rm_init init.conf || exit
+mpiexec_mpt dplace -s1 ./scale-rm  run.conf || exit

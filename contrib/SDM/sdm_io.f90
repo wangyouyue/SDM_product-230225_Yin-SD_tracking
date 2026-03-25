@@ -29,7 +29,7 @@ module m_sdm_io
 
   implicit none
   private
-  public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_coal_outnetcdf
+  public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_coal_outnetcdf,sdm_assign_tracking_subset
 
 contains
   subroutine sdm_outasci(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,if_coal,sdn_dmpnskip)
@@ -166,6 +166,277 @@ contains
 
   end subroutine sdm_outasci
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine sdm_assign_tracking_subset(sd_num, sd_z, sd_r, pre_sdid, pre_dmid, if_coal)
+    use scale_precision
+    use scale_process, only: &
+         mype => PRC_myrank
+    use m_sdm_common, only: &
+         i2, INVALID_i4, backward_tracking_enable, tracking_selection_mode, tracking_fraction, max_tracked_sds, &
+         tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, tracking_nz_bin, tracking_nr_bin, &
+         tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized
+
+    implicit none
+
+    integer, intent(in) :: sd_num
+    real(RP), intent(in) :: sd_z(1:sd_num)
+    real(RP), intent(in) :: sd_r(1:sd_num)
+    integer, intent(inout) :: pre_sdid(1:sd_num)
+    integer, intent(inout) :: pre_dmid(1:sd_num)
+    integer(kind=i2), intent(inout) :: if_coal(1:sd_num)
+
+    integer :: n, ibin, iz, ir
+    integer :: tracked_cnt, candidate_cnt, target_cnt
+    integer :: nbin, sum_quota, extra_needed, reduce_needed, idx_best
+    integer :: needed_in_bin, non_empty_bins, min_per_bin_eff
+    real(RP) :: rand_tracking
+    real(RP) :: z_span, r_min_eff, r_max_eff, log_r_span
+    real(RP) :: best_frac
+    logical :: do_track, use_stratified, stratified_selected, use_radius_upper_bound
+    integer, allocatable :: bin_cnt(:), bin_quota(:), bin_selected(:), bin_remaining(:), bin_min(:)
+    real(RP), allocatable :: bin_frac(:)
+
+    if( (.not. backward_tracking_enable) .or. (tracking_fraction <= 0.0_RP) ) then
+       do n=1,sd_num
+          pre_sdid(n) = INVALID_i4
+          pre_dmid(n) = INVALID_i4
+          if_coal(n)  = 0_i2
+       end do
+       tracking_sample_initialized = .false.
+       return
+    end if
+
+    ! When tracking_fraction is full and no hard cap is requested, keep all SDs and skip sampling paths.
+    if( tracking_fraction >= 1.0_RP .and. max_tracked_sds <= 0 ) then
+       do n=1,sd_num
+          pre_sdid(n) = n
+          pre_dmid(n) = mype
+          if_coal(n)  = 0_i2
+       end do
+       tracking_sample_initialized = .true.
+       return
+    end if
+
+    tracked_cnt = 0
+    if( .not. tracking_sample_initialized ) then
+      use_stratified = trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'Stratified'
+      ! If tracking_radius_max <= tracking_radius_min, use runtime candidate maximum radius as effective upper bound.
+      use_radius_upper_bound = tracking_radius_max > tracking_radius_min
+      stratified_selected = .false.
+
+      if( use_stratified ) then
+         if( tracking_nz_bin > 0 .and. tracking_nr_bin > 0 .and. tracking_height_max > tracking_height_min ) then
+            nbin = tracking_nz_bin * tracking_nr_bin
+            allocate(bin_cnt(nbin), bin_quota(nbin), bin_selected(nbin), bin_remaining(nbin), bin_min(nbin), bin_frac(nbin))
+
+            candidate_cnt = 0
+            r_min_eff = max(tracking_radius_min, 1.0E-12_RP)
+            r_max_eff = r_min_eff
+            do n=1,sd_num
+               if( sd_z(n) >= tracking_height_min .and. sd_z(n) <= tracking_height_max .and. &
+                    sd_r(n) >= tracking_radius_min .and. &
+                    ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+                  candidate_cnt = candidate_cnt + 1
+                  if( sd_r(n) > r_max_eff ) r_max_eff = sd_r(n)
+               end if
+            end do
+
+            target_cnt = int( real(candidate_cnt,kind=RP) * tracking_fraction + 0.5_RP )
+            if( candidate_cnt > 0 .and. tracking_fraction > 0.0_RP .and. target_cnt == 0 ) target_cnt = 1
+            if( target_cnt > candidate_cnt ) target_cnt = candidate_cnt
+            if( max_tracked_sds > 0 ) target_cnt = min(target_cnt, max_tracked_sds)
+
+            if( candidate_cnt > 0 .and. target_cnt > 0 ) then
+               z_span = tracking_height_max - tracking_height_min
+               if( r_max_eff > r_min_eff ) then
+                  log_r_span = log(r_max_eff / r_min_eff)
+               else
+                  log_r_span = 0.0_RP
+               end if
+
+               bin_cnt(:) = 0
+               bin_quota(:) = 0
+               bin_selected(:) = 0
+               bin_remaining(:) = 0
+               bin_min(:) = 0
+               bin_frac(:) = 0.0_RP
+
+               do n=1,sd_num
+                  if( sd_z(n) >= tracking_height_min .and. sd_z(n) <= tracking_height_max .and. &
+                       sd_r(n) >= tracking_radius_min .and. &
+                       ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+                     iz = int( (sd_z(n)-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
+                     iz = min( tracking_nz_bin, max(1,iz) )
+                     if( tracking_nr_bin == 1 ) then
+                        ir = 1
+                     else
+                        if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
+                           ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                        else
+                           ir = 1
+                        end if
+                        ir = min( tracking_nr_bin, max(1,ir) )
+                     end if
+                     ibin = (iz-1)*tracking_nr_bin + ir
+                     bin_cnt(ibin) = bin_cnt(ibin) + 1
+                  end if
+               end do
+
+               non_empty_bins = count(bin_cnt > 0)
+               if( non_empty_bins > 0 ) then
+                  min_per_bin_eff = max(0, tracking_min_per_bin)
+                  min_per_bin_eff = min(min_per_bin_eff, target_cnt / non_empty_bins)
+               else
+                  min_per_bin_eff = 0
+               end if
+
+               do ibin=1,nbin
+                  if( bin_cnt(ibin) > 0 ) then
+                     bin_quota(ibin) = min( bin_cnt(ibin), int(real(target_cnt*bin_cnt(ibin),kind=RP)/real(candidate_cnt,kind=RP)) )
+                     bin_frac(ibin) = real(target_cnt*bin_cnt(ibin),kind=RP)/real(candidate_cnt,kind=RP) - real(bin_quota(ibin),kind=RP)
+                     bin_min(ibin) = min( min_per_bin_eff, bin_cnt(ibin) )
+                     if( bin_quota(ibin) < bin_min(ibin) ) bin_quota(ibin) = bin_min(ibin)
+                  end if
+               end do
+
+               sum_quota = sum(bin_quota)
+               if( sum_quota < target_cnt ) then
+                  extra_needed = target_cnt - sum_quota
+                  do while( extra_needed > 0 )
+                     idx_best = 0
+                     best_frac = -1.0_RP
+                     do ibin=1,nbin
+                        if( bin_quota(ibin) < bin_cnt(ibin) ) then
+                           if( bin_frac(ibin) > best_frac ) then
+                              best_frac = bin_frac(ibin)
+                              idx_best = ibin
+                           end if
+                        end if
+                     end do
+                     if( idx_best == 0 ) exit
+                     bin_quota(idx_best) = bin_quota(idx_best) + 1
+                     bin_frac(idx_best) = bin_frac(idx_best) - 1.0_RP
+                     extra_needed = extra_needed - 1
+                  end do
+               else if( sum_quota > target_cnt ) then
+                  reduce_needed = sum_quota - target_cnt
+                  do while( reduce_needed > 0 )
+                     idx_best = 0
+                     best_frac = 2.0_RP
+                     do ibin=1,nbin
+                        if( bin_quota(ibin) > bin_min(ibin) ) then
+                           if( bin_frac(ibin) < best_frac ) then
+                              best_frac = bin_frac(ibin)
+                              idx_best = ibin
+                           end if
+                        end if
+                     end do
+                     if( idx_best == 0 ) exit
+                     bin_quota(idx_best) = bin_quota(idx_best) - 1
+                     reduce_needed = reduce_needed - 1
+                  end do
+               end if
+
+               bin_remaining(:) = bin_cnt(:)
+               do n=1,sd_num
+                  do_track = .false.
+                  if( sd_z(n) >= tracking_height_min .and. sd_z(n) <= tracking_height_max .and. &
+                       sd_r(n) >= tracking_radius_min .and. &
+                       ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+                     iz = int( (sd_z(n)-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
+                     iz = min( tracking_nz_bin, max(1,iz) )
+                     if( tracking_nr_bin == 1 ) then
+                        ir = 1
+                     else
+                        if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
+                           ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                        else
+                           ir = 1
+                        end if
+                        ir = min( tracking_nr_bin, max(1,ir) )
+                     end if
+                     ibin = (iz-1)*tracking_nr_bin + ir
+                     needed_in_bin = bin_quota(ibin) - bin_selected(ibin)
+                     if( needed_in_bin > 0 .and. bin_remaining(ibin) > 0 ) then
+                        call random_number(rand_tracking)
+                        if( rand_tracking <= real(needed_in_bin,kind=RP) / real(bin_remaining(ibin),kind=RP) ) then
+                           do_track = .true.
+                           bin_selected(ibin) = bin_selected(ibin) + 1
+                        end if
+                     end if
+                     if( bin_remaining(ibin) > 0 ) bin_remaining(ibin) = bin_remaining(ibin) - 1
+                  end if
+                  if( do_track ) then
+                     tracked_cnt = tracked_cnt + 1
+                     pre_sdid(n) = n
+                     pre_dmid(n) = mype
+                  else
+                     pre_sdid(n) = INVALID_i4
+                     pre_dmid(n) = INVALID_i4
+                  end if
+                  if_coal(n) = 0_i2
+               end do
+               tracking_sample_initialized = .true.
+               stratified_selected = .true.
+            end if
+
+            deallocate(bin_cnt, bin_quota, bin_selected, bin_remaining, bin_min, bin_frac)
+         end if
+      end if
+
+      if( .not. stratified_selected ) then
+         if( use_stratified .and. .not. tracking_fallback_to_random ) then
+            do n=1,sd_num
+               pre_sdid(n) = INVALID_i4
+               pre_dmid(n) = INVALID_i4
+               if_coal(n)  = 0_i2
+            end do
+            tracking_sample_initialized = .true.
+         else
+            do n=1,sd_num
+               do_track = .true.
+               if( tracking_fraction < 1.0_RP ) then
+                  call random_number(rand_tracking)
+                  if( rand_tracking > tracking_fraction ) do_track = .false.
+               end if
+               if( max_tracked_sds > 0 ) then
+                  if( tracked_cnt >= max_tracked_sds ) do_track = .false.
+               end if
+               if( do_track ) then
+                  tracked_cnt = tracked_cnt + 1
+                  pre_sdid(n) = n
+                  pre_dmid(n) = mype
+               else
+                  pre_sdid(n) = INVALID_i4
+                  pre_dmid(n) = INVALID_i4
+               end if
+               if_coal(n) = 0_i2
+            end do
+            tracking_sample_initialized = .true.
+         end if
+      end if
+    else
+      do n=1,sd_num
+         do_track = ( pre_sdid(n) > INVALID_i4 .and. pre_dmid(n) > INVALID_i4 )
+         if( do_track .and. max_tracked_sds > 0 ) then
+            if( tracked_cnt >= max_tracked_sds ) do_track = .false.
+         end if
+         if( do_track ) then
+            tracked_cnt = tracked_cnt + 1
+            pre_sdid(n) = n
+            pre_dmid(n) = mype
+         else
+            pre_sdid(n) = INVALID_i4
+            pre_dmid(n) = INVALID_i4
+         end if
+         if_coal(n) = 0_i2
+      end do
+    end if
+
+    return
+  end subroutine sdm_assign_tracking_subset
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_outnetcdf(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,pre_sdid,pre_dmid,if_coal,sdn_dmpnskip,filetag)
     use mpi, only: &
          mpi_wtime
@@ -177,8 +448,7 @@ contains
          mype => PRC_myrank
     use m_sdm_common, only: &
          i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
-         INVALID_i4, backward_tracking_enable, coalescence_output_enable, tracking_fraction, max_tracked_sds, &
-         tracked_radius_threshold, tracked_grid_coal_only, &
+         backward_tracking_enable, coalescence_output_enable, &
          tracking_time_id_assign, tracking_count_id_assign, &
          tracking_sample_initialized
 
@@ -220,10 +490,8 @@ contains
     integer :: ncid, sd_num_id, sd_numasl_id
     integer :: sd_x_id, sd_y_id, sd_z_id, sd_vz_id, sd_r_id, sd_asl_id, sd_n_id, sd_liqice_id, sd_id_id, domain_id, if_coal_id
     integer :: sdi_re_id, sdi_rp_id, sdi_rho_id, sdi_tf_id, sdi_mrime_id, sdi_nmono_id
-    integer :: tracked_cnt
     real(DP) :: t0_id_assign, t1_id_assign
-    logical :: do_track, pass_filter, write_tracking, write_coal
-    real(RP) :: rand_tracking
+    logical :: write_tracking, write_coal
     integer, allocatable :: pre_sdid_out(:), pre_dmid_out(:)
     integer(kind=i2), allocatable :: if_coal_out(:)
 
@@ -403,24 +671,6 @@ contains
        if( write_coal ) then
           if_coal_out(1:sd_num)  = if_coal(1:sd_num)
        end if
-       do n=1,sd_num
-          pass_filter = .true.
-          if( tracked_radius_threshold > 0.0_RP ) then
-             if( sd_r(n) < tracked_radius_threshold ) pass_filter = .false.
-          end if
-          if( tracked_grid_coal_only .and. write_coal ) then
-             if( if_coal_out(n) == 0_i2 ) pass_filter = .false.
-          end if
-          if( .not. pass_filter ) then
-             if( write_tracking ) then
-                pre_sdid_out(n) = INVALID_i4
-                pre_dmid_out(n) = INVALID_i4
-             end if
-             if( write_coal ) then
-                if_coal_out(n)  = 0_i2
-             end if
-          end if
-       end do
        if( write_tracking ) then
           call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid_out) )
           call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid_out) )
@@ -452,55 +702,7 @@ contains
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF) of Super Droplet'
 
     t0_id_assign = mpi_wtime()
-    if( (.not. backward_tracking_enable) .or. (tracking_fraction <= 0.0_RP) ) then
-       do n=1,sd_num
-          pre_sdid(n) = INVALID_i4
-          pre_dmid(n) = INVALID_i4
-          if_coal(n)  = 0_i2
-       end do
-       tracking_sample_initialized = .false.
-    else
-       tracked_cnt = 0
-       ! Track subset is sampled only once, then reused every output cycle to avoid time-varying chain truncation.
-       if( .not. tracking_sample_initialized ) then
-          do n=1,sd_num
-             do_track = .true.
-             if( tracking_fraction < 1.0_RP ) then
-                call random_number(rand_tracking)
-                if( rand_tracking > tracking_fraction ) do_track = .false.
-             end if
-             if( max_tracked_sds > 0 ) then
-                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
-             end if
-             if( do_track ) then
-                tracked_cnt = tracked_cnt + 1
-                pre_sdid(n) = n
-                pre_dmid(n) = mype
-             else
-                pre_sdid(n) = INVALID_i4
-                pre_dmid(n) = INVALID_i4
-             end if
-             if_coal(n) = 0_i2
-          end do
-          tracking_sample_initialized = .true.
-       else
-          do n=1,sd_num
-             do_track = ( pre_sdid(n) > INVALID_i4 .and. pre_dmid(n) > INVALID_i4 )
-             if( do_track .and. max_tracked_sds > 0 ) then
-                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
-             end if
-             if( do_track ) then
-                tracked_cnt = tracked_cnt + 1
-                pre_sdid(n) = n
-                pre_dmid(n) = mype
-             else
-                pre_sdid(n) = INVALID_i4
-                pre_dmid(n) = INVALID_i4
-             end if
-             if_coal(n) = 0_i2
-          end do
-       end if
-    end if
+    call sdm_assign_tracking_subset(sd_num, sd_z, sd_r, pre_sdid, pre_dmid, if_coal)
     t1_id_assign = mpi_wtime()
     tracking_time_id_assign = tracking_time_id_assign + (t1_id_assign - t0_id_assign)
     tracking_count_id_assign = tracking_count_id_assign + 1
@@ -521,8 +723,7 @@ contains
          PRC_MPIstop
     use m_sdm_common, only: &
          i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
-         INVALID_i4, backward_tracking_enable, coalescence_output_enable, tracking_fraction, max_tracked_sds, &
-         tracked_radius_threshold, tracked_grid_coal_only, &
+         backward_tracking_enable, coalescence_output_enable, &
          tracking_time_id_assign, tracking_count_id_assign, &
          tracking_sample_initialized
 
@@ -579,10 +780,8 @@ contains
     character(len=100), save :: ftag_list(1:max_filenum)
     integer, save :: time_count(1:max_filenum)
     integer :: nf, fileid
-    integer :: tracked_cnt
     real(DP) :: t0_id_assign, t1_id_assign
-    logical :: do_track, pass_filter, write_tracking, write_coal
-    real(RP) :: rand_tracking
+    logical :: write_tracking, write_coal
     integer, allocatable :: pre_sdid_out(:), pre_dmid_out(:)
     integer(kind=i2), allocatable :: if_coal_out(:)
 
@@ -835,24 +1034,6 @@ contains
        if( write_coal ) then
           if_coal_out(1:sd_num)  = if_coal(1:sd_num)
        end if
-       do n=1,sd_num
-          pass_filter = .true.
-          if( tracked_radius_threshold > 0.0_RP ) then
-             if( sd_r(n) < tracked_radius_threshold ) pass_filter = .false.
-          end if
-          if( tracked_grid_coal_only .and. write_coal ) then
-             if( if_coal_out(n) == 0_i2 ) pass_filter = .false.
-          end if
-          if( .not. pass_filter ) then
-             if( write_tracking ) then
-                pre_sdid_out(n) = INVALID_i4
-                pre_dmid_out(n) = INVALID_i4
-             end if
-             if( write_coal ) then
-                if_coal_out(n)  = 0_i2
-             end if
-          end if
-       end do
        if( write_tracking ) then
           call check_netcdf( nf90_put_var(ncid, sd_id_id, pre_sdid_out) )
           call check_netcdf( nf90_put_var(ncid, domain_id, pre_dmid_out) )
@@ -884,55 +1065,7 @@ contains
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF_HIST) of Super Droplet'
 
     t0_id_assign = mpi_wtime()
-    if( (.not. backward_tracking_enable) .or. (tracking_fraction <= 0.0_RP) ) then
-       do n=1,sd_num
-          pre_sdid(n) = INVALID_i4
-          pre_dmid(n) = INVALID_i4
-          if_coal(n)  = 0_i2
-       end do
-       tracking_sample_initialized = .false.
-    else
-       tracked_cnt = 0
-       ! Track subset is sampled only once, then reused every output cycle to avoid time-varying chain truncation.
-       if( .not. tracking_sample_initialized ) then
-          do n=1,sd_num
-             do_track = .true.
-             if( tracking_fraction < 1.0_RP ) then
-                call random_number(rand_tracking)
-                if( rand_tracking > tracking_fraction ) do_track = .false.
-             end if
-             if( max_tracked_sds > 0 ) then
-                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
-             end if
-             if( do_track ) then
-                tracked_cnt = tracked_cnt + 1
-                pre_sdid(n) = n
-                pre_dmid(n) = mype
-             else
-                pre_sdid(n) = INVALID_i4
-                pre_dmid(n) = INVALID_i4
-             end if
-             if_coal(n) = 0_i2
-          end do
-          tracking_sample_initialized = .true.
-       else
-          do n=1,sd_num
-             do_track = ( pre_sdid(n) > INVALID_i4 .and. pre_dmid(n) > INVALID_i4 )
-             if( do_track .and. max_tracked_sds > 0 ) then
-                if( tracked_cnt >= max_tracked_sds ) do_track = .false.
-             end if
-             if( do_track ) then
-                tracked_cnt = tracked_cnt + 1
-                pre_sdid(n) = n
-                pre_dmid(n) = mype
-             else
-                pre_sdid(n) = INVALID_i4
-                pre_dmid(n) = INVALID_i4
-             end if
-             if_coal(n) = 0_i2
-          end do
-       end if
-    end if
+    call sdm_assign_tracking_subset(sd_num, sd_z, sd_r, pre_sdid, pre_dmid, if_coal)
     t1_id_assign = mpi_wtime()
     tracking_time_id_assign = tracking_time_id_assign + (t1_id_assign - t0_id_assign)
     tracking_count_id_assign = tracking_count_id_assign + 1

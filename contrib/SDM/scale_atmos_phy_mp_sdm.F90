@@ -765,7 +765,7 @@ contains
        P00   => CONST_PRE00
 
     use m_sdm_io, only: &
-       sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist
+       sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_assign_tracking_subset
     use m_sdm_coordtrans, only: &
        sdm_rk2z
     use m_sdm_fluidconv, only: &
@@ -833,9 +833,6 @@ contains
     real(DP) :: tracking_mem_mb, coal_mem_mb
     character(len=16) :: selected_sdtype
     integer :: order_n
-    integer :: tracked_cnt
-    logical :: do_track
-    real(RP) :: rand_tracking
 
     !-------------------------------------------------------------------------------------------------------------------------------
 
@@ -933,8 +930,13 @@ contains
     call fapp_start("sdm_out",0,0)
 #endif
     did_sdm_dump = .false.
+    ! sampling_mode is true only when subset tracking is requested.
+    ! For tracking_fraction >= 1 and max_tracked_sds == 0, full tracking is used directly.
     sampling_mode = backward_tracking_enable .and. &
-         ((tracking_fraction > 0.0_RP .and. tracking_fraction < 1.0_RP) .or. (max_tracked_sds > 0))
+         ((tracking_fraction > 0.0_RP .and. tracking_fraction < 1.0_RP) .or. (max_tracked_sds > 0) .or. &
+         trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
+         trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
+         trim(adjustl(tracking_selection_mode)) == 'Stratified')
     if( sampling_mode ) then
        selected_sdtype = 'tracked'
     else
@@ -1024,26 +1026,8 @@ contains
 
       call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
       if( sampling_mode .and. .not. tracking_sample_initialized ) then
-         tracked_cnt = 0
-         do n=1,sdnum_s2c
-            do_track = .true.
-            if( tracking_fraction < 1.0_RP ) then
-               call random_number(rand_tracking)
-               if( rand_tracking > tracking_fraction ) do_track = .false.
-            end if
-            if( do_track .and. max_tracked_sds > 0 ) then
-               if( tracked_cnt >= max_tracked_sds ) do_track = .false.
-            end if
-            if( do_track ) then
-               sdid_s2c(n) = n
-               dmid_s2c(n) = mype
-               tracked_cnt = tracked_cnt + 1
-            else
-               sdid_s2c(n) = INVALID_i4
-               dmid_s2c(n) = INVALID_i4
-            end if
-         end do
-         tracking_sample_initialized = .true.
+         call sdm_rk2z(sdnum_s2c,sdx_s2c,sdy_s2c,sdrk_s2c,sdz_s2c,sdri_s2c,sdrj_s2c)
+         call sdm_assign_tracking_subset(sdnum_s2c, sdz_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c)
       end if
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
             &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                &
@@ -2234,6 +2218,7 @@ contains
   integer(DP), allocatable :: sdn2_out_sel(:)
    integer :: num_pair    ! number of super-droplet pairs
   integer :: num_pair_sel
+  logical :: sampling_mode
    real(RP) :: dz_inv
   !---------------------------------------------------------------------
 
@@ -2252,6 +2237,12 @@ contains
       istep_sbl = nclstp(5)                !! motion of super-droplets
 
       lsdmup = .false.
+      ! Keep this condition consistent with the output path to avoid unnecessary subset operations.
+      sampling_mode = backward_tracking_enable .and. &
+           ((tracking_fraction > 0.0_RP .and. tracking_fraction < 1.0_RP) .or. (max_tracked_sds > 0) .or. &
+           trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'Stratified')
 
       ! Calculate super-droplets process.
       !   1 : motion of super-droplets (advection, terminal velocity)
