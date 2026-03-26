@@ -76,15 +76,6 @@ def _apply_job_name(path: Path, name: str) -> None:
     path.write_text(text)
 
 
-def _set_queue(path: Path, queue_name: str) -> None:
-    """Set PBS queue in one UoH_run.pbs file."""
-    if not path.exists():
-        return
-    text = path.read_text()
-    updated = re.sub(r"^#PBS -q\s+\S+$", f"#PBS -q {queue_name}", text, flags=re.MULTILINE)
-    path.write_text(updated)
-
-
 def _collect_binaries(bin_dir: Path) -> list[Path]:
     if not bin_dir.exists() or not bin_dir.is_dir():
         return []
@@ -109,11 +100,6 @@ def _clean_tracked_radius_threshold_in_tree(root_dir: Path) -> int:
             runconf.write_text(cleaned)
             updated += 1
     return updated
-
-
-def _set_all_uoh_queue_to_s(root_dir: Path) -> None:
-    for pbs in root_dir.glob("*/UoH_run.pbs"):
-        _set_queue(pbs, "S")
 
 
 def _resolve_bin_dir(user_bin_dir: str | None) -> Path | None:
@@ -187,9 +173,7 @@ def generate_cases(bin_dir_arg: str | None = None) -> None:
         shutil.copytree(TEMPLATE, case_dir)
         _apply_runconf(case_dir / "run.conf", spec.mode, spec.fraction, spec.seed_scale)
         _apply_job_name(case_dir / "UoH_run.pbs", spec.case_name)
-        _set_queue(case_dir / "results" / "run_py.pbs", "SMP")
         _copy_binaries_to_case(case_dir, binaries)
-    _set_all_uoh_queue_to_s(ROOT)
     index_path = ROOT / "ensemble_index.csv"
     with index_path.open("w") as f:
         f.write("case_name,mode,tracking_fraction,random_seed_scale\n")

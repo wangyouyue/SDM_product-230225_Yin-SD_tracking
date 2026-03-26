@@ -168,6 +168,8 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_assign_tracking_subset(sd_num, sd_z, sd_r, pre_sdid, pre_dmid, if_coal)
     use scale_precision
+    use scale_stdio, only: &
+         IO_L, IO_FID_LOG
     use scale_process, only: &
          mype => PRC_myrank
     use m_sdm_common, only: &
@@ -188,9 +190,10 @@ contains
     integer :: tracked_cnt, candidate_cnt, target_cnt
     integer :: nbin, sum_quota, extra_needed, reduce_needed, idx_best
     integer :: needed_in_bin, non_empty_bins, min_per_bin_eff
+    integer :: upper_exceed_cnt, near_upper_cnt
     real(RP) :: rand_tracking
     real(RP) :: z_span, r_min_eff, r_max_eff, log_r_span
-    real(RP) :: best_frac
+    real(RP) :: best_frac, max_radius_in_height, near_upper_threshold
     logical :: do_track, use_stratified, stratified_selected, use_radius_upper_bound
     integer, allocatable :: bin_cnt(:), bin_quota(:), bin_selected(:), bin_remaining(:), bin_min(:)
     real(RP), allocatable :: bin_frac(:)
@@ -233,14 +236,40 @@ contains
             candidate_cnt = 0
             r_min_eff = max(tracking_radius_min, 1.0E-12_RP)
             r_max_eff = r_min_eff
+            upper_exceed_cnt = 0
+            near_upper_cnt = 0
+            max_radius_in_height = 0.0_RP
+            near_upper_threshold = tracking_radius_max * 0.98_RP
             do n=1,sd_num
+               if( sd_z(n) >= tracking_height_min .and. sd_z(n) <= tracking_height_max ) then
+                  if( sd_r(n) > max_radius_in_height ) max_radius_in_height = sd_r(n)
+                  if( use_radius_upper_bound ) then
+                     if( sd_r(n) > tracking_radius_max ) then
+                        upper_exceed_cnt = upper_exceed_cnt + 1
+                     else if( sd_r(n) >= near_upper_threshold ) then
+                        near_upper_cnt = near_upper_cnt + 1
+                     end if
+                  end if
+               end if
                if( sd_z(n) >= tracking_height_min .and. sd_z(n) <= tracking_height_max .and. &
                     sd_r(n) >= tracking_radius_min .and. &
                     ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
-                  candidate_cnt = candidate_cnt + 1
-                  if( sd_r(n) > r_max_eff ) r_max_eff = sd_r(n)
+                   candidate_cnt = candidate_cnt + 1
+                   if( sd_r(n) > r_max_eff ) r_max_eff = sd_r(n)
                end if
             end do
+            ! Emit warnings once during initial subset construction if the configured radius upper bound may truncate samples.
+            if( use_radius_upper_bound .and. IO_L ) then
+               if( upper_exceed_cnt > 0 ) then
+                  write(IO_FID_LOG,*) '*** WARNING (sdm_assign_tracking_subset): stratified candidates exceed tracking_radius_max.'
+                  write(IO_FID_LOG,*) '    upper_exceed_cnt=', upper_exceed_cnt, ' tracking_radius_max[m]=', tracking_radius_max, &
+                       ' max_radius_in_height[m]=', max_radius_in_height
+               else if( near_upper_cnt > 0 ) then
+                  write(IO_FID_LOG,*) '*** WARNING (sdm_assign_tracking_subset): candidate radii are close to tracking_radius_max.'
+                  write(IO_FID_LOG,*) '    near_upper_cnt=', near_upper_cnt, ' near_upper_threshold[m]=', near_upper_threshold, &
+                       ' tracking_radius_max[m]=', tracking_radius_max
+               end if
+            end if
 
             target_cnt = int( real(candidate_cnt,kind=RP) * tracking_fraction + 0.5_RP )
             if( candidate_cnt > 0 .and. tracking_fraction > 0.0_RP .and. target_cnt == 0 ) target_cnt = 1
