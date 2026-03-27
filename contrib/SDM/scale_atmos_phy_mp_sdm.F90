@@ -253,7 +253,9 @@ contains
        PRC_MPIstop
     use scale_atmos_hydrometeor, only: &
        ATMOS_HYDROMETEOR_regist
-    use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM
+    use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM, &
+         forward_tracking_enable, backward_tracking_enable, &
+         tracking_sample_initialized
 
     implicit none
 
@@ -285,6 +287,12 @@ contains
        call PRC_MPIstop
     endif
     if( IO_L ) write(IO_FID_LOG,nml=PARAM_ATMOS_PHY_MP_SDM)
+
+    tracking_sample_initialized = .false.
+    if( forward_tracking_enable .and. backward_tracking_enable ) then
+       write(*,*) 'xxx forward_tracking_enable and backward_tracking_enable cannot both be .true.. Check!'
+       call PRC_MPIstop
+    endif
 
     if( .not. sdm_cold ) then
 
@@ -825,7 +833,9 @@ contains
     type(sdicedef), pointer :: sdice_tmp
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
-    logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3
+    logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3, did_sdm_dump
+    integer :: tracking_chain_count
+    real(DP) :: tracking_mem_mb, coal_mem_mb
     integer :: order_n
 
     !-------------------------------------------------------------------------------------------------------------------------------
@@ -866,8 +876,13 @@ contains
                       sdm_rdnc,sdm_sdnmlvol,sdm_aslset,   &
                       sdm_inisdnc,sdm_zlower,             &
                       sdm_zupper,sdm_calvar,              &
-                      zph_crs, num_selected, height_min,  &
-                      height_max, radius_min,             &
+                      zph_crs, tracking_selection_mode,    &
+                      tracking_fraction, max_tracked_sds,  &
+                      tracking_height_min, tracking_height_max, &
+                      tracking_radius_min, tracking_radius_max, &
+                      tracking_nz_bin, tracking_nr_bin,    &
+                      tracking_min_per_bin, tracking_fallback_to_random, &
+                      tracking_sample_initialized,         &
                       sdasl_s2c, sdx_s2c, sdy_s2c,        &
                       sdz_s2c, sdr_s2c,                   &
                       sdrk_s2c, sdvz_s2c,                 &
@@ -924,6 +939,8 @@ contains
     ! Section specification for fapp profiler
     call fapp_start("sdm_out",0,0)
 #endif
+    did_sdm_dump = .false.
+
     if( (mod(sdm_dmpvar,10)==1) .and. sdm_dmpitva>0.0_RP .and. &
          mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
              int(1.E+3_RP*(sdm_dmpitva+0.00010_RP))) == 0 ) then
@@ -947,6 +964,7 @@ contains
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
                         sdice_s2c, &
                         sdm_dmpnskip)
+       did_sdm_dump = .true.
     end if
 
     if( ((mod(sdm_dmpvar,100))/10>=1) .and. sdm_dmpitvb>0.0_RP .and. &
@@ -981,6 +999,7 @@ contains
                         sdice_s2c, &
                         sdm_dmpnskip,filetag='all')
        end if
+      did_sdm_dump = .true.
     end if
 
     if( ((mod(sdm_dmpvar,1000))/100>=1) .and. sdm_dmpitvl>0.0_RP .and. &
@@ -1040,6 +1059,7 @@ contains
                         sdice_tmp, &
                         sdm_dmpnskip,filetag='selected')
        end if
+      did_sdm_dump = .true.
 
        nullify(sdx_tmp)
        nullify(sdy_tmp)
@@ -1057,6 +1077,27 @@ contains
        nullify(sdid_tmp)
        nullify(dmid_tmp)
 
+    end if
+
+    if( IO_L .and. ( forward_tracking_enable .or. backward_tracking_enable ) .and. did_sdm_dump ) then
+       tracking_chain_count = count( (sdid_s2c(1:sdnum_s2c) > INVALID_i4) .and. (dmid_s2c(1:sdnum_s2c) > INVALID_i4) )
+       tracking_mem_mb = real(sdnum_s2c,kind=DP) * 8.0_DP / 1048576.0_DP
+       coal_mem_mb = real(sdnum_s2c,kind=DP) * 2.0_DP / 1048576.0_DP
+       write(IO_FID_LOG,*) '*** tracking_chain_count=', tracking_chain_count, ' / ', sdnum_s2c
+       write(IO_FID_LOG,*) '*** tracking_memory_estimate_MB(pre_sdid+pre_dmid)=', tracking_mem_mb
+       write(IO_FID_LOG,*) '*** coal_flag_memory_estimate_MB(if_coal)=', coal_mem_mb
+       if( tracking_count_id_assign > 0 ) then
+          write(IO_FID_LOG,*) '*** tracking_time_id_assign_avg[s]=', &
+               tracking_time_id_assign / real(tracking_count_id_assign,kind=DP)
+       end if
+       if( tracking_count_boundary_x > 0 ) then
+          write(IO_FID_LOG,*) '*** tracking_time_boundary_x_avg[s]=', &
+               tracking_time_boundary_x / real(tracking_count_boundary_x,kind=DP)
+       end if
+       if( tracking_count_boundary_y > 0 ) then
+          write(IO_FID_LOG,*) '*** tracking_time_boundary_y_avg[s]=', &
+               tracking_time_boundary_y / real(tracking_count_boundary_y,kind=DP)
+       end if
     end if
 
 #ifdef _FAPP_
@@ -1355,7 +1396,7 @@ contains
     return
   end subroutine ATMOS_PHY_MP_sdm
   !-----------------------------------------------------------------------------
-   subroutine sdm_iniset(DENS, RHOT, QTRC,                   &
+  subroutine sdm_iniset(DENS, RHOT, QTRC,                   &
                          RANDOM_IN_BASENAME, fid_random_i,   &
                          xmax_sdm, ymax_sdm, dtcmph,         &
                          sdm_rdnc,sdm_sdnmlvol,sdm_aslset,   &
@@ -1365,8 +1406,13 @@ contains
 !                         nqw,jcb,                            &
 !                         qwtr_crs,zph_crs,                   &
 !                         jcb,                                &
-                         zph_crs, num_selected, height_min,  &
-                         height_max, radius_min,             &
+                         zph_crs, tracking_selection_mode,    &
+                         tracking_fraction, max_tracked_sds,  &
+                         tracking_height_min, tracking_height_max, &
+                         tracking_radius_min, tracking_radius_max, &
+                         tracking_nz_bin, tracking_nr_bin,    &
+                         tracking_min_per_bin, tracking_fallback_to_random, &
+                         tracking_sample_initialized,          &
                          sdasl_s2c, sdx_s2c, sdy_s2c,        &
                          sdz_s2c, sdr_s2c,                   &
                          sdrk_s2c, sdvz_s2c,                 &
@@ -1381,6 +1427,8 @@ contains
       use scale_process, only: &
         PRC_MPIstop, &
         mype => PRC_myrank
+      use mpi, only: &
+        mpi_wtime
       use scale_tracer, only: &
         QAD => QA
       use scale_grid, only: &
@@ -1414,10 +1462,18 @@ contains
       real(RP),intent(in) :: sdm_zlower   ! Lower limitaion of initial SDs position
       real(RP),intent(in) :: sdm_zupper   ! Upper limitaion of initial SDs position
       real(RP),intent(in) :: zph_crs(KA,IA,JA)  ! z physical coordinates
-      integer, intent(in) :: num_selected      ! Number of super-droplets to select
-      real(RP), intent(in) :: height_min         ! Minimum height for selection
-      real(RP), intent(in) :: height_max         ! Maximum height for selection
-      real(RP), intent(in) :: radius_min         ! Minimum radius for selection
+      character(len=*), intent(in) :: tracking_selection_mode
+      real(RP), intent(in) :: tracking_fraction
+      integer, intent(in) :: max_tracked_sds
+      real(RP), intent(in) :: tracking_height_min
+      real(RP), intent(in) :: tracking_height_max
+      real(RP), intent(in) :: tracking_radius_min
+      real(RP), intent(in) :: tracking_radius_max
+      integer, intent(in) :: tracking_nz_bin
+      integer, intent(in) :: tracking_nr_bin
+      integer, intent(in) :: tracking_min_per_bin
+      logical, intent(in) :: tracking_fallback_to_random
+      logical, intent(inout) :: tracking_sample_initialized
       real(RP),intent(inout) :: sdasl_s2c(1:sdnum_s2c,1:sdnumasl_s2c)
       real(RP),intent(inout) :: sdx_s2c(1:sdnum_s2c)
       real(RP),intent(inout) :: sdy_s2c(1:sdnum_s2c)
@@ -1439,7 +1495,7 @@ contains
       integer :: i, j, k, n, iq, np             ! index
       real(RP) :: crs_dtmp1(KA,IA,JA), crs_dtmp2(KA,IA,JA), crs_dtmp3(KA,IA,JA)
       integer :: sd_str, sd_end, sd_valid
-      real(RP) :: rand_s2c(1:sdnum_s2c) ! random numbers
+      real(DP) :: time_id_start, time_id_end
 
       real(RP) :: pres_scale(KA,IA,JA)  ! Pressure
       real(RP) :: t_scale(KA,IA,JA)    ! Temperature
@@ -1941,8 +1997,14 @@ contains
                       sd_itmp1,sd_itmp2,sd_itmp3,crs_dtmp1,crs_dtmp2,crs_dtmp3)
       end if
 
-      call gen_rand_array( rng_s2c, rand_s2c )
-      call sdm_select_stratified_random_particles(sdnum_s2c, num_selected, rand_s2c, sdrk_s2c, sdr_s2c, height_min, height_max, radius_min, dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+      time_id_start = mpi_wtime()
+      call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, tracking_selection_mode, tracking_fraction, &
+           max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+           tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+           dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+      time_id_end = mpi_wtime()
+      tracking_time_id_assign = tracking_time_id_assign + ( time_id_end - time_id_start )
+      tracking_count_id_assign = tracking_count_id_assign + 1
 
       ! Output logfile about SDM
       if( mype==0 ) then

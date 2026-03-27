@@ -531,175 +531,281 @@ contains
 
   end subroutine sdm_copy_selected_sd
 !---------------------------------------------------------------------------------------------------------------------------------
-  subroutine sdm_select_stratified_random_particles(sd_num, num_selected, sd_rand, sd_rk, sd_r, height_min, height_max, radius_min, dm_id, sd_id, if_coal, status_rdm)
+  subroutine sdm_select_stratified_random_particles(sd_num, sd_rk, sd_r,         &
+                                                    tracking_selection_mode,      &
+                                                    tracking_fraction,             &
+                                                    max_tracked_sds,              &
+                                                    tracking_height_min,          &
+                                                    tracking_height_max,          &
+                                                    tracking_radius_min,          &
+                                                    tracking_radius_max,          &
+                                                    tracking_nz_bin,              &
+                                                    tracking_nr_bin,              &
+                                                    tracking_min_per_bin,         &
+                                                    tracking_fallback_to_random,  &
+                                                    tracking_sample_initialized,  &
+                                                    dm_id, sd_id, if_coal, status_rdm)
     use scale_precision
     use scale_grid, only: DZ
-    use m_sdm_common, only: VALID2INVALID, i2
+    use m_sdm_common, only: VALID2INVALID, INVALID_i4, i2
     use scale_process, only: mype => PRC_myrank
-    use sdm_sorting_module  ! Use the module containing the sorting subroutines
 
     implicit none
 
-    integer, intent(in) :: sd_num            ! Total number of super-droplets
-    integer, intent(in) :: num_selected      ! Number of super-droplets to select
-    real(RP), intent(in) :: sd_rand(1:sd_num)  ! Array of random numbers
-    real(RP), intent(in) :: sd_rk(1:sd_num)    ! z-coordinates (heights) of super-droplets
-    real(RP), intent(in) :: sd_r(1:sd_num)     ! Radii of super-droplets
-    real(RP), intent(in) :: height_min         ! Minimum height for selection
-    real(RP), intent(in) :: height_max         ! Maximum height for selection
-    real(RP), intent(in) :: radius_min         ! Minimum radius for selection
+    integer, intent(in) :: sd_num
+    real(RP), intent(in) :: sd_rk(1:sd_num)
+    real(RP), intent(in) :: sd_r(1:sd_num)
+    character(len=*), intent(in) :: tracking_selection_mode
+    real(RP), intent(in) :: tracking_fraction
+    integer, intent(in) :: max_tracked_sds
+    real(RP), intent(in) :: tracking_height_min
+    real(RP), intent(in) :: tracking_height_max
+    real(RP), intent(in) :: tracking_radius_min
+    real(RP), intent(in) :: tracking_radius_max
+    integer, intent(in) :: tracking_nz_bin
+    integer, intent(in) :: tracking_nr_bin
+    integer, intent(in) :: tracking_min_per_bin
+    logical, intent(in) :: tracking_fallback_to_random
+    logical, intent(inout) :: tracking_sample_initialized
     integer, intent(inout) :: sd_id(1:sd_num)
     integer, intent(inout) :: dm_id(1:sd_num)
     integer(i2), intent(inout) :: if_coal(1:sd_num)
     integer, intent(out) :: status_rdm
 
-    integer :: i, j, layer, count, total_count, selected_count, min_layer, max_layer, num_layers, selected_particle_index
-    integer, allocatable :: layer_indices(:), layer_counts(:), layer_selected_counts(:)
-    logical, allocatable :: selected(:)
-    integer, allocatable :: index_array(:)
+    integer :: n, iz, ir, ibin
+    integer :: tracked_cnt, candidate_cnt, target_cnt
+    integer :: nbin, sum_quota, extra_needed, reduce_needed
+    integer :: needed_in_bin, non_empty_bins, min_per_bin_eff
+    real(RP) :: rand_tracking
+    real(RP) :: z_span, r_min_eff, r_max_eff, log_r_span, z_height
+    logical :: do_track, use_stratified, stratified_selected, use_radius_upper_bound
+    integer, allocatable :: bin_cnt(:), bin_quota(:), bin_selected(:), bin_remaining(:), bin_min(:)
+    real(RP), allocatable :: bin_frac(:)
 
-    ! Initialize status
     status_rdm = 0
 
-    if (height_min >= height_max .or. height_min < 0.0_RP) then
-        print *, "Error: Invalid height range"
-        status_rdm = -1
-        return
-    end if
-
-    ! Calculate minimum and maximum layers
-    min_layer = ceiling(height_min / DZ)
-    max_layer = floor(height_max / DZ)
-    if (min_layer > max_layer) then
-        status_rdm = -1
-        return
-    end if
-    num_layers = max_layer - min_layer + 1
-
-    ! Initialize counters
-    total_count = 0
-    allocate(layer_counts(num_layers))
-    layer_counts = 0
-    allocate(selected(sd_num))
-    selected = .false.
-
-    ! Count super-droplets in each layer that meet the criteria
-    do i = 1, sd_num
-      if (sd_rk(i) < VALID2INVALID) cycle
-      layer = floor(sd_rk(i))
-      if (layer >= min_layer .and. layer <= max_layer .and. sd_r(i) >= radius_min) then
-        layer_counts(layer - min_layer + 1) = layer_counts(layer - min_layer + 1) + 1
-        total_count = total_count + 1
-      else
-        selected(i) = .true.  ! Mark super-droplets that do not meet the criteria as selected
-      end if
-    end do
-
-    ! Check if there are enough super-droplets to select from
-    if (total_count < num_selected) then
-      print *, "Error: Not enough particles meet the criteria"
-      print *, "Required:", num_selected, " Available:", total_count
-      deallocate(layer_counts, selected)
-      status_rdm = -2
+    if( tracking_fraction <= 0.0_RP ) then
+      do n = 1, sd_num
+        sd_id(n) = INVALID_i4
+        dm_id(n) = INVALID_i4
+        if_coal(n) = 0_i2
+      end do
+      tracking_sample_initialized = .false.
       return
     end if
 
-    ! Calculate number of super-droplets to select from each layer
-    allocate(layer_selected_counts(num_layers))
-    layer_selected_counts = 0
+    tracked_cnt = 0
+    if( .not. tracking_sample_initialized ) then
+      use_stratified = trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
+                       trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
+                       trim(adjustl(tracking_selection_mode)) == 'Stratified'
+      use_radius_upper_bound = tracking_radius_max > tracking_radius_min
+      stratified_selected = .false.
 
-    do layer = 1, num_layers
-      layer_selected_counts(layer) = nint(real(num_selected,RP) * real(layer_counts(layer),RP) / real(total_count,RP))
-      
-      ! Check if there are enough particles in the layer
-      if (layer_selected_counts(layer) > layer_counts(layer)) then
-          print *, "Error: Not enough particles in layer", layer + min_layer - 1
-          print *, "Required:", layer_selected_counts(layer), &
-                   " Available:", layer_counts(layer)
-          deallocate(layer_counts, selected, layer_selected_counts)
-          status_rdm = -3
-          return
-      end if
-    end do
+      if( use_stratified .and. tracking_nz_bin > 0 .and. tracking_nr_bin > 0 .and. &
+          tracking_height_max > tracking_height_min ) then
+        nbin = tracking_nz_bin * tracking_nr_bin
+        allocate(bin_cnt(nbin), bin_quota(nbin), bin_selected(nbin), bin_remaining(nbin), bin_min(nbin), bin_frac(nbin))
 
-    ! Adjust the selection counts to match exactly num_selected
-    selected_count = sum(layer_selected_counts)
-    if (selected_count < num_selected) then
-      print *, "Warning: Adjusting layer counts to match required total"
-      print *, "Current total:", selected_count, " Required:", num_selected
-      
-      if (selected_count < num_selected) then
-          ! Find the layer with the most available particles to allocate extra particles
-          do i = 1, num_selected - selected_count
-              do layer = 1, num_layers
-                  if (layer_selected_counts(layer) < layer_counts(layer)) then
-                      layer_selected_counts(layer) = layer_selected_counts(layer) + 1
-                      exit
-                  end if
-              end do
+        candidate_cnt = 0
+        r_min_eff = max(tracking_radius_min, 1.0E-12_RP)
+        r_max_eff = r_min_eff
+        do n = 1, sd_num
+          if( sd_rk(n) <= VALID2INVALID ) cycle
+          z_height = sd_rk(n) * DZ
+          if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
+              sd_r(n) >= tracking_radius_min .and. &
+              ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+            candidate_cnt = candidate_cnt + 1
+            if( sd_r(n) > r_max_eff ) r_max_eff = sd_r(n)
+          end if
+        end do
+
+        target_cnt = int( real(candidate_cnt,kind=RP) * tracking_fraction + 0.5_RP )
+        if( candidate_cnt > 0 .and. tracking_fraction > 0.0_RP .and. target_cnt == 0 ) target_cnt = 1
+        if( target_cnt > candidate_cnt ) target_cnt = candidate_cnt
+        if( max_tracked_sds > 0 ) target_cnt = min(target_cnt, max_tracked_sds)
+
+        if( candidate_cnt > 0 .and. target_cnt > 0 ) then
+          z_span = tracking_height_max - tracking_height_min
+          if( r_max_eff > r_min_eff ) then
+            log_r_span = log(r_max_eff / r_min_eff)
+          else
+            log_r_span = 0.0_RP
+          end if
+
+          bin_cnt(:) = 0
+          bin_quota(:) = 0
+          bin_selected(:) = 0
+          bin_remaining(:) = 0
+          bin_min(:) = 0
+          bin_frac(:) = 0.0_RP
+
+          do n = 1, sd_num
+            if( sd_rk(n) <= VALID2INVALID ) cycle
+            z_height = sd_rk(n) * DZ
+            if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
+                sd_r(n) >= tracking_radius_min .and. &
+                ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+              iz = int( (z_height-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
+              iz = min( tracking_nz_bin, max(1,iz) )
+              if( tracking_nr_bin == 1 ) then
+                ir = 1
+              else
+                if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
+                  ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                else
+                  ir = 1
+                end if
+                ir = min( tracking_nr_bin, max(1,ir) )
+              end if
+              ibin = (iz-1)*tracking_nr_bin + ir
+              bin_cnt(ibin) = bin_cnt(ibin) + 1
+            end if
           end do
-      else
-          ! Reduce the selection count from the layers with extra particles
-          do i = 1, selected_count - num_selected
-              do layer = num_layers, 1, -1
-                  if (layer_selected_counts(layer) > 0) then
-                      layer_selected_counts(layer) = layer_selected_counts(layer) - 1
-                      exit
-                  end if
-              end do
+
+          non_empty_bins = count(bin_cnt > 0)
+          if( non_empty_bins > 0 ) then
+            min_per_bin_eff = max(0, tracking_min_per_bin)
+            min_per_bin_eff = min(min_per_bin_eff, target_cnt / non_empty_bins)
+          else
+            min_per_bin_eff = 0
+          end if
+
+          do ibin = 1, nbin
+            if( bin_cnt(ibin) > 0 ) then
+              bin_quota(ibin) = int( real(target_cnt,kind=RP) * real(bin_cnt(ibin),kind=RP) / real(candidate_cnt,kind=RP) )
+              bin_quota(ibin) = min(bin_quota(ibin), bin_cnt(ibin))
+              if( min_per_bin_eff > 0 ) then
+                bin_min(ibin) = min(min_per_bin_eff, bin_cnt(ibin))
+                if( bin_quota(ibin) < bin_min(ibin) ) bin_quota(ibin) = bin_min(ibin)
+              end if
+            end if
           end do
+
+          sum_quota = sum(bin_quota)
+          if( sum_quota < target_cnt ) then
+            extra_needed = target_cnt - sum_quota
+            do while( extra_needed > 0 )
+              do ibin = 1, nbin
+                if( extra_needed <= 0 ) exit
+                if( bin_quota(ibin) < bin_cnt(ibin) ) then
+                  bin_quota(ibin) = bin_quota(ibin) + 1
+                  extra_needed = extra_needed - 1
+                end if
+              end do
+              if( all(bin_quota >= bin_cnt) ) exit
+            end do
+          else if( sum_quota > target_cnt ) then
+            reduce_needed = sum_quota - target_cnt
+            do while( reduce_needed > 0 )
+              do ibin = nbin, 1, -1
+                if( reduce_needed <= 0 ) exit
+                if( bin_quota(ibin) > bin_min(ibin) ) then
+                  bin_quota(ibin) = bin_quota(ibin) - 1
+                  reduce_needed = reduce_needed - 1
+                end if
+              end do
+              if( all(bin_quota <= bin_min) ) exit
+            end do
+          end if
+
+          bin_remaining(:) = bin_cnt(:)
+          do n = 1, sd_num
+            do_track = .false.
+            if( sd_rk(n) > VALID2INVALID ) then
+              z_height = sd_rk(n) * DZ
+              if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
+                  sd_r(n) >= tracking_radius_min .and. &
+                  ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+                iz = int( (z_height-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
+                iz = min( tracking_nz_bin, max(1,iz) )
+                if( tracking_nr_bin == 1 ) then
+                  ir = 1
+                else
+                  if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
+                    ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                  else
+                    ir = 1
+                  end if
+                  ir = min( tracking_nr_bin, max(1,ir) )
+                end if
+                ibin = (iz-1)*tracking_nr_bin + ir
+                needed_in_bin = bin_quota(ibin) - bin_selected(ibin)
+                if( needed_in_bin > 0 .and. bin_remaining(ibin) > 0 ) then
+                  call random_number(rand_tracking)
+                  if( rand_tracking <= real(needed_in_bin,kind=RP) / real(bin_remaining(ibin),kind=RP) ) then
+                    do_track = .true.
+                    bin_selected(ibin) = bin_selected(ibin) + 1
+                  end if
+                end if
+                if( bin_remaining(ibin) > 0 ) bin_remaining(ibin) = bin_remaining(ibin) - 1
+              end if
+            end if
+            if( do_track ) then
+              tracked_cnt = tracked_cnt + 1
+              sd_id(n) = n
+              dm_id(n) = mype
+            else
+              sd_id(n) = INVALID_i4
+              dm_id(n) = INVALID_i4
+            end if
+            if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+          stratified_selected = .true.
+        end if
+
+        deallocate(bin_cnt, bin_quota, bin_selected, bin_remaining, bin_min, bin_frac)
       end if
-    else if (selected_count > num_selected) then
-      do i = 1, selected_count - num_selected
-        layer_selected_counts(i) = layer_selected_counts(i) - 1
+
+      if( .not. stratified_selected ) then
+        if( use_stratified .and. .not. tracking_fallback_to_random ) then
+          do n = 1, sd_num
+            sd_id(n) = INVALID_i4
+            dm_id(n) = INVALID_i4
+            if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+        else
+          do n = 1, sd_num
+            do_track = ( sd_rk(n) > VALID2INVALID )
+            if( do_track .and. tracking_fraction < 1.0_RP ) then
+              call random_number(rand_tracking)
+              if( rand_tracking > tracking_fraction ) do_track = .false.
+            end if
+            if( do_track .and. max_tracked_sds > 0 .and. tracked_cnt >= max_tracked_sds ) do_track = .false.
+            if( do_track ) then
+              tracked_cnt = tracked_cnt + 1
+              sd_id(n) = n
+              dm_id(n) = mype
+            else
+              sd_id(n) = INVALID_i4
+              dm_id(n) = INVALID_i4
+            end if
+            if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+        end if
+      end if
+    else
+      do n = 1, sd_num
+        if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
+          tracked_cnt = tracked_cnt + 1
+          if( max_tracked_sds > 0 .and. tracked_cnt > max_tracked_sds ) then
+            sd_id(n) = INVALID_i4
+            dm_id(n) = INVALID_i4
+          else
+            sd_id(n) = n
+            dm_id(n) = mype
+          end if
+        else
+          sd_id(n) = INVALID_i4
+          dm_id(n) = INVALID_i4
+        end if
+        if_coal(n) = 0_i2
       end do
     end if
-
-    ! Allocate temporary arrays
-    allocate(layer_indices(sd_num))
-
-    ! Select particles from each layer
-    do layer = min_layer, max_layer
-      if (layer_selected_counts(layer - min_layer + 1) == 0) cycle
-
-      count = 0
-      selected_count = 0
-      do i = 1, sd_num
-        if (selected(i)) cycle
-        if (floor(sd_rk(i)) == layer .and. sd_r(i) >= radius_min) then
-          count = count + 1
-          layer_indices(count) = i
-          selected(i) = .true.  ! Mark the super-droplets as selected
-        end if
-      end do
-
-      ! Create index array and sort by random numbers
-      allocate(index_array(count))
-      do i = 1, count
-        index_array(i) = i
-      end do
-
-      call sort_index_array_by_sd_rand(index_array, sd_rand, layer_indices, count)
-
-      ! Select super-droplets based on sorted indices
-      do i = 1, layer_selected_counts(layer - min_layer + 1)
-        j = index_array(i)
-        selected_particle_index = layer_indices(j)
-        sd_id(selected_particle_index) = selected_particle_index
-        dm_id(selected_particle_index) = mype
-        if_coal(selected_particle_index) = 0
-      end do
-
-      selected_count = selected_count + layer_selected_counts(layer - min_layer + 1)
-
-      deallocate(index_array)
-    end do
-
-    ! Clean up
-    if (allocated(layer_counts)) deallocate(layer_counts)
-    if (allocated(selected)) deallocate(selected)
-    if (allocated(layer_selected_counts)) deallocate(layer_selected_counts)
-    if (allocated(layer_indices)) deallocate(layer_indices)
 
     return
   end subroutine sdm_select_stratified_random_particles

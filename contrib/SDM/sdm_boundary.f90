@@ -158,6 +158,8 @@ contains
     use scale_process, only: &
          PRC_MPIstop, &
          mype => PRC_myrank
+    use mpi, only: &
+         mpi_wtime
     use scale_grid, only: &
          GRID_FX, &
          GRID_FY
@@ -167,7 +169,9 @@ contains
          IS,IE,JS,JE
     use m_sdm_common, only: &
          stat,nisub,njsub, &
-         VALID2INVALID,i2,sdicedef
+         VALID2INVALID,i2,sdicedef, &
+         tracking_time_boundary_x, tracking_time_boundary_y, &
+         tracking_count_boundary_x, tracking_count_boundary_y
 
     ! Input variables
     integer, intent(in) :: wbc ! Option for west boundary conditions
@@ -254,6 +258,7 @@ contains
     integer, intent(out) :: sd_itmp1(1:sd_num) ! temporary array of the size of the number of super-droplets.
 
     integer :: n     ! index
+    real(DP) :: time_boundary_start, time_boundary_end
     !---------------------------------------------------------------------
     
     if( (wbc/=1).or.(ebc/=1).or.(sbc/=1).or.(nbc/=1))then
@@ -267,6 +272,7 @@ contains
     
     ! Set the boundary condition of super-droplets in x direction
     if( nisub>=2 ) then
+       time_boundary_start = mpi_wtime()
        !== Exchange the value horizontally in x direction ==!
        
        call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,              &
@@ -287,6 +293,9 @@ contains
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
+       time_boundary_end = mpi_wtime()
+       tracking_time_boundary_x = tracking_time_boundary_x + ( time_boundary_end - time_boundary_start )
+       tracking_count_boundary_x = tracking_count_boundary_x + 1
 
     else if((wbc==1).and.(ebc==1).and.(nisub==1))then
        !### Apply periodic boundary condition
@@ -303,6 +312,7 @@ contains
 
     ! Set the boundary condition of super-droplets in y direction
     if( njsub>=2 ) then
+       time_boundary_start = mpi_wtime()
        !== Exchange the value horizontally in y direction ==!
 
        call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,              &
@@ -323,6 +333,9 @@ contains
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
+       time_boundary_end = mpi_wtime()
+       tracking_time_boundary_y = tracking_time_boundary_y + ( time_boundary_end - time_boundary_start )
+       tracking_count_boundary_y = tracking_count_boundary_y + 1
 
     else if((nbc==1).and.(sbc==1).and.(njsub==1))then
        !### Apply periodic boundary condition

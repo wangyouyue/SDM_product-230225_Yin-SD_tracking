@@ -478,11 +478,27 @@ module m_sdm_common
   real(RP), save :: sdm_dmpitvb  = 0.e0  ! Time interval of binary output of all droplets [s]
   real(RP), save :: sdm_dmpitvl  = 0.e0  ! Time interval of binary output of large droplets [s]
   real(RP), save :: sdm_dmpsdsiz = 0.e0  ! Threshold radius to store large super droplets in binary format [m]
-  integer, save :: num_selected = 1000   ! Number of super-droplets per domain to select
-  real(RP), save :: height_min = 400     ! Minimum height for selection [m]
-  real(RP), save :: height_max = 800     ! Maximum height for selection [m]
-  real(RP), save :: radius_min = 1.E-6_RP   ! Minimum radius for selection [m]
-  real(RP), save :: sdm_noise_amp = 1.E-4_RP ! amplitude of random noise [m^1.5 * s^-0.5]
+  logical, save :: forward_tracking_enable = .false.
+  logical, save :: backward_tracking_enable = .true.
+  character(len=32), save :: tracking_selection_mode = 'random'
+  real(RP), save :: tracking_fraction = 1.0_RP
+  integer, save :: max_tracked_sds = 0
+  real(RP), save :: tracking_height_min = 400.0_RP
+  real(RP), save :: tracking_height_max = 800.0_RP
+  real(RP), save :: tracking_radius_min = 1.E-6_RP
+  real(RP), save :: tracking_radius_max = 0.0_RP
+  integer, save :: tracking_nz_bin = 8
+  integer, save :: tracking_nr_bin = 10
+  integer, save :: tracking_min_per_bin = 1
+  logical, save :: tracking_fallback_to_random = .true.
+  logical, save :: tracking_sample_initialized = .false.
+  real(DP), save :: tracking_time_id_assign = 0.0_DP
+  real(DP), save :: tracking_time_boundary_x = 0.0_DP
+  real(DP), save :: tracking_time_boundary_y = 0.0_DP
+  integer, save :: tracking_count_id_assign = 0
+  integer, save :: tracking_count_boundary_x = 0
+  integer, save :: tracking_count_boundary_y = 0
+  real(RP), save :: sdm_noise_amp = 0.0_RP ! amplitude of random noise [m^1.5 * s^-0.5]
   integer(i2), save :: coal_output = 1        ! Control flag to output coalescence events. 0: off, 1: on
 
   data sdm_dtcmph / 0.1_RP,0.1_RP,0.1_RP,0.1_RP,0.1_RP /
@@ -617,10 +633,19 @@ module m_sdm_common
        sdm_dmpitvb,         &
        sdm_dmpitvl,         &
        sdm_dmpsdsiz,        &
-       num_selected,        &
-       height_min,          &
-       height_max,          &
-       radius_min,          &
+       forward_tracking_enable, &
+       backward_tracking_enable, &
+       tracking_selection_mode, &
+       tracking_fraction,   &
+       max_tracked_sds,     &
+       tracking_height_min, &
+       tracking_height_max, &
+       tracking_radius_min, &
+       tracking_radius_max, &
+       tracking_nz_bin,     &
+       tracking_nr_bin,     &
+       tracking_min_per_bin, &
+       tracking_fallback_to_random, &
        sdm_noise_amp,       &
        coal_output
 

@@ -1,0 +1,42 @@
+#!/bin/bash
+#PBS -l select=1:ncpus=40:mpiprocs=40
+#PBS -q T
+#PBS -N sample_stratified_f020_seed12008
+#PBS -o $PBS_O_WORKDIR/log.txt
+#PBS -e $PBS_O_WORKDIR/error.txt
+
+module purge
+module use --append /home/s274s011/modules
+source /etc/profile.d/modules.sh
+cd ${PBS_O_WORKDIR}
+module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1
+
+# Run-time diagnostics for performance comparison
+run_with_timing() {
+  local label="$1"
+  shift
+  if [ -x /usr/bin/time ]; then
+    /usr/bin/time -v -o "time_${label}.log" "$@" && return 0
+    echo "[perf] warning: /usr/bin/time -v is unavailable, fallback to direct run."
+  fi
+  "$@"
+}
+
+RUN_START_EPOCH=$(date +%s)
+run_with_timing scale_rm_init mpiexec_mpt dplace -s1 ./scale-rm_init init.conf || exit
+run_with_timing scale_rm_main mpiexec_mpt dplace -s1 ./scale-rm run.conf || exit
+RUN_END_EPOCH=$(date +%s)
+RUN_ELAPSED_SEC=$((RUN_END_EPOCH - RUN_START_EPOCH))
+echo "[perf] total_elapsed_sec=${RUN_ELAPSED_SEC}"
+
+# Try scheduler-level resource statistics if PBS tools are available
+if [ -n "${PBS_JOBID:-}" ]; then
+  echo "=== Scheduler resource usage (PBS) ==="
+  if command -v qstat >/dev/null 2>&1; then
+    qstat -fx "${PBS_JOBID}" 2>/dev/null | grep -E "resources_used|Resource_List" || true
+  elif command -v tracejob >/dev/null 2>&1; then
+    tracejob -n 1 "${PBS_JOBID}" 2>/dev/null | grep -Ei "resources_used|mem|vmem|walltime|cput" || true
+  else
+    echo "qstat/tracejob is not available in this environment."
+  fi
+fi
