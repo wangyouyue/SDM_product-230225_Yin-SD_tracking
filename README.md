@@ -14,8 +14,8 @@ This repository integrates SDM into SCALE version 5.2.6, leveraging both SDM’s
 The **forward tracking method** allows for the tracking of a selected subset of super-droplets (SDs) from the initial stage of the simulation, focusing on SDs that meet certain size criteria within specific altitude ranges. This method is particularly suited for high-resolution simulations with a large number of SDs, as it enables efficient data storage and extraction of relevant microphysical statistics while maintaining computational feasibility.
 
 ## Methodology
-1. **Random Selection of SDs**
-At the beginning of the simulation, a random selection of SDs with radii larger than a specified threshold is made within each domain across a given altitude range. The number of SDs selected at each altitude level is proportional to the number of SDs at that level that meet the radius criterion, relative to the total number of eligible SDs within the specified altitude range. The actual number of selected SDs is always less than or equal to the pre-set total number of SDs to be selected.
+1. **Sampling and Selection of SDs**
+At the beginning of the simulation, SDs are sampled according to `tracking_selection_mode`, which supports `random` and `stratified`. The sampling target is controlled by `tracking_fraction` and `max_tracked_sds` (`0` means unlimited). For stratified sampling, the selectable population is constrained by `tracking_height_min`, `tracking_height_max`, `tracking_radius_min`, and `tracking_radius_max`, and then balanced with `tracking_nz_bin`, `tracking_nr_bin`, `tracking_min_per_bin`, and `tracking_fallback_to_random`.
 
 2. **Initialization of Selected SD IDs**
 - **dm_id:** The domain ID of the selected SD at the initial simulation time.
@@ -34,7 +34,13 @@ The collision-coalescence algorithm is similar to that used in backward tracking
 - **sd_n1/sd_n2:** The multiplicities of the two SDs before the collision-coalescence.
 - **num_col:** The number of coalescence between the pair of SDs.
 
-These collision event files are **output at each microphysical time step**. If no collision-coalescence occurs or if no selected SD is involved in a collision-coalescence event, no `SD_coal_output_NetCDF*` file is generated.
+These collision event files are written in the following way:
+- **Forward tracking:** Collision events are appended into one file per SDM output interval and MPI rank, with filename pattern `SD_coal_output_NetCDF_00000101-hhmmss.mmm.peXXXXXX`.
+- **Backward tracking:** The original behavior is kept (time-labeled files at each output call).
+- If no collision-coalescence occurs or if no selected SD is involved in a collision-coalescence event, no `SD_coal_output_NetCDF*` file is generated.
+
+For forward tracking, each stored collision event also contains:
+- **event_time:** Event time in simulation seconds (`TIME_NOWSEC`) at the microphysical step when the collision is recorded.
 
 5. **Random Perturbations in SD Motion**
 Random perturbations are applied to the displacement of each SD during its motion. The magnitude of the displacement perturbation is proportional to the square root of the time step and inversely proportional to the square root of the SD radius. The displacement formula is:
@@ -44,13 +50,26 @@ $$\Delta x = (\text{random number} - 0.5) \times \sqrt{\frac{\Delta t}{r}} \time
 where the **random number** is between 0 and 1 (the same for all three directions), $\Delta x$ is the displacement, $\Delta t$ is the time step, $r$ is the SD radius, and **sdm_noise_amp** is the user-specified noise amplitude.
 
 6. **Parameter Configuration in run.conf**
-For parameter configuration in the `run.conf` file (see [run.conf](https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking/blob/SDM_selected_SD/scale-rm/test/case/shallowcloud/SD_tracking/run.conf#L160-L165)):
+For parameter configuration in the `run.conf` file:
 
-- **num_selected:** Number of super-droplets per domain to select.
-- **height_min and height_max:** Minimum and maximum heights for selection [m].
-- **radius_min:** Minimum radius for selection [m].
-- **coal_output:** Control flag to output collision-coalescence events (0: off, 1: on).
-- **sdm_noise_amp:** Amplitude of random noise [m^1.5 * s^-0.5], default value is 0.D0.
+- **forward_tracking_enable / backward_tracking_enable:** Master switches for tracking mode. They cannot both be `.true.`.
+- **tracking_selection_mode:** `"random"` or `"stratified"`.
+- **tracking_fraction:** Fraction of SDs to track `(0,1]`.
+- **max_tracked_sds:** Upper limit of tracked SDs (`0` means unlimited).
+- **tracking_height_min / tracking_height_max:** Height range for stratified sampling [m].
+- **tracking_radius_min / tracking_radius_max:** Radius range for stratified sampling [m].
+- **tracking_nz_bin / tracking_nr_bin / tracking_min_per_bin:** Stratified bin and minimum-per-bin controls.
+- **tracking_fallback_to_random:** Whether to fallback to random sampling when stratified candidates are insufficient.
+- **coalescence_output_enable:** Master switch to output `SD_coal_output_NetCDF_*` (default `.true.`).
+- **random_perturbation_enable:** Master switch for random perturbation in SD motion (default `.false.`).
+- **random_perturbation_amp:** Random perturbation amplitude [m^1.5 * s^-0.5].
+- **sdm_noise_amp:** Internal perturbation amplitude used by motion integration (kept for compatibility).
+
+## Recent Updates
+- Forward and backward sampling interfaces were aligned, including shared selection controls and mutual exclusion of tracking master switches.
+- Forward test suites were reorganized into `forward_tracking_sampling_tests` and `forward_tracking_representativeness_tests`, with consistent case naming and batch generation scripts.
+- Forward representativeness post-processing was added with `evaluate_representativeness.py`.
+- Job scripts in forward tests were aligned with backward scripts for runtime and memory reporting style.
 
 ## Advantages and Disadvantages of the Forward Tracking Method
 The forward tracking method allows for the random sampling of SDs from specific altitude ranges at the beginning of the simulation, and tracks their future trajectories. This approach is ideal for high-resolution simulations with a large number of SDs, as it reduces storage usage while providing microphysical statistics (e.g., mean radius and relative dispersion at each altitude) with a confidence level close to the entire population.

@@ -50,6 +50,8 @@ def _apply_runconf(path: Path, mode: str, fraction: float, seed_scale: int) -> N
     text = path.read_text()
     text = re.sub(r"^\s*tracking_sample_initialized\s*=.*$\n?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*coalescence_output_enable\s*=.*$\n?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*random_perturbation_enable\s*=.*$\n?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*random_perturbation_amp\s*=.*$\n?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*tracked_grid_coal_only\s*=.*$\n?", "", text, flags=re.MULTILINE)
     values = {
         "forward_tracking_enable": ".true.",
@@ -66,7 +68,6 @@ def _apply_runconf(path: Path, mode: str, fraction: float, seed_scale: int) -> N
         "tracking_min_per_bin": "1",
         "tracking_fallback_to_random": ".true.",
         "sdm_noise_amp": "0.d0",
-        "coal_output": "0",
     }
     for key, value in values.items():
         text = _replace_key_value(text, key, value)
@@ -118,6 +119,9 @@ def _rewrite_tracking_comment_block(path: Path) -> None:
         f"tracking_nr_bin = {_get('tracking_nr_bin', '10')},               ! Number of radius bins for stratified selection\n"
         f"tracking_min_per_bin = {_get('tracking_min_per_bin', '1')},           ! Minimum selected SDs per non-empty bin\n"
         "tracking_fallback_to_random = .true., ! Fallback to random selection if stratified candidates are insufficient\n"
+        "coalescence_output_enable = .true., ! Master switch for SD_coal_output_NetCDF_* (default ON)\n"
+        "random_perturbation_enable = .false., ! Master switch for random perturbation in SD motion (default OFF)\n"
+        "random_perturbation_amp = 0.d0, ! Random perturbation amplitude [m^1.5 * s^-0.5]\n"
     )
     lines[start : end + 1] = [block]
     path.write_text("".join(lines))

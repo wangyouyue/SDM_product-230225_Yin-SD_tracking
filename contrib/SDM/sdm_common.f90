@@ -498,6 +498,9 @@ module m_sdm_common
   integer, save :: tracking_count_id_assign = 0
   integer, save :: tracking_count_boundary_x = 0
   integer, save :: tracking_count_boundary_y = 0
+  logical, save :: coalescence_output_enable = .true. ! Master switch for SD_coal_output_NetCDF_* (default ON)
+  logical, save :: random_perturbation_enable = .false. ! Master switch for random perturbation in SD motion (default OFF)
+  real(RP), save :: random_perturbation_amp = 0.0_RP ! Random perturbation amplitude [m^1.5 * s^-0.5]
   real(RP), save :: sdm_noise_amp = 0.0_RP ! amplitude of random noise [m^1.5 * s^-0.5]
   integer(i2), save :: coal_output = 1        ! Control flag to output coalescence events. 0: off, 1: on
 
@@ -646,6 +649,9 @@ module m_sdm_common
        tracking_nr_bin,     &
        tracking_min_per_bin, &
        tracking_fallback_to_random, &
+       coalescence_output_enable, &
+       random_perturbation_enable, &
+       random_perturbation_amp, &
        sdm_noise_amp,       &
        coal_output
 

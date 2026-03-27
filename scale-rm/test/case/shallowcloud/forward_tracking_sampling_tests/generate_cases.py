@@ -96,6 +96,8 @@ def _replace_key_value(text: str, key: str, value: str) -> str:
 def _remove_legacy_keys(text: str) -> str:
     text = re.sub(r"^\s*tracking_sample_initialized\s*=.*$\n?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*coalescence_output_enable\s*=.*$\n?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*random_perturbation_enable\s*=.*$\n?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*random_perturbation_amp\s*=.*$\n?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*tracked_grid_coal_only\s*=.*$\n?", "", text, flags=re.MULTILINE)
     return text
 
@@ -121,6 +123,9 @@ def _rewrite_tracking_block(text: str, spec: dict[str, str]) -> str:
         f"tracking_nr_bin = {spec['nr_bin']},               ! Number of radius bins for stratified selection\n"
         f"tracking_min_per_bin = {spec['min_per_bin']},           ! Minimum selected SDs per non-empty bin\n"
         "tracking_fallback_to_random = .true., ! Fallback to random selection if stratified candidates are insufficient\n"
+        "coalescence_output_enable = .true., ! Master switch for SD_coal_output_NetCDF_* (default ON)\n"
+        "random_perturbation_enable = .false., ! Master switch for random perturbation in SD motion (default OFF)\n"
+        "random_perturbation_amp = 0.d0, ! Random perturbation amplitude [m^1.5 * s^-0.5]\n"
     )
     return text[: start.start()] + block + text[end.end() :]
 
@@ -133,7 +138,6 @@ def _apply_case(case_dir: Path, spec: dict[str, str]) -> None:
     text = _replace_key_value(text, "backward_tracking_enable", ".false.")
     text = _replace_key_value(text, "max_tracked_sds", "0")
     text = _replace_key_value(text, "sdm_noise_amp", "0.d0")
-    text = _replace_key_value(text, "coal_output", "0")
     text = _rewrite_tracking_block(text, spec)
     runconf.write_text(text)
 

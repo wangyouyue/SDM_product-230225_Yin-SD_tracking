@@ -255,7 +255,8 @@ contains
        ATMOS_HYDROMETEOR_regist
     use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM, &
          forward_tracking_enable, backward_tracking_enable, &
-         tracking_sample_initialized
+         tracking_sample_initialized, coalescence_output_enable, coal_output, &
+         random_perturbation_enable, random_perturbation_amp, sdm_noise_amp
 
     implicit none
 
@@ -292,6 +293,16 @@ contains
     if( forward_tracking_enable .and. backward_tracking_enable ) then
        write(*,*) 'xxx forward_tracking_enable and backward_tracking_enable cannot both be .true.. Check!'
        call PRC_MPIstop
+    endif
+    if( random_perturbation_enable ) then
+       sdm_noise_amp = random_perturbation_amp
+    else
+       sdm_noise_amp = 0.0_RP
+    endif
+    if( coalescence_output_enable ) then
+       coal_output = 1
+    else
+       coal_output = 0
     endif
 
     if( .not. sdm_cold ) then
@@ -835,6 +846,7 @@ contains
     integer :: histitemid
     logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3, did_sdm_dump
     integer :: tracking_chain_count
+    character(len=64) :: tracking_id_label
     real(DP) :: tracking_mem_mb, coal_mem_mb
     integer :: order_n
 
@@ -1084,7 +1096,12 @@ contains
        tracking_mem_mb = real(sdnum_s2c,kind=DP) * 8.0_DP / 1048576.0_DP
        coal_mem_mb = real(sdnum_s2c,kind=DP) * 2.0_DP / 1048576.0_DP
        write(IO_FID_LOG,*) '*** tracking_chain_count=', tracking_chain_count, ' / ', sdnum_s2c
-       write(IO_FID_LOG,*) '*** tracking_memory_estimate_MB(pre_sdid+pre_dmid)=', tracking_mem_mb
+       if( forward_tracking_enable ) then
+          tracking_id_label = 'sd_id+dm_id'
+       else
+          tracking_id_label = 'pre_sdid+pre_dmid'
+       end if
+       write(IO_FID_LOG,*) '*** tracking_memory_estimate_MB(' // trim(tracking_id_label) // ')=', tracking_mem_mb
        write(IO_FID_LOG,*) '*** coal_flag_memory_estimate_MB(if_coal)=', coal_mem_mb
        if( tracking_count_id_assign > 0 ) then
           write(IO_FID_LOG,*) '*** tracking_time_id_assign_avg[s]=', &

@@ -186,7 +186,11 @@ def compute_chain_metrics(grouped_files: dict[str, dict[int, Path]], max_chain_s
         for domain, file_path in grouped_files[t_key].items():
             with Dataset(file_path, "r") as ds:
                 pre_sdid = _read_var(ds, "pre_sdid")
+                if pre_sdid is None:
+                    pre_sdid = _read_var(ds, "sd_id")
                 pre_dmid = _read_var(ds, "pre_dmid")
+                if pre_dmid is None:
+                    pre_dmid = _read_var(ds, "dm_id")
                 if_coal = _read_var(ds, "if_coal")
                 sd_z = _read_var(ds, "sd_z")
                 sd_n = _read_var(ds, "sd_n")
