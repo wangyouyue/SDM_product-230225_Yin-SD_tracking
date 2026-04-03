@@ -21,7 +21,6 @@
 !! @li      2018-05-13 (S.Shima) [fix] a bug in sdm_getbufsy
 !! @li      2018-06-26 (S.Shima) [fix] a bug in sdm_boundary
 !! @li      2018-06-30 (S.Shima) [add] rime mass and number of monomers as SD attributes
-!! @li      2023-04-01 (C.Yin)   [add] MPI comunication of index
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -150,17 +149,17 @@ contains
   end subroutine sdm_jdginvdv
   !----------------------------------------------------------------------------
   subroutine sdm_boundary(wbc,ebc,sbc,nbc,                         &
-                         sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,  &
-                         sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,                  &
-                         pre_sdid,pre_dmid,if_coal,bufsiz1,                &
+                         sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,   &
+                         sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,       &
+                         if_coal,bufsiz1,                                  &
                          bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
-                         sd_itmp1,                                         &
-                         rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4)
-    use mpi, only: &
-         mpi_wtime
+                         sd_itmp1,                              &
+                         rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
     use scale_process, only: &
          PRC_MPIstop, &
          mype => PRC_myrank
+    use mpi, only: &
+         mpi_wtime
     use scale_grid, only: &
          GRID_FX, &
          GRID_FY
@@ -188,8 +187,8 @@ contains
     integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
     ! Input and output variables
     integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
-    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: dm_id(1:sd_num)   ! domain id of super-droplets
     integer(i2), intent(inout) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
@@ -259,7 +258,7 @@ contains
     integer, intent(out) :: sd_itmp1(1:sd_num) ! temporary array of the size of the number of super-droplets.
 
     integer :: n     ! index
-    real(DP) :: t0_boundary, t1_boundary
+    real(DP) :: time_boundary_start, time_boundary_end
     !---------------------------------------------------------------------
     
     if( (wbc/=1).or.(ebc/=1).or.(sbc/=1).or.(nbc/=1))then
@@ -273,13 +272,14 @@ contains
     
     ! Set the boundary condition of super-droplets in x direction
     if( nisub>=2 ) then
+       time_boundary_start = mpi_wtime()
        !== Exchange the value horizontally in x direction ==!
-       t0_boundary = mpi_wtime()
-       call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,               &
-            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-            sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       
+       call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,              &
+            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
-            stat,sd_itmp1,                                       &
+            stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
 
        ! In case of exsiting outflow super-droplets
@@ -287,14 +287,14 @@ contains
             bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             sbuf_r8,rbuf_r8,sbuf_i8,rbuf_i8,sbuf_i2,rbuf_i2,sbuf_i4,rbuf_i4)
 
-       call sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,               &
-            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-            sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       call sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,              &
+            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
-            stat,sd_itmp1,                                       &
+            stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
-       t1_boundary = mpi_wtime()
-       tracking_time_boundary_x = tracking_time_boundary_x + (t1_boundary - t0_boundary)
+       time_boundary_end = mpi_wtime()
+       tracking_time_boundary_x = tracking_time_boundary_x + ( time_boundary_end - time_boundary_start )
        tracking_count_boundary_x = tracking_count_boundary_x + 1
 
     else if((wbc==1).and.(ebc==1).and.(nisub==1))then
@@ -312,14 +312,14 @@ contains
 
     ! Set the boundary condition of super-droplets in y direction
     if( njsub>=2 ) then
+       time_boundary_start = mpi_wtime()
        !== Exchange the value horizontally in y direction ==!
-       t0_boundary = mpi_wtime()
 
-       call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,               &
-            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-            sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,              &
+            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
-            stat,sd_itmp1,                                       &
+            stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
 
        ! In case of exsiting outflow super-droplets
@@ -327,14 +327,14 @@ contains
             bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             sbuf_r8,rbuf_r8,sbuf_i8,rbuf_i8,sbuf_i2,rbuf_i2,sbuf_i4,rbuf_i4)
        
-       call sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,               &
-            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-            sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       call sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,              &
+            sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
+            sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
-            stat,sd_itmp1,                                       &
+            stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
-       t1_boundary = mpi_wtime()
-       tracking_time_boundary_y = tracking_time_boundary_y + (t1_boundary - t0_boundary)
+       time_boundary_end = mpi_wtime()
+       tracking_time_boundary_y = tracking_time_boundary_y + ( time_boundary_end - time_boundary_start )
        tracking_count_boundary_y = tracking_count_boundary_y + 1
 
     else if((nbc==1).and.(sbc==1).and.(njsub==1))then
@@ -362,8 +362,8 @@ contains
   end subroutine sdm_boundary
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,         &
-       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-       sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -380,8 +380,8 @@ contains
     integer, intent(in) :: sd_num ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer, intent(in) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer, intent(in) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(in) :: dm_id(1:sd_num)   ! domain id of super-droplets
     integer(i2), intent(in) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
@@ -416,7 +416,7 @@ contains
     integer(DP), intent(out) ::                                  &
      &                              sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity
+                       ! dim02 = 1 : multiplicity 
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(out) ::                                  &
      &                              sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -427,7 +427,7 @@ contains
      &                              sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2)
                        ! sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2) or sbuf_i4(1:1,1:1,1:2)
                        ! Sending buffer in x direction (int4)
-                       ! dim02 = 2/3 : nmono (ice), save and domain index
+                       ! dim02 =  2/3 : nmono (ice), save and domain index
                        ! dim03 = 1 : west, 2: east
     integer, intent(out) :: ilist(1:sd_num)
     ! buffer for list vectorization
@@ -493,8 +493,8 @@ contains
              sbuf_i8(m,1,1) = sd_n(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
              sbuf_i2(m,2,1) = if_coal(n)
-             sbuf_i4(m,1,1) = pre_sdid(n)
-             sbuf_i4(m,2,1) = pre_dmid(n)
+             sbuf_i4(m,1,1) = sd_id(n)
+             sbuf_i4(m,2,1) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -568,8 +568,8 @@ contains
              sbuf_i8(m,1,2) = sd_n(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
              sbuf_i2(m,2,2) = if_coal(n)
-             sbuf_i4(m,1,2) = pre_sdid(n)
-             sbuf_i4(m,2,2) = pre_dmid(n)
+             sbuf_i4(m,1,2) = sd_id(n)
+             sbuf_i4(m,2,2) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -709,6 +709,7 @@ contains
        siz_r8 = bufsiz1 * bufsiz2_r8
        siz_i8 = bufsiz1 * bufsiz2_i8
        siz_i2 = bufsiz1 * bufsiz2_i2
+       !siz_i4 = 0
        !if( sdm_cold ) then
           siz_i4 = bufsiz1 * bufsiz2_i4
        !end if
@@ -863,8 +864,8 @@ contains
   end subroutine sdm_shiftsx
   !--------------------------------------------------------------------------
   subroutine sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,         &
-       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-       sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -894,7 +895,7 @@ contains
     integer(DP), intent(in) ::                                  &
      &                              rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 2 : multiplicity and ID
+                       ! dim02 = 1 : multiplicity 
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(in) ::                                  &
      &                              rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -909,8 +910,8 @@ contains
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
-    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: dm_id(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(inout) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
@@ -998,8 +999,8 @@ contains
              sd_n(n)      = rbuf_i8(m,1,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
              if_coal(n)   = rbuf_i2(m,2,1)
-             pre_sdid(n)  = rbuf_i4(m,1,1)
-             pre_dmid(n)  = rbuf_i4(m,2,1)
+             sd_id(n)  = rbuf_i4(m,1,1)
+             dm_id(n)  = rbuf_i4(m,2,1)
           end do
 
           do nasl=1,sd_numasl
@@ -1073,8 +1074,8 @@ contains
              sd_n(n)      = rbuf_i8(m,1,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
              if_coal(n)   = rbuf_i2(m,2,2)
-             pre_sdid(n)  = rbuf_i4(m,1,2)
-             pre_dmid(n)  = rbuf_i4(m,2,2)
+             sd_id(n)  = rbuf_i4(m,1,2)
+             dm_id(n)  = rbuf_i4(m,2,2)
 
           end do
 
@@ -1112,8 +1113,8 @@ contains
   end subroutine sdm_getbufsx
   !----------------------------------------------------------------------------
   subroutine sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,         &
-       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-       sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,            &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -1130,8 +1131,8 @@ contains
     integer, intent(in) :: sd_num  ! number of super-droplets
     integer, intent(in) :: sd_numasl ! number of kind of chemical materia contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
-    integer, intent(in) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer, intent(in) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(in) :: dm_id(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(in) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
@@ -1166,7 +1167,7 @@ contains
     integer(DP), intent(out) ::                                  &
      &                              sbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity
+                       ! dim02 = 1 : multiplicity 
                        ! dim03 = 1 : south, 2: north
     integer(i2), intent(out) ::                                  &
      &                              sbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -1243,8 +1244,8 @@ contains
              sbuf_i8(m,1,1) = sd_n(n)
              sbuf_i2(m,1,1) = sd_liqice(n)
              sbuf_i2(m,2,1) = if_coal(n)
-             sbuf_i4(m,1,1) = pre_sdid(n)
-             sbuf_i4(m,2,1) = pre_dmid(n)
+             sbuf_i4(m,1,1) = sd_id(n)
+             sbuf_i4(m,2,1) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -1318,8 +1319,8 @@ contains
              sbuf_i8(m,1,2) = sd_n(n)
              sbuf_i2(m,1,2) = sd_liqice(n)
              sbuf_i2(m,2,2) = if_coal(n)
-             sbuf_i4(m,1,2) = pre_sdid(n)
-             sbuf_i4(m,2,2) = pre_dmid(n)
+             sbuf_i4(m,1,2) = sd_id(n)
+             sbuf_i4(m,2,2) = dm_id(n)
           end do
 
           do nasl=1,sd_numasl
@@ -1459,6 +1460,7 @@ contains
        siz_r8 = bufsiz1 * bufsiz2_r8
        siz_i8 = bufsiz1 * bufsiz2_i8
        siz_i2 = bufsiz1 * bufsiz2_i2
+       !siz_i4 = 0
        !if( sdm_cold ) then
           siz_i4 = bufsiz1 * bufsiz2_i4
        !end if
@@ -1613,8 +1615,8 @@ contains
   end subroutine sdm_shiftsy
   !----------------------------------------------------------------------------
   subroutine sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,         &
-       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,      &
-       sd_r,sd_asl,sdi,pre_sdid,pre_dmid,if_coal,           &
+       sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
+       sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,                    &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -1644,7 +1646,7 @@ contains
     integer(DP), intent(in) ::                                  &
      &                              rbuf_i8(1:bufsiz1,1:bufsiz2_i8,1:2)
                        ! Sending buffer in x direction (int8)
-                       ! dim02 = 1 : multiplicity
+                       ! dim02 = 1 : multiplicity 
                        ! dim03 = 1 : west, 2: east
     integer(i2), intent(in) ::                                  &
      &                              rbuf_i2(1:bufsiz1,1:bufsiz2_i2,1:2)
@@ -1659,8 +1661,8 @@ contains
                        ! dim03 = 1 : west, 2: east
     integer, intent(inout) :: stat  ! Runtime status
     integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
-    integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-    integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain index of super-droplets
+    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+    integer, intent(inout) :: dm_id(1:sd_num)   ! domain index of super-droplets
     integer(i2), intent(inout) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
@@ -1748,8 +1750,8 @@ contains
              sd_n(n)      = rbuf_i8(m,1,1)
              sd_liqice(n) = rbuf_i2(m,1,1)
              if_coal(n)   = rbuf_i2(m,2,1)
-             pre_sdid(n)  = rbuf_i4(m,1,1)
-             pre_dmid(n)  = rbuf_i4(m,2,1)
+             sd_id(n)  = rbuf_i4(m,1,1)
+             dm_id(n)  = rbuf_i4(m,2,1)
           end do
 
           do nasl=1,sd_numasl
@@ -1822,8 +1824,8 @@ contains
              sd_n(n)      = rbuf_i8(m,1,2)
              sd_liqice(n) = rbuf_i2(m,1,2)
              if_coal(n)   = rbuf_i2(m,2,2)
-             pre_sdid(n)  = rbuf_i4(m,1,2)
-             pre_dmid(n)  = rbuf_i4(m,2,2)
+             sd_id(n)  = rbuf_i4(m,1,2)
+             dm_id(n)  = rbuf_i4(m,2,2)
           end do
 
           do nasl=1,sd_numasl

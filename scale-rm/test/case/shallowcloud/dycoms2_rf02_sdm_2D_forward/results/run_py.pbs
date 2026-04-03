@@ -1,0 +1,11 @@
+#!/bin/bash
+#PBS -l select=1:ncpus=4:mpiprocs=4
+#PBS -q S
+#PBS -N python
+#PBS -o $PBS_O_WORKDIR/log.txt
+#PBS -e $PBS_O_WORKDIR/error.txt
+source ~/.bashrc
+cd ${PBS_O_WORKDIR}
+
+# please set num_processes = core number in the python script
+python sd_output.py

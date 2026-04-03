@@ -20,7 +20,6 @@
 !! @li      2016-07-20 (S.Shima) [add] Coalescence of the "liqice" attribute added 
 !! @li      2019-07-01 (S.Shima) [fix] the possiblity of overflow by int(sd_n1/sd_n2,kind=RP)) -> int(sd_n1/sd_n2,kind=DP)
 !! @li      2019-10-07 (S.Shima) [add] aslset=5 for DYCOMSII(RF02) (Ackerman et al. 2009)
-!! @li      2023-03-12 (C.Yin)   [add] update universal ID of super-droplets during coalescence
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -39,8 +38,8 @@ contains
                         zph_crs,                &
                         ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl, &
                         sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,&
-                        pre_sdid, pre_dmid, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, num_pair,&
-                        sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,sort_id,sort_key,sort_freq,sort_tag,  &
+                        sd_id, dm_id, sd_id1, sd_id2, dm_id1, dm_id2, num_col, num_pair,&
+                        sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,coal_output,sort_id,sort_key,sort_freq,sort_tag,&
                         sd_rng,sd_rand,                        &
                         sort_tag0,fsort_id,icp,sd_perm,c_rate  )
     use gadg_algorithm, only: &
@@ -56,8 +55,9 @@ contains
          cp => CONST_CPdry, &
          p0 => CONST_PRE00       ! Reference Pressure [Pa]
     use m_sdm_common, only: &
-         VALID2INVALID,INVALID,knum_sdm, backward_tracking_enable, &
-         rho_amsul,rho_nacl,ONE_PI,m2micro,r0col,ratcol,ecoll,micro2m,dxiv_sdm,dyiv_sdm,F_THRD,O_THRD,rrst,boltz,mass_air,i2
+         VALID2INVALID,INVALID,knum_sdm,INVALID_i4, &
+         rho_amsul,rho_nacl,ONE_PI,m2micro,r0col,ratcol,ecoll,micro2m,dxiv_sdm,dyiv_sdm,F_THRD,O_THRD,rrst,boltz,mass_air,i2, &
+         forward_tracking_enable, backward_tracking_enable
     use m_sdm_coordtrans, only: &
          sdm_x2ri, sdm_y2rj
     use m_sdm_idutil, only: &
@@ -79,8 +79,8 @@ contains
     real(RP), intent(in) :: sd_x(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(in) :: sd_y(1:sd_num) ! y-coordinate of super-droplets
     real(RP), intent(in) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
-    integer, intent(in) :: pre_sdid(1:sd_num)   ! previous SD ID of super-droplets
-    integer, intent(in) :: pre_dmid(1:sd_num)   ! previous domain ID of super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)   ! SD ID of super-droplets
+    integer, intent(in) :: dm_id(1:sd_num)   ! domain ID of super-droplets
     ! Input and output variables
     type(c_rng_uniform_mt), intent(inout) :: sd_rng ! random number generator
     real(RP),intent(inout) :: sd_rand(1:sd_num) ! random numbers
@@ -93,6 +93,7 @@ contains
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
+    integer(i2), intent(in) :: coal_output
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -108,16 +109,16 @@ contains
     integer, intent(out) :: icp(1:sd_num) ! index of coalescence pair
     integer, intent(out) :: sd_perm(1:sd_num) ! random permutations
     real(RP), intent(out) :: c_rate(1:sd_num) ! coalescence probability
-    integer, allocatable, intent(out) :: pre_sdid1(:)   ! previous SD ID of super-droplets with large multiplicity
-    integer, allocatable, intent(out) :: pre_sdid2(:)   ! previous SD ID of super-droplets  with small multiplicity
-    integer, allocatable, intent(out) :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
-    integer, allocatable, intent(out) :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
+    integer, allocatable, intent(out) :: sd_id1(:)   ! SD ID of super-droplets with large multiplicity
+    integer, allocatable, intent(out) :: sd_id2(:)   ! SD ID of super-droplets  with small multiplicity
+    integer, allocatable, intent(out) :: dm_id1(:)   ! domain ID of super-droplets with large multiplicity
+    integer, allocatable, intent(out) :: dm_id2(:)   ! domain ID of super-droplets with small multiplicity
     integer, allocatable, intent(out) :: num_col(:)     ! number of coalesence of pairs of SDs
     real(RP), allocatable, intent(out) :: sdr1_out(:)
     real(RP), allocatable, intent(out) :: sdr2_out(:)
     integer(DP), allocatable, intent(out) :: sdn1_out(:)
     integer(DP), allocatable, intent(out) :: sdn2_out(:)
- 
+    integer, intent(out) :: num_pair           ! number of selected coalescent SD pairs
     ! Internal shared variables
     real(RP) :: sd_aslrho(1:22) ! Density of chemical material contained as water-soluble aerosol in super droplets
     integer(RP) :: sd_ncol ! how many times coalescence occurs
@@ -179,10 +180,10 @@ contains
     integer(DP) :: sd_n2    ! multiplicity of super-droplets  with small multiplicity
     integer(i2) :: sd_li1, sd_li2
 
-    integer, allocatable :: pre_sdid1_temp(:)
-    integer, allocatable :: pre_sdid2_temp(:)
-    integer, allocatable :: pre_dmid1_temp(:)
-    integer, allocatable :: pre_dmid2_temp(:)
+    integer, allocatable :: sd_id1_temp(:)
+    integer, allocatable :: sd_id2_temp(:)
+    integer, allocatable :: dm_id1_temp(:)
+    integer, allocatable :: dm_id2_temp(:)
     integer, allocatable :: num_col_temp(:)    ! temporary
     real(RP), allocatable :: sdr1_temp(:)
     real(RP), allocatable :: sdr2_temp(:)
@@ -202,12 +203,12 @@ contains
     integer :: i, j, k, m, n, s   ! index
     integer :: t, tc, tp          ! index
     integer :: ix, jy
-    integer, intent(out) :: num_pair           ! number of coalescent SD pairs
 
     integer :: sort_tag0m
     integer :: sort_freqm
     integer :: icptc, icptp
-    logical :: write_pair_tracking
+    logical :: write_tracking_ids
+    logical :: write_coal
     !--------------------------------------------------------------------
 #ifdef _FAPP_
     ! Section specification for fapp profiler
@@ -925,19 +926,22 @@ contains
 !!$            tp = tc + sort_freq(m)/2
 
 !OCL NORECURRENCE
+    write_tracking_ids = forward_tracking_enable .or. backward_tracking_enable
+    write_coal = coal_output == 1_i2
 
-    write_pair_tracking = backward_tracking_enable
-    if( write_pair_tracking ) then
-       allocate(pre_sdid1_temp(sd_num/2))
-       allocate(pre_sdid2_temp(sd_num/2))
-       allocate(pre_dmid1_temp(sd_num/2))
-       allocate(pre_dmid2_temp(sd_num/2))
+    if( write_coal ) then
+       if( write_tracking_ids ) then
+          allocate(sd_id1_temp(sd_num/2))
+          allocate(sd_id2_temp(sd_num/2))
+          allocate(dm_id1_temp(sd_num/2))
+          allocate(dm_id2_temp(sd_num/2))
+       end if
+       allocate(num_col_temp(sd_num/2))
+       allocate(sdr1_temp(sd_num/2))
+       allocate(sdr2_temp(sd_num/2))
+       allocate(sdn1_temp(sd_num/2))
+       allocate(sdn2_temp(sd_num/2))
     end if
-    allocate(num_col_temp(sd_num/2))
-    allocate(sdr1_temp(sd_num/2))
-    allocate(sdr2_temp(sd_num/2))
-    allocate(sdn1_temp(sd_num/2))
-    allocate(sdn2_temp(sd_num/2))
 
     num_pair = 0
     do m=1,gnum
@@ -967,10 +971,12 @@ contains
           if( sd_ncol<=0 ) cycle  !! no coalesecense
 
           !### coalescence procudure ###!
+          if( write_coal ) then
+             num_pair = num_pair + 1
+             if_coal( icptp ) = 1
+             if_coal( icptc ) = 1
+          end if
 
-          num_pair = num_pair + 1
-          if_coal( icptp ) = 1
-          if_coal( icptc ) = 1
           if( sd_n(icptc) > sd_n(icptp) ) then
 
              sd_n1  = sd_n( icptc )
@@ -978,18 +984,17 @@ contains
              sd_rk1 = sd_rk( icptc )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptc )
-             if( write_pair_tracking ) then
-                pre_sdid1_temp( num_pair ) = pre_sdid( icptc )
-                pre_dmid1_temp( num_pair ) = pre_dmid( icptc )
-             end if
 
              sd_n2  = sd_n( icptp )
              sd_r2  = sd_r( icptp )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptp )
-             if( write_pair_tracking ) then
-                pre_sdid2_temp( num_pair ) = pre_sdid( icptp )
-                pre_dmid2_temp( num_pair ) = pre_dmid( icptp )
+
+             if( write_coal .and. write_tracking_ids ) then
+                sd_id1_temp( num_pair ) = sd_id( icptc )
+                dm_id1_temp( num_pair ) = dm_id( icptc )
+                sd_id2_temp( num_pair ) = sd_id( icptp )
+                dm_id2_temp( num_pair ) = dm_id( icptp )
              end if
 
              do k=1,22
@@ -1005,18 +1010,17 @@ contains
              sd_rk1 = sd_rk( icptp )
              sd_m1  = sd_r1 * sd_r1 * sd_r1
              sd_li1 = sd_liqice( icptp )
-             if( write_pair_tracking ) then
-                pre_sdid1_temp( num_pair ) = pre_sdid( icptp )
-                pre_dmid1_temp( num_pair ) = pre_dmid( icptp )
-             end if
 
              sd_n2  = sd_n( icptc )
              sd_r2  = sd_r( icptc )
              sd_m2  = sd_r2 * sd_r2 * sd_r2
              sd_li2 = sd_liqice( icptc )
-             if( write_pair_tracking ) then
-                pre_sdid2_temp( num_pair ) = pre_sdid( icptc )
-                pre_dmid2_temp( num_pair ) = pre_dmid( icptc )
+
+             if( write_coal .and. write_tracking_ids ) then
+                sd_id1_temp( num_pair ) = sd_id( icptc )
+                dm_id1_temp( num_pair ) = dm_id( icptc )
+                sd_id2_temp( num_pair ) = sd_id( icptp )
+                dm_id2_temp( num_pair ) = dm_id( icptp )
              end if
 
              do k=1,22
@@ -1027,13 +1031,15 @@ contains
 
           end if
 
-          sdr1_temp( num_pair ) = sd_r1
-          sdn1_temp( num_pair ) = sd_n1
-          sdr2_temp( num_pair ) = sd_r2
-          sdn2_temp( num_pair ) = sd_n2
-
           sd_ncol = min( sd_ncol, int(sd_n1/sd_n2,kind=DP) )
-          num_col_temp( num_pair ) = sd_ncol
+
+          if( write_coal ) then
+             sdr1_temp( num_pair ) = sd_r1
+             sdn1_temp( num_pair ) = sd_n1
+             sdr2_temp( num_pair ) = sd_r2
+             sdn2_temp( num_pair ) = sd_n2
+             num_col_temp( num_pair ) = sd_ncol
+          end if
 
           if( sd_n1 > sd_n2*sd_ncol ) then
 
@@ -1131,25 +1137,22 @@ contains
        end do
 
     end do
-    if( num_pair > 0 ) then
-        ! Allocate
-        if( write_pair_tracking ) then
-           allocate(pre_dmid1( num_pair ))
-           allocate(pre_dmid2( num_pair ))
-           allocate(pre_sdid1( num_pair ))
-           allocate(pre_sdid2( num_pair ))
+    if( write_coal .and. num_pair > 0 ) then
+        if( write_tracking_ids ) then
+           allocate(dm_id1( num_pair ))
+           allocate(dm_id2( num_pair ))
+           allocate(sd_id1( num_pair ))
+           allocate(sd_id2( num_pair ))
+           dm_id1 = dm_id1_temp( :num_pair )
+           dm_id2 = dm_id2_temp( :num_pair )
+           sd_id1 = sd_id1_temp( :num_pair )
+           sd_id2 = sd_id2_temp( :num_pair )
         end if
         allocate(num_col( num_pair ))
         allocate(sdr1_out( num_pair ))
         allocate(sdr2_out( num_pair ))
         allocate(sdn1_out( num_pair ))
         allocate(sdn2_out( num_pair ))
-        if( write_pair_tracking ) then
-           pre_dmid1 = pre_dmid1_temp( :num_pair )
-           pre_dmid2 = pre_dmid2_temp( :num_pair )
-           pre_sdid1 = pre_sdid1_temp( :num_pair )
-           pre_sdid2 = pre_sdid2_temp( :num_pair )
-        end if
         num_col = num_col_temp( :num_pair )
         sdr1_out = sdr1_temp( :num_pair )
         sdr2_out = sdr2_temp( :num_pair )
@@ -1157,20 +1160,21 @@ contains
         sdn2_out = sdn2_temp( :num_pair )
     end if
 
-    ! Deallocate
     deallocate( fsort_tag  )
     deallocate( fsort_freq )
-    if( write_pair_tracking ) then
-       deallocate( pre_dmid1_temp )
-       deallocate( pre_dmid2_temp )
-       deallocate( pre_sdid1_temp )
-       deallocate( pre_sdid2_temp )
+    if( write_coal ) then
+       if( write_tracking_ids ) then
+          deallocate( dm_id1_temp )
+          deallocate( dm_id2_temp )
+          deallocate( sd_id1_temp )
+          deallocate( sd_id2_temp )
+       end if
+       deallocate( num_col_temp )
+       deallocate( sdr1_temp )
+       deallocate( sdr2_temp )
+       deallocate( sdn1_temp )
+       deallocate( sdn2_temp )
     end if
-    deallocate( num_col_temp )
-    deallocate( sdr1_temp )
-    deallocate( sdr2_temp )
-    deallocate( sdn1_temp )
-    deallocate( sdn2_temp )
 
 #ifdef _FAPP_
     ! Section specification for fapp profiler

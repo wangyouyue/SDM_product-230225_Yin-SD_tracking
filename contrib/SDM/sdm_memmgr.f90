@@ -27,7 +27,6 @@
 !! @li      2018-02-28 (S.Shima) [add] sd_dtmp3,4,5,6
 !! @li      2018-06-30 (S.Shima) [add] rime mass and number of monomers as SD attributes
 !! @li      2020-07-23 (S.Shima) [add] variables for sdm_dmpvar == 1?? and sdm_dmpvar == 2??
-!! @li      2023-02-28 (C.Yin)   [mod] initialize save index and domain index of super-droplets
 !!
 !<
 !-------------------------------------------------------------------------------
@@ -138,8 +137,8 @@ contains
        allocate(rbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2))
        allocate(sbuf_i4(1:bufsiz1,1:bufsiz2_i4,1:2))
     !else
-       !allocate(rbuf_i4(1:bufsiz1,1:bufsiz2_i4-1,1:2))
-       !allocate(sbuf_i4(1:bufsiz1,1:bufsiz2_i4-1,1:2))
+    !   allocate(rbuf_i4(1:1,1:1,1:2))
+    !   allocate(sbuf_i4(1:1,1:1,1:2))
     !end if
 
     allocate(sdm_itmp1(1:ni_s2c*nj_s2c*nk_s2c+2))
@@ -263,10 +262,10 @@ contains
     allocate(sdv_s2c_restart(1:sdnum_s2c))
     allocate(sdvz_s2c_restart(1:sdnum_s2c))
     allocate(sdasl_s2c_restart(1:sdnum_s2c,1:sdnumasl_s2c))
-    allocate(sdliqice_s2c_restart(1:sdnum_s2c))
     allocate(sdid_s2c_restart(1:sdnum_s2c))
     allocate(dmid_s2c_restart(1:sdnum_s2c))
     allocate(ifcoal_s2c_restart(1:sdnum_s2c))
+    allocate(sdliqice_s2c_restart(1:sdnum_s2c))
     if( sdm_cold ) then
        allocate(sdice_s2c_restart%re(1:sdnum_s2c))
        allocate(sdice_s2c_restart%rp(1:sdnum_s2c))
