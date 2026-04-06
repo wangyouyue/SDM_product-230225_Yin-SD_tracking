@@ -4,9 +4,9 @@
 The **Super-Droplet Method (SDM)**, originally introduced by **Shima et al. (2009)**, represents a significant advancement in Lagrangian cloud microphysics simulations. Unlike traditional Eulerian microphysics schemes, SDM employs **super-droplets (SDs)**, which are computational particles representing a large number of real droplets, aerosols, or precipitation particles with similar properties. This framework enables explicit treatment of key cloud-microphysical processes, including condensation, evaporation, and coalescence, thereby improving the physical interpretability of cloud formation and precipitation evolution.
 
 ## Integration with SCALE-SDM
-The **SCALE (Scalable Computing for Advanced Library and Environment)** framework, developed with co-design by computational and computer science researchers, provides a robust, scalable platform for high-resolution atmospheric simulations (Nishizawa et al., 2015; Sato et al., 2015). SCALE-SDM integrates the SDM within this framework, offering a powerful tool for simulating cloud microphysics and dynamics. For more information on the SCALE platform, please visit the [SCALE's official website](http://scale.aics.riken.jp/).
+The **SCALE (Scalable Computing for Advanced Library and Environment)** framework, developed with co-design by computational and computer science researchers, provides a robust, scalable platform for high-resolution atmospheric simulations (Nishizawa et al., 2015; Sato et al., 2015). SCALE-SDM integrates the SDM within this framework, offering a powerful tool for simulating cloud microphysics and dynamics. For more information on the SCALE platform, please visit the [SCALE's official website](https://scale.riken.jp/) (last access: 6 April 2026).
 
-This repository integrates SDM into SCALE version 5.2.6, leveraging both SDM’s microphysical precision and SCALE’s computational scalability to facilitate simulations of cloud systems that capture the complex interactions between microphysics and atmospheric dynamics. Further details about this version of SCALE can be explored in the [SCALE version 5.2.6 archives](https://scale.riken.jp/archives/5.2.6/).
+This repository integrates SDM into SCALE version 5.2.6, leveraging both SDM’s microphysical precision and SCALE’s computational scalability to facilitate simulations of cloud systems that capture the complex interactions between microphysics and atmospheric dynamics. Further details about this version of SCALE can be explored in the [SCALE version 5.2.6 archives](https://scale.riken.jp/archives/5.2.6/) (last access: 6 April 2026).
 
 # Super-Droplet Tracking (Merged Forward/Backward Version)
 
@@ -267,7 +267,7 @@ where:
 - `sdm_noise_amp` is the internal runtime copy of the user parameter `random_perturbation_amp`.
 
 ## 10. Installation and Usage
-For more details, please see [the official user guide of SCALE](https://scale.riken.jp/archives/scale_users_guide_En.v5.2.6.pdf).
+For more details, please see [the official user guide of SCALE](https://scale.riken.jp/archives/scale_users_guide_En.v5.2.6.pdf) (last access: 6 April 2026).
 
 ### Prerequisites
 - **Compilers:** Fortran and C compilers are required.
@@ -444,6 +444,9 @@ python evaluate_representativeness.py
 - Compare sampled cases against full-tracking references within the same selection mode.
 - Evaluate both scalar metrics and distribution metrics; agreement in one does not guarantee agreement in the other.
 - Use multi-seed spread as an uncertainty estimate for sampling robustness.
+
+## Acknowledgements
+I would like to sincerely thank my advisor, Prof. Shin-ichiro Shima, for his invaluable suggestions on the code and algorithms, his scientific and technical guidance, and his generous support in providing computational resources. I would also like to express my special gratitude to my Ph.D. supervisor, Prof. Chunsong Lu, for his mentorship and cultivation throughout my doctoral studies. I would also like to thank Mikito Toda for his generous support and informative discussions.
 
 ## Support and Community
 Questions, issues, and discussions about SCALE-SDM can be directed here. Contributions and feedback are highly encouraged to enhance the model's capabilities and user experience. Please feel free to contact me: yinchongzhi@gmail.com. :grin:

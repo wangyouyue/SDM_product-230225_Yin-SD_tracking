@@ -470,7 +470,7 @@ contains
          mype => PRC_myrank
     use m_sdm_common, only: &
          i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
-         INVALID_i4, backward_tracking_enable, coalescence_output_enable
+         INVALID_i4, forward_tracking_enable, backward_tracking_enable, coalescence_output_enable
 
     implicit none
 
@@ -514,8 +514,8 @@ contains
     character(len=80) :: tracking_id_label
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
-    integer,parameter :: nc_deflate       = .true. ! turn on NetCDF compresion
-    integer,parameter :: nc_shuffle       = .true. ! turn on NetCDF shuffle filter
+    integer,parameter :: nc_deflate       = 1 ! turn on NetCDF compresion
+    integer,parameter :: nc_shuffle       = 1 ! turn on NetCDF shuffle filter
     character(len=100) :: ftag ! =filetag or ''(default)
 
     !--- output Super Droplets in NetCDF format
@@ -783,8 +783,8 @@ contains
     integer :: sd_dmp_time_idx_id, sd_dmp_time_id
 
     integer,parameter :: nc_deflate_level = 1      ! NetCDF compression level {1,..,9}
-    integer,parameter :: nc_deflate       = .true. ! turn on NetCDF compresion
-    integer,parameter :: nc_shuffle       = .true. ! turn on NetCDF shuffle filter
+    integer,parameter :: nc_deflate       = 1 ! turn on NetCDF compresion
+    integer,parameter :: nc_shuffle       = 1 ! turn on NetCDF shuffle filter
 
     logical :: newfile
     character(len=100) :: var_name
@@ -822,6 +822,7 @@ contains
        if(filenum == max_filenum) then
           write(*,*) "sdm_outnetcdf_hist: ", "Exceeds the maximum file tag numbers allowed.", &
                &     "Consider increasing 'max_filenum' in sdm_io.f90"
+          fileid = 1 ! Provide a safe fallback before aborting to avoid undefined behavior
           call PRC_MPIstop
        else
           filenum = filenum + 1
@@ -1157,8 +1158,8 @@ contains
     logical :: write_tracking_ids
 
     integer,parameter :: nc_deflate_level = 1
-    integer,parameter :: nc_deflate       = .true.
-    integer,parameter :: nc_shuffle       = .true.
+    integer,parameter :: nc_deflate       = 1
+    integer,parameter :: nc_shuffle       = 1
     character(len=100) :: ftag
 
     if( num_pair <= 0 ) return

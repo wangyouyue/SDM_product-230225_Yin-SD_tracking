@@ -139,7 +139,7 @@ contains
     real(RP), intent(out) :: c_rate(1:sd_num) ! coalescence probability
     ! Internal shared variables
     real(RP) :: sd_aslrho(1:22) ! Density of chemical material contained as water-soluble aerosol in super droplets
-    integer  :: sd_ncol ! how many times coalescence occurs
+    integer(DP)  :: sd_ncol ! how many times coalescence occurs
     integer :: freq_max ! get the maximum number of super-droplets in each grid
     integer :: hfreq_max ! hfreq_max / 2
     integer :: ipremium  ! premium coef. for coalescence
@@ -1325,7 +1325,7 @@ contains
     ! calculate the outcome of droplet-droplet coalescence
     use m_sdm_common, only: O_THRD
 
-    integer, intent(in)     :: sd_ncol ! how many times coalescence occurs
+    integer(DP), intent(in)     :: sd_ncol ! how many times coalescence occurs
     real(RP), intent(in)    :: sd_r1   ! radius of super-droplets with larger multiplicity
     real(RP), intent(inout) :: sd_r2   ! radius of super-droplets with smaller multiplicity
 
@@ -1352,7 +1352,7 @@ contains
 
     use m_sdm_common, only: O_THRD,F_THRD,ONE_PI,STAT_ICE,STAT_LIQ,i2
 
-    integer, intent(in)     :: sd_ncol ! how many times coalescence occurs
+    integer(DP), intent(in)     :: sd_ncol ! how many times coalescence occurs
     real(RP), intent(in)    :: sd_r1   ! radius of liquid droplet with larger multiplicity
     real(RP), intent(in)    :: sd_r2   ! radius of liquid droplet with smaller multiplicity
     real(RP), intent(in)    :: sd_re1  ! equatorial radius of ice particle with larger multiplicity
@@ -1730,7 +1730,7 @@ contains
          rhoi_mks => CONST_DICE  ! density of ice [kg/m^3]
     use m_sdm_common, only: F_THRD,ONE_PI
 
-    integer, intent(in)     :: sd_ncol ! how many times coalescence occurs
+    integer(DP), intent(in)     :: sd_ncol ! how many times coalescence occurs
     real(RP), intent(in)    :: sd_re1  ! equatorial radius of ice particle with larger multiplicity
     real(RP), intent(inout) :: sd_re2  ! equatorial radius of ice particle with smaller multiplicity
     real(RP), intent(in)    :: sd_rp1  ! polar radius of ice particle with larger multiplicity
@@ -1800,7 +1800,7 @@ contains
          rhoi_mks => CONST_DICE  ! density of ice [kg/m^3]
     use m_sdm_common, only: F_THRD,ONE_PI
 
-    integer, intent(in)     :: sd_ncol ! how many times coalescence occurs
+    integer(DP), intent(in)     :: sd_ncol ! how many times coalescence occurs
     real(RP), intent(in)    :: sd_re1  ! equatorial radius of ice particle with larger multiplicity
     real(RP), intent(inout) :: sd_re2  ! equatorial radius of ice particle with smaller multiplicity
     real(RP), intent(in)    :: sd_rp1  ! polar radius of ice particle with larger multiplicity
