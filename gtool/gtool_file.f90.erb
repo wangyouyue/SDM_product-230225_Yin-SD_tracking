@@ -28,6 +28,11 @@ module gtool_file
   use dc_types, only: &
        DP, &
        SP
+  use, intrinsic :: iso_c_binding, only: &
+       c_double, &
+       c_int32_t, &
+       c_loc, &
+       c_ptr
   !-----------------------------------------------------------------------------
   implicit none
   private
@@ -130,6 +135,48 @@ module gtool_file
      module procedure FileSetGlobalAttributeDouble
   end interface FileSetGlobalAttribute
 
+  interface
+     subroutine file_write_data_c( &
+          fid,       &
+          vid,       &
+          var,       &
+          t_start,   &
+          t_end,     &
+          precision, &
+          ndims,     &
+          start,     &
+          count,     &
+          error      &
+          ) bind(C, name='file_write_data_')
+       use, intrinsic :: iso_c_binding, only: &
+            c_double, &
+            c_int32_t, &
+            c_ptr
+       implicit none
+       integer(c_int32_t), intent(in)  :: fid
+       integer(c_int32_t), intent(in)  :: vid
+       type(c_ptr),        value       :: var
+       real(c_double),     intent(in)  :: t_start
+       real(c_double),     intent(in)  :: t_end
+       integer(c_int32_t), intent(in)  :: precision
+       integer(c_int32_t), intent(in)  :: ndims
+       integer(c_int32_t), intent(in)  :: start(*)
+       integer(c_int32_t), intent(in)  :: count(*)
+       integer(c_int32_t), intent(out) :: error
+     end subroutine file_write_data_c
+  end interface
+
+  interface file_write_data
+     module procedure file_write_data_1d_sp
+     module procedure file_write_data_1d_dp
+     module procedure file_write_data_2d_sp
+     module procedure file_write_data_2d_dp
+     module procedure file_write_data_3d_sp
+     module procedure file_write_data_3d_dp
+     module procedure file_write_data_4d_sp
+     module procedure file_write_data_4d_dp
+  end interface file_write_data
+
   !-----------------------------------------------------------------------------
   !
   !++ Public parameters & variables
@@ -160,6 +207,366 @@ module gtool_file
   character(len=LOG_LMSG),   private            :: message
 
 contains
+  subroutine file_write_data_1d_sp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(SP), intent(in), target :: var(:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_1d_sp
+
+  subroutine file_write_data_1d_dp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(DP), intent(in), target :: var(:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_1d_dp
+
+  subroutine file_write_data_2d_sp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(SP), intent(in), target :: var(:,:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1,1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_2d_sp
+
+  subroutine file_write_data_2d_dp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(DP), intent(in), target :: var(:,:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1,1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_2d_dp
+
+  subroutine file_write_data_3d_sp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(SP), intent(in), target :: var(:,:,:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1,1,1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_3d_sp
+
+  subroutine file_write_data_3d_dp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(DP), intent(in), target :: var(:,:,:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1,1,1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_3d_dp
+
+  subroutine file_write_data_4d_sp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(SP), intent(in), target :: var(:,:,:,:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1,1,1,1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_4d_sp
+
+  subroutine file_write_data_4d_dp( &
+       fid,       &
+       vid,       &
+       var,       &
+       t_start,   &
+       t_end,     &
+       precision, &
+       ndims,     &
+       start,     &
+       count,     &
+       error      &
+       )
+    implicit none
+
+    integer,  intent(in)  :: fid
+    integer,  intent(in)  :: vid
+    real(DP), intent(in), target :: var(:,:,:,:)
+    real(DP), intent(in)  :: t_start
+    real(DP), intent(in)  :: t_end
+    integer,  intent(in)  :: precision
+    integer,  intent(in)  :: ndims
+    integer,  intent(in)  :: start(:)
+    integer,  intent(in)  :: count(:)
+    integer,  intent(out) :: error
+
+    integer(c_int32_t) :: fid_c, vid_c, precision_c, ndims_c, error_c
+    integer(c_int32_t) :: start_c(size(start)), count_c(size(count))
+    real(c_double) :: t_start_c, t_end_c
+
+    fid_c       = int(fid, c_int32_t)
+    vid_c       = int(vid, c_int32_t)
+    precision_c = int(precision, c_int32_t)
+    ndims_c     = int(ndims, c_int32_t)
+    start_c     = int(start, c_int32_t)
+    count_c     = int(count, c_int32_t)
+    t_start_c   = real(t_start, c_double)
+    t_end_c     = real(t_end, c_double)
+
+    call file_write_data_c(fid_c, vid_c, c_loc(var(1,1,1,1)), t_start_c, t_end_c, precision_c, ndims_c, start_c, count_c, error_c)
+
+    error = int(error_c, kind(error))
+
+    return
+  end subroutine file_write_data_4d_dp
+
   !-----------------------------------------------------------------------------
   subroutine FileCreate( &
        fid,         & ! (out)

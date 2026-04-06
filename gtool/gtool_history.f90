@@ -191,7 +191,7 @@ module gtool_history
   type(vars),                 private, allocatable :: History_vars(:)
   logical,                    private, allocatable :: History_axis_written(:) !> Axis for this file is already written?
 
-  integer,                    private, parameter   :: History_axis_limit    = 100       !> number limit of axes
+  integer,                    private, parameter   :: History_axis_limit    = 500       !> number limit of axes
   integer,                    private              :: History_axis_count    =   0
   type(axis),                 private              :: History_axis(History_axis_limit)
 
