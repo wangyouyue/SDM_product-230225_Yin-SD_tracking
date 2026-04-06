@@ -28,7 +28,7 @@ module m_sdm_io
 
   implicit none
   private
-  public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_coal_outnetcdf,sdm_assign_tracking_subset
+  public :: sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_coal_outnetcdf,sdm_assign_tracking_subset,sdm_interest_id_outnetcdf
 
 contains
   subroutine sdm_outasci(otime,sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sdi,sdn_dmpnskip)
@@ -724,6 +724,12 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF) of Super Droplet'
 
+    if( forward_tracking_enable .and. present(filetag) ) then
+      if( trim(filetag) == 'selected' ) then
+        call sdm_write_tracking_id_file(basename_sd_out, sd_num, sd_id, dm_id)
+      end if
+    end if
+
     if( write_coal ) then
       if_coal(1:sd_num) = 0
     end if
@@ -1093,6 +1099,12 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF_HIST) of Super Droplet'
 
+    if( forward_tracking_enable .and. present(filetag) ) then
+      if( trim(filetag) == 'selected' ) then
+        call sdm_write_tracking_id_file(basename_sd_out, sd_num, sd_id, dm_id)
+      end if
+    end if
+
     if( backward_tracking_enable ) then
       call sdm_assign_tracking_subset(sd_num, sd_z, sd_r, sd_id, dm_id, if_coal)
     end if
@@ -1100,6 +1112,226 @@ contains
     return
 
   end subroutine sdm_outnetcdf_hist
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine sdm_write_tracking_id_file(basename_sd_out, sd_num, sd_id, dm_id)
+    use scale_stdio
+    use scale_process, only: &
+         mype => PRC_myrank
+    use scale_process, only: &
+         PRC_MPIstop
+    use m_sdm_common, only: &
+         INVALID_i4
+
+    implicit none
+
+    character(len=*), intent(in) :: basename_sd_out
+    integer, intent(in) :: sd_num
+    integer, intent(in) :: sd_id(1:sd_num)
+    integer, intent(in) :: dm_id(1:sd_num)
+
+    integer :: fid, ierr, n
+    character(len=H_LONG) :: tracking_id_filename
+
+    tracking_id_filename = trim(basename_sd_out) // '.ids'
+    fid = IO_get_available_fid()
+
+    open(fid, file=trim(tracking_id_filename), access='sequential', status='replace', form='formatted', iostat=ierr)
+    if( ierr /= 0 ) then
+      write(*,*) 'sdm_write_tracking_id_file', 'Write error', trim(tracking_id_filename), mype
+      call PRC_MPIstop
+    end if
+
+    do n = 1, sd_num
+      if( sd_id(n) <= INVALID_i4 .or. dm_id(n) <= INVALID_i4 ) cycle
+      write(fid,'(I0,1X,I0)') dm_id(n), sd_id(n)
+    end do
+
+    close(fid)
+
+    if( IO_L ) write(IO_FID_LOG,*) '*** Wrote tracking ID list:', trim(tracking_id_filename)
+
+    return
+  end subroutine sdm_write_tracking_id_file
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine sdm_interest_id_outnetcdf(otime, sd_num, sd_r, sd_id, dm_id, if_coal)
+    use netcdf
+    use scale_precision
+    use scale_stdio
+    use scale_process, only: &
+         mype => PRC_myrank
+    use scale_process, only: &
+         PRC_MPIstop
+    use m_sdm_common, only: &
+         INVALID_i4, tracking_id_output_basename, &
+         tracking_interest_radius_enable, tracking_interest_radius_threshold, &
+         tracking_interest_coalescence_enable
+
+    implicit none
+
+    real(DP), intent(in) :: otime
+    integer, intent(in) :: sd_num
+    real(RP), intent(in) :: sd_r(1:sd_num)
+    integer, intent(in) :: sd_id(1:sd_num)
+    integer, intent(in) :: dm_id(1:sd_num)
+    integer(i2), intent(in) :: if_coal(1:sd_num)
+
+    character(len=H_LONG) :: tracking_id_filename
+    integer :: n, m, ncid, dimid, status, nf90_real_precision
+    integer :: dm_id_varid, sd_id_varid, time_varid, radius_varid
+    integer :: radius_flag_varid, coal_flag_varid
+    integer :: existing_count, append_count, candidate_count
+    integer, dimension(1) :: start1, count1
+    logical :: file_exists, selected, duplicated
+    integer, allocatable :: append_dm_id(:), append_sd_id(:)
+    integer, allocatable :: existing_dm_id(:), existing_sd_id(:)
+    integer, allocatable :: append_radius_flag(:), append_coal_flag(:)
+    real(RP), allocatable :: append_radius(:)
+    real(DP), allocatable :: append_time(:)
+
+    if( len_trim(tracking_id_output_basename) == 0 ) return
+    if( .not. tracking_interest_radius_enable .and. .not. tracking_interest_coalescence_enable ) return
+
+    if(RP == SP)then
+       nf90_real_precision = NF90_FLOAT
+    else
+       nf90_real_precision = NF90_DOUBLE
+    end if
+
+    if( len_trim(tracking_id_output_basename) >= 3 ) then
+      if( tracking_id_output_basename(len_trim(tracking_id_output_basename)-2:len_trim(tracking_id_output_basename)) == '.nc' ) then
+        tracking_id_filename = trim(adjustl(tracking_id_output_basename))
+      else
+        write(tracking_id_filename,'(A,".pe",I6.6,".nc")') trim(adjustl(tracking_id_output_basename)), mype
+      end if
+    else
+      write(tracking_id_filename,'(A,".pe",I6.6,".nc")') trim(adjustl(tracking_id_output_basename)), mype
+    end if
+
+    candidate_count = 0
+    do n = 1, sd_num
+      if( sd_id(n) <= INVALID_i4 .or. dm_id(n) <= INVALID_i4 ) cycle
+      selected = .false.
+      if( tracking_interest_radius_enable ) then
+        if( sd_r(n) >= tracking_interest_radius_threshold ) selected = .true.
+      end if
+      if( tracking_interest_coalescence_enable ) then
+        if( if_coal(n) > 0_i2 ) selected = .true.
+      end if
+      if( selected ) candidate_count = candidate_count + 1
+    end do
+
+    if( candidate_count <= 0 ) return
+
+    inquire(file=trim(tracking_id_filename), exist=file_exists)
+
+    if( file_exists ) then
+      call check_netcdf( nf90_open(trim(tracking_id_filename), NF90_WRITE, ncid) )
+      call check_netcdf( nf90_inq_dimid(ncid, 'tracked_id', dimid) )
+      call check_netcdf( nf90_inquire_dimension(ncid, dimid, len=existing_count) )
+      call check_netcdf( nf90_inq_varid(ncid, 'dm_id', dm_id_varid) )
+      call check_netcdf( nf90_inq_varid(ncid, 'sd_id', sd_id_varid) )
+      call check_netcdf( nf90_inq_varid(ncid, 'first_time', time_varid) )
+      call check_netcdf( nf90_inq_varid(ncid, 'sd_r', radius_varid) )
+      call check_netcdf( nf90_inq_varid(ncid, 'flag_radius', radius_flag_varid) )
+      call check_netcdf( nf90_inq_varid(ncid, 'flag_coalescence', coal_flag_varid) )
+
+      if( existing_count > 0 ) then
+        allocate(existing_dm_id(existing_count), existing_sd_id(existing_count))
+        call check_netcdf( nf90_get_var(ncid, dm_id_varid, existing_dm_id) )
+        call check_netcdf( nf90_get_var(ncid, sd_id_varid, existing_sd_id) )
+      end if
+    else
+      call check_netcdf( nf90_create(trim(tracking_id_filename), NF90_NETCDF4, ncid) )
+      call check_netcdf( nf90_def_dim(ncid, 'tracked_id', NF90_UNLIMITED, dimid) )
+      call check_netcdf( nf90_def_var(ncid, 'dm_id', NF90_INT, dimid, dm_id_varid) )
+      call check_netcdf( nf90_def_var(ncid, 'sd_id', NF90_INT, dimid, sd_id_varid) )
+      call check_netcdf( nf90_def_var(ncid, 'first_time', NF90_DOUBLE, dimid, time_varid) )
+      call check_netcdf( nf90_def_var(ncid, 'sd_r', nf90_real_precision, dimid, radius_varid) )
+      call check_netcdf( nf90_def_var(ncid, 'flag_radius', NF90_INT, dimid, radius_flag_varid) )
+      call check_netcdf( nf90_def_var(ncid, 'flag_coalescence', NF90_INT, dimid, coal_flag_varid) )
+      call check_netcdf( nf90_put_att(ncid, NF90_GLOBAL, 'tracking_id_output_basename', trim(tracking_id_output_basename)) )
+      call check_netcdf( nf90_enddef(ncid) )
+      existing_count = 0
+    end if
+
+    allocate(append_dm_id(candidate_count), append_sd_id(candidate_count))
+    allocate(append_radius(candidate_count), append_time(candidate_count))
+    allocate(append_radius_flag(candidate_count), append_coal_flag(candidate_count))
+
+    append_count = 0
+    do n = 1, sd_num
+      if( sd_id(n) <= INVALID_i4 .or. dm_id(n) <= INVALID_i4 ) cycle
+      selected = .false.
+      if( tracking_interest_radius_enable ) then
+        if( sd_r(n) >= tracking_interest_radius_threshold ) selected = .true.
+      end if
+      if( tracking_interest_coalescence_enable ) then
+        if( if_coal(n) > 0_i2 ) selected = .true.
+      end if
+      if( .not. selected ) cycle
+
+      duplicated = .false.
+      if( existing_count > 0 ) then
+        do m = 1, existing_count
+          if( dm_id(n) == existing_dm_id(m) .and. sd_id(n) == existing_sd_id(m) ) then
+            duplicated = .true.
+            exit
+          end if
+        end do
+      end if
+      if( duplicated ) cycle
+
+      do m = 1, append_count
+        if( dm_id(n) == append_dm_id(m) .and. sd_id(n) == append_sd_id(m) ) then
+          duplicated = .true.
+          exit
+        end if
+      end do
+      if( duplicated ) cycle
+
+      append_count = append_count + 1
+      append_dm_id(append_count) = dm_id(n)
+      append_sd_id(append_count) = sd_id(n)
+      append_time(append_count) = otime
+      append_radius(append_count) = real(sd_r(n), kind=RP)
+      if( tracking_interest_radius_enable .and. sd_r(n) >= tracking_interest_radius_threshold ) then
+        append_radius_flag(append_count) = 1
+      else
+        append_radius_flag(append_count) = 0
+      end if
+      if( tracking_interest_coalescence_enable .and. if_coal(n) > 0_i2 ) then
+        append_coal_flag(append_count) = 1
+      else
+        append_coal_flag(append_count) = 0
+      end if
+    end do
+
+    if( append_count > 0 ) then
+      start1(1) = existing_count + 1
+      count1(1) = append_count
+      call check_netcdf( nf90_put_var(ncid, dm_id_varid, append_dm_id(1:append_count), start=start1, count=count1) )
+      call check_netcdf( nf90_put_var(ncid, sd_id_varid, append_sd_id(1:append_count), start=start1, count=count1) )
+      call check_netcdf( nf90_put_var(ncid, time_varid, append_time(1:append_count), start=start1, count=count1) )
+      call check_netcdf( nf90_put_var(ncid, radius_varid, append_radius(1:append_count), start=start1, count=count1) )
+      call check_netcdf( nf90_put_var(ncid, radius_flag_varid, append_radius_flag(1:append_count), start=start1, count=count1) )
+      call check_netcdf( nf90_put_var(ncid, coal_flag_varid, append_coal_flag(1:append_count), start=start1, count=count1) )
+    end if
+
+    status = nf90_close(ncid)
+    if( status /= nf90_noerr ) then
+      write(*,*) 'sdm_interest_id_outnetcdf', 'Write error', trim(tracking_id_filename), mype
+      call PRC_MPIstop
+    end if
+
+    if( allocated(append_dm_id) ) deallocate(append_dm_id, append_sd_id)
+    if( allocated(append_radius) ) deallocate(append_radius, append_time)
+    if( allocated(append_radius_flag) ) deallocate(append_radius_flag, append_coal_flag)
+    if( allocated(existing_dm_id) ) deallocate(existing_dm_id, existing_sd_id)
+
+    if( IO_L .and. append_count > 0 ) write(IO_FID_LOG,*) '*** Updated tracking interest ID file:', trim(tracking_id_filename), append_count
+
+    return
+  end subroutine sdm_interest_id_outnetcdf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine check_netcdf(status)
     use netcdf

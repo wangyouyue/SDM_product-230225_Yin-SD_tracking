@@ -496,6 +496,11 @@ module m_sdm_common
   integer, save :: tracking_nr_bin = 10
   integer, save :: tracking_min_per_bin = 1
   logical, save :: tracking_fallback_to_random = .true.
+  character(len=H_LONG), save :: tracking_id_input_basename = ''
+  character(len=H_LONG), save :: tracking_id_output_basename = ''
+  logical, save :: tracking_interest_radius_enable = .false.
+  real(RP), save :: tracking_interest_radius_threshold = 0.0_RP
+  logical, save :: tracking_interest_coalescence_enable = .false.
   logical, save :: tracking_sample_initialized = .false.
   real(DP), save :: tracking_time_id_assign = 0.0_DP
   real(DP), save :: tracking_time_boundary_x = 0.0_DP
@@ -655,6 +660,11 @@ module m_sdm_common
        tracking_nr_bin,     &
        tracking_min_per_bin, &
        tracking_fallback_to_random, &
+       tracking_id_input_basename, &
+       tracking_id_output_basename, &
+       tracking_interest_radius_enable, &
+       tracking_interest_radius_threshold, &
+       tracking_interest_coalescence_enable, &
        coalescence_output_enable, &
        random_perturbation_enable, &
        random_perturbation_amp, &

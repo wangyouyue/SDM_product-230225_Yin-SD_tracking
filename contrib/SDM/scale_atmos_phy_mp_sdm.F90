@@ -806,7 +806,7 @@ contains
        P00   => CONST_PRE00
 
     use m_sdm_io, only: &
-       sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist
+       sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_interest_id_outnetcdf
     use m_sdm_coordtrans, only: &
        sdm_rk2z
     use m_sdm_fluidconv, only: &
@@ -876,6 +876,11 @@ contains
 
     !-------------------------------------------------------------------------------------------------------------------------------
 
+    if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
+         ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
+       call sdm_interest_id_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c)
+    end if
+
 #ifdef _FIPP_
     ! Section specification for fipp profiler
     call fipp_start()
@@ -912,7 +917,8 @@ contains
                       sdm_rdnc,sdm_sdnmlvol,sdm_aslset,   &
                       sdm_inisdnc,sdm_zlower,             &
                       sdm_zupper,sdm_calvar,              &
-                      zph_crs, tracking_selection_mode,    &
+                     zph_crs, tracking_selection_mode,    &
+                     tracking_id_input_basename,         &
                       tracking_fraction, max_tracked_sds,  &
                       tracking_height_min, tracking_height_max, &
                       tracking_radius_min, tracking_radius_max, &
@@ -1448,6 +1454,7 @@ contains
 !                         qwtr_crs,zph_crs,                   &
 !                         jcb,                                &
                          zph_crs, tracking_selection_mode,    &
+                         tracking_id_input_basename,         &
                          tracking_fraction, max_tracked_sds,  &
                          tracking_height_min, tracking_height_max, &
                          tracking_radius_min, tracking_radius_max, &
@@ -1486,6 +1493,7 @@ contains
       use m_sdm_meltfreeze, only: &
            sdm_meltfreeze
       use m_sdm_idutil, only: &
+           sdm_select_particles_from_id_file, &
            sdm_select_stratified_random_particles
 
       real(RP), intent(in) :: DENS(KA,IA,JA) ! Density     [kg/m3]
@@ -1504,6 +1512,7 @@ contains
       real(RP),intent(in) :: sdm_zupper   ! Upper limitaion of initial SDs position
       real(RP),intent(in) :: zph_crs(KA,IA,JA)  ! z physical coordinates
       character(len=*), intent(in) :: tracking_selection_mode
+      character(len=*), intent(in) :: tracking_id_input_basename
       real(RP), intent(in) :: tracking_fraction
       integer, intent(in) :: max_tracked_sds
       real(RP), intent(in) :: tracking_height_min
@@ -2039,10 +2048,22 @@ contains
       end if
 
       time_id_start = mpi_wtime()
-      call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, tracking_selection_mode, tracking_fraction, &
-           max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
-           tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
-           dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+      if( backward_tracking_enable .and. .not. tracking_sample_initialized .and. &
+           len_trim(tracking_id_input_basename) > 0 ) then
+         call sdm_select_particles_from_id_file(sdnum_s2c, tracking_id_input_basename, tracking_sample_initialized, &
+              sdid_s2c, dmid_s2c, ifcoal_s2c, status_rdm)
+      else if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
+           ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
+         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, tracking_selection_mode, 1.0_RP, &
+              0, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+              tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+              dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+      else
+         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, tracking_selection_mode, tracking_fraction, &
+              max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+              tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+              dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+      end if
       time_id_end = mpi_wtime()
       tracking_time_id_assign = tracking_time_id_assign + ( time_id_end - time_id_start )
       tracking_count_id_assign = tracking_count_id_assign + 1

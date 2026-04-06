@@ -86,7 +86,8 @@ module m_sdm_idutil
 
   implicit none
   private
-  public :: sdm_sort,sdm_getperm,sdm_copy_selected_sd,sdm_select_stratified_random_particles
+  public :: sdm_sort,sdm_getperm,sdm_copy_selected_sd,sdm_select_stratified_random_particles, &
+       sdm_select_particles_from_id_file
 
 contains
   subroutine sdm_getperm(freq_max,ni_sdm,nj_sdm,nk_sdm,sd_num,    &
@@ -531,6 +532,188 @@ contains
 
   end subroutine sdm_copy_selected_sd
 !---------------------------------------------------------------------------------------------------------------------------------
+  subroutine sdm_select_particles_from_id_file(sd_num, tracking_id_input_basename, tracking_sample_initialized, sd_id, dm_id, if_coal, status_rdm)
+    use netcdf
+    use scale_stdio, only: &
+         H_LONG, IO_L, IO_FID_LOG, IO_get_available_fid
+    use scale_process, only: &
+         mype => PRC_myrank
+    use m_sdm_common, only: &
+         i2, INVALID_i4
+
+    implicit none
+
+    integer, intent(in) :: sd_num
+    character(len=*), intent(in) :: tracking_id_input_basename
+    logical, intent(inout) :: tracking_sample_initialized
+    integer, intent(inout) :: sd_id(1:sd_num)
+    integer, intent(inout) :: dm_id(1:sd_num)
+    integer(i2), intent(inout) :: if_coal(1:sd_num)
+    integer, intent(out) :: status_rdm
+
+    character(len=H_LONG) :: input_filename
+    character(len=512) :: linebuf
+    integer :: fid, ierr, n, m, pair_cnt, ios, ncid, dimid, varid
+    integer, allocatable :: target_sd_id(:), target_dm_id(:)
+    logical :: do_track, file_exists, is_netcdf
+
+    status_rdm = 0
+    input_filename = trim(adjustl(tracking_id_input_basename))
+    is_netcdf = .false.
+
+    if( len_trim(input_filename) == 0 ) then
+      status_rdm = 1
+      return
+    end if
+
+    if( len_trim(input_filename) >= 3 ) then
+      if( input_filename(len_trim(input_filename)-2:len_trim(input_filename)) == '.nc' ) then
+        is_netcdf = .true.
+      end if
+    end if
+
+    if( .not. is_netcdf ) then
+      if( len_trim(input_filename) >= 4 ) then
+        if( input_filename(len_trim(input_filename)-3:len_trim(input_filename)) /= '.ids' ) then
+          write(input_filename,'(A,".pe",I6.6,".nc")') trim(adjustl(tracking_id_input_basename)), mype
+          inquire(file=trim(input_filename), exist=file_exists)
+          if( file_exists ) then
+            is_netcdf = .true.
+          else
+            write(input_filename,'(A,".pe",I6.6,".ids")') trim(adjustl(tracking_id_input_basename)), mype
+          end if
+        end if
+      else
+        write(input_filename,'(A,".pe",I6.6,".nc")') trim(adjustl(tracking_id_input_basename)), mype
+        inquire(file=trim(input_filename), exist=file_exists)
+        if( file_exists ) then
+          is_netcdf = .true.
+        else
+          write(input_filename,'(A,".pe",I6.6,".ids")') trim(adjustl(tracking_id_input_basename)), mype
+        end if
+      end if
+    end if
+
+    if( is_netcdf ) then
+      ierr = nf90_open(trim(input_filename), NF90_NOWRITE, ncid)
+      if( ierr /= nf90_noerr ) then
+        if( IO_L ) write(IO_FID_LOG,*) '*** WARNING (sdm_select_particles_from_id_file): failed to open tracking ID NetCDF file:', trim(input_filename)
+        status_rdm = 2
+        return
+      end if
+
+      ierr = nf90_inq_dimid(ncid, 'tracked_id', dimid)
+      if( ierr /= nf90_noerr ) then
+        ios = nf90_close(ncid)
+        if( IO_L ) write(IO_FID_LOG,*) '*** WARNING (sdm_select_particles_from_id_file): missing tracked_id dimension:', trim(input_filename)
+        status_rdm = 3
+        return
+      end if
+
+      ierr = nf90_inquire_dimension(ncid, dimid, len=pair_cnt)
+      if( ierr /= nf90_noerr ) then
+        ios = nf90_close(ncid)
+        if( IO_L ) write(IO_FID_LOG,*) '*** WARNING (sdm_select_particles_from_id_file): failed to inspect tracked_id dimension:', trim(input_filename)
+        status_rdm = 3
+        return
+      end if
+
+      if( pair_cnt <= 0 ) then
+        ios = nf90_close(ncid)
+        do n = 1, sd_num
+          sd_id(n) = INVALID_i4
+          dm_id(n) = INVALID_i4
+          if_coal(n) = 0_i2
+        end do
+        tracking_sample_initialized = .true.
+        return
+      end if
+
+      allocate(target_dm_id(pair_cnt), target_sd_id(pair_cnt))
+
+      ierr = nf90_inq_varid(ncid, 'dm_id', varid)
+      if( ierr == nf90_noerr ) ierr = nf90_get_var(ncid, varid, target_dm_id)
+      if( ierr == nf90_noerr ) ierr = nf90_inq_varid(ncid, 'sd_id', varid)
+      if( ierr == nf90_noerr ) ierr = nf90_get_var(ncid, varid, target_sd_id)
+      ios = nf90_close(ncid)
+      if( ierr /= nf90_noerr ) then
+        if( IO_L ) write(IO_FID_LOG,*) '*** WARNING (sdm_select_particles_from_id_file): failed to read tracking IDs from NetCDF:', trim(input_filename)
+        deallocate(target_dm_id, target_sd_id)
+        status_rdm = 3
+        return
+      end if
+    else
+      fid = IO_get_available_fid()
+      open(unit=fid, file=trim(input_filename), form='formatted', status='old', action='read', iostat=ierr)
+      if( ierr /= 0 ) then
+        if( IO_L ) write(IO_FID_LOG,*) '*** WARNING (sdm_select_particles_from_id_file): failed to open tracking ID file:', trim(input_filename)
+        status_rdm = 2
+        return
+      end if
+
+      pair_cnt = 0
+      do
+        read(fid,'(A)',iostat=ierr) linebuf
+        if( ierr /= 0 ) exit
+        if( len_trim(linebuf) == 0 ) cycle
+        if( linebuf(1:1) == '#' ) cycle
+        read(linebuf,*,iostat=ios) m, n
+        if( ios /= 0 ) cycle
+        pair_cnt = pair_cnt + 1
+      end do
+
+      rewind(fid)
+
+      if( pair_cnt <= 0 ) then
+        close(fid)
+        do n = 1, sd_num
+          sd_id(n) = INVALID_i4
+          dm_id(n) = INVALID_i4
+          if_coal(n) = 0_i2
+        end do
+        tracking_sample_initialized = .true.
+        return
+      end if
+
+      allocate(target_dm_id(pair_cnt), target_sd_id(pair_cnt))
+      pair_cnt = 0
+      do
+        read(fid,'(A)',iostat=ierr) linebuf
+        if( ierr /= 0 ) exit
+        if( len_trim(linebuf) == 0 ) cycle
+        if( linebuf(1:1) == '#' ) cycle
+        read(linebuf,*,iostat=ios) m, n
+        if( ios /= 0 ) cycle
+        pair_cnt = pair_cnt + 1
+        target_dm_id(pair_cnt) = m
+        target_sd_id(pair_cnt) = n
+      end do
+      close(fid)
+    end if
+
+    do n = 1, sd_num
+      do_track = .false.
+      if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
+        do m = 1, pair_cnt
+          if( dm_id(n) == target_dm_id(m) .and. sd_id(n) == target_sd_id(m) ) then
+            do_track = .true.
+            exit
+          end if
+        end do
+      end if
+      if( .not. do_track ) then
+        sd_id(n) = INVALID_i4
+        dm_id(n) = INVALID_i4
+      end if
+      if_coal(n) = 0_i2
+    end do
+
+    tracking_sample_initialized = .true.
+    deallocate(target_dm_id, target_sd_id)
+
+    return
+  end subroutine sdm_select_particles_from_id_file
+!---------------------------------------------------------------------------------------------------------------------------------
   subroutine sdm_select_stratified_random_particles(sd_num, sd_rk, sd_r,         &
                                                     tracking_selection_mode,      &
                                                     tracking_fraction,             &
@@ -792,16 +975,6 @@ contains
       do n = 1, sd_num
         if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
           tracked_cnt = tracked_cnt + 1
-          if( max_tracked_sds > 0 .and. tracked_cnt > max_tracked_sds ) then
-            sd_id(n) = INVALID_i4
-            dm_id(n) = INVALID_i4
-          else
-            sd_id(n) = n
-            dm_id(n) = mype
-          end if
-        else
-          sd_id(n) = INVALID_i4
-          dm_id(n) = INVALID_i4
         end if
         if_coal(n) = 0_i2
       end do
