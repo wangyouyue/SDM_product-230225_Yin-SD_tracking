@@ -92,6 +92,17 @@ def write_output(output_path, merged, tracking_id_output_basename, radius_dataty
             nc.setncattr("tracking_id_output_basename", tracking_id_output_basename)
         nc.setncattr("merge_source_file_count", source_count)
 
+    if output_path.endswith(".nc"):
+        output_ids_path = output_path[:-3] + ".ids"
+    else:
+        output_ids_path = output_path + ".ids"
+
+    with open(output_ids_path, "w") as ids_out:
+        for index in range(len(dm_id)):
+            ids_out.write("{0} {1}\n".format(dm_id[index], sd_id[index]))
+
+    return output_ids_path
+
 
 def main():
     args = parse_args()
@@ -101,11 +112,12 @@ def main():
 
     merged, tracking_id_output_basename, radius_datatype = collect_records(input_files)
     output_path = args.output
-    write_output(output_path, merged, tracking_id_output_basename, radius_datatype, len(input_files))
+    output_ids_path = write_output(output_path, merged, tracking_id_output_basename, radius_datatype, len(input_files))
 
     print("input_files={0}".format(len(input_files)))
     print("unique_pairs={0}".format(len(merged)))
-    print("output={0}".format(output_path))
+    print("output_nc={0}".format(output_path))
+    print("output_ids={0}".format(output_ids_path))
 
 
 if __name__ == "__main__":

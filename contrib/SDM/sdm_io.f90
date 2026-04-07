@@ -470,7 +470,7 @@ contains
          mype => PRC_myrank
     use m_sdm_common, only: &
          i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
-         INVALID_i4, forward_tracking_enable, backward_tracking_enable, coalescence_output_enable
+         INVALID_i4, tracking_mode, forward_tracking_enable, backward_tracking_enable, coalescence_output_enable
 
     implicit none
 
@@ -1153,6 +1153,43 @@ contains
     return
   end subroutine sdm_write_tracking_id_file
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine sdm_append_tracking_id_pairs(tracking_id_filename, pair_cnt, dm_id, sd_id)
+    use scale_stdio
+    use scale_process, only: &
+         mype => PRC_myrank
+    use scale_process, only: &
+         PRC_MPIstop
+
+    implicit none
+
+    character(len=*), intent(in) :: tracking_id_filename
+    integer, intent(in) :: pair_cnt
+    integer, intent(in) :: dm_id(:)
+    integer, intent(in) :: sd_id(:)
+
+    integer :: fid, ierr, n
+
+    if( pair_cnt <= 0 ) return
+
+    fid = IO_get_available_fid()
+    open(fid, file=trim(tracking_id_filename), access='sequential', status='unknown', position='append', &
+         form='formatted', iostat=ierr)
+    if( ierr /= 0 ) then
+      write(*,*) 'sdm_append_tracking_id_pairs', 'Write error', trim(tracking_id_filename), mype
+      call PRC_MPIstop
+    end if
+
+    do n = 1, pair_cnt
+      write(fid,'(I0,1X,I0)') dm_id(n), sd_id(n)
+    end do
+
+    close(fid)
+
+    if( IO_L ) write(IO_FID_LOG,*) '*** Appended tracking ID list:', trim(tracking_id_filename), pair_cnt
+
+    return
+  end subroutine sdm_append_tracking_id_pairs
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_interest_id_outnetcdf(otime, sd_num, sd_r, sd_id, dm_id, if_coal)
     use netcdf
     use scale_precision
@@ -1162,7 +1199,7 @@ contains
     use scale_process, only: &
          PRC_MPIstop
     use m_sdm_common, only: &
-         INVALID_i4, tracking_id_output_basename, &
+         i2, INVALID_i4, tracking_id_output_basename, &
          tracking_interest_radius_enable, tracking_interest_radius_threshold, &
          tracking_interest_coalescence_enable
 
@@ -1173,9 +1210,10 @@ contains
     real(RP), intent(in) :: sd_r(1:sd_num)
     integer, intent(in) :: sd_id(1:sd_num)
     integer, intent(in) :: dm_id(1:sd_num)
-    integer(i2), intent(in) :: if_coal(1:sd_num)
+    integer(kind=i2), intent(in) :: if_coal(1:sd_num)
 
     character(len=H_LONG) :: tracking_id_filename
+    character(len=H_LONG) :: tracking_id_text_filename
     integer :: n, m, ncid, dimid, status, nf90_real_precision
     integer :: dm_id_varid, sd_id_varid, time_varid, radius_varid
     integer :: radius_flag_varid, coal_flag_varid
@@ -1205,6 +1243,16 @@ contains
       end if
     else
       write(tracking_id_filename,'(A,".pe",I6.6,".nc")') trim(adjustl(tracking_id_output_basename)), mype
+    end if
+
+    if( len_trim(tracking_id_filename) >= 3 ) then
+      if( tracking_id_filename(len_trim(tracking_id_filename)-2:len_trim(tracking_id_filename)) == '.nc' ) then
+        tracking_id_text_filename = trim(tracking_id_filename(1:len_trim(tracking_id_filename)-3)) // '.ids'
+      else
+        tracking_id_text_filename = trim(tracking_id_filename) // '.ids'
+      end if
+    else
+      tracking_id_text_filename = trim(tracking_id_filename) // '.ids'
     end if
 
     candidate_count = 0
@@ -1321,6 +1369,11 @@ contains
     if( status /= nf90_noerr ) then
       write(*,*) 'sdm_interest_id_outnetcdf', 'Write error', trim(tracking_id_filename), mype
       call PRC_MPIstop
+    end if
+
+    if( append_count > 0 ) then
+      call sdm_append_tracking_id_pairs(tracking_id_text_filename, append_count, &
+           append_dm_id(1:append_count), append_sd_id(1:append_count))
     end if
 
     if( allocated(append_dm_id) ) deallocate(append_dm_id, append_sd_id)

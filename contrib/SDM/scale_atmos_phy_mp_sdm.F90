@@ -2045,6 +2045,11 @@ contains
            len_trim(tracking_id_input_basename) > 0 ) then
          call sdm_select_particles_from_id_file(sdnum_s2c, tracking_id_input_basename, tracking_sample_initialized, &
               sdid_s2c, dmid_s2c, ifcoal_s2c, status_rdm)
+         if( status_rdm /= 0 ) then
+            write(*,*) 'ATMOS_PHY_MP_sdm_init', 'Failed to initialize BW tracking IDs from input file', &
+                 trim(tracking_id_input_basename), status_rdm
+            call PRC_MPIstop
+         end if
       else if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
            ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
          call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, tracking_selection_mode, 1.0_RP, &
