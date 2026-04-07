@@ -761,7 +761,7 @@ contains
     integer :: needed_in_bin, non_empty_bins, min_per_bin_eff
     real(RP) :: rand_tracking
     real(RP) :: z_span, r_min_eff, r_max_eff, log_r_span, z_height
-    logical :: do_track, use_stratified, stratified_selected, use_radius_upper_bound
+    logical :: do_track, use_none, use_stratified, stratified_selected, use_radius_upper_bound
     integer, allocatable :: bin_cnt(:), bin_quota(:), bin_selected(:), bin_remaining(:), bin_min(:)
     real(RP), allocatable :: bin_frac(:)
 
@@ -779,9 +779,14 @@ contains
 
     tracked_cnt = 0
     if( .not. tracking_sample_initialized ) then
+      ! tracking_selection_mode selects which initialization path is used.
+      ! tracking_fraction is applied afterwards only when additional thinning is requested.
       use_stratified = trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
                        trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
                        trim(adjustl(tracking_selection_mode)) == 'Stratified'
+      use_none = trim(adjustl(tracking_selection_mode)) == 'none' .or. &
+                 trim(adjustl(tracking_selection_mode)) == 'NONE' .or. &
+                 trim(adjustl(tracking_selection_mode)) == 'None'
       use_radius_upper_bound = tracking_radius_max > tracking_radius_min
       stratified_selected = .false.
 
@@ -953,6 +958,12 @@ contains
         else
           do n = 1, sd_num
             do_track = ( sd_rk(n) > VALID2INVALID )
+            if( do_track .and. use_none ) then
+              z_height = sd_rk(n) * DZ
+              do_track = z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
+                         sd_r(n) >= tracking_radius_min .and. &
+                         ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max )
+            end if
             if( do_track .and. tracking_fraction < 1.0_RP ) then
               call random_number(rand_tracking)
               if( rand_tracking > tracking_fraction ) do_track = .false.

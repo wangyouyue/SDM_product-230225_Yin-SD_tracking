@@ -40,7 +40,7 @@ contains
          PRC_MPIstop
     use m_sdm_common, only: &
          i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
-         INVALID_i4, forward_tracking_enable, backward_tracking_enable, coalescence_output_enable
+         INVALID_i4, coalescence_output_enable
 
     implicit none
 
@@ -160,7 +160,7 @@ contains
     use scale_process, only: &
          mype => PRC_myrank
     use m_sdm_common, only: &
-         i2, INVALID_i4, backward_tracking_enable, tracking_selection_mode, tracking_fraction, max_tracked_sds, &
+         i2, INVALID_i4, tracking_mode, tracking_selection_mode, tracking_fraction, max_tracked_sds, &
          tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, tracking_nz_bin, tracking_nr_bin, &
          tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized
 
@@ -185,7 +185,7 @@ contains
     integer, allocatable :: bin_cnt(:), bin_quota(:), bin_selected(:), bin_remaining(:), bin_min(:)
     real(RP), allocatable :: bin_frac(:)
 
-    if( (.not. backward_tracking_enable) .or. (tracking_fraction <= 0.0_RP) ) then
+    if( tracking_mode /= 2 .or. tracking_fraction <= 0.0_RP ) then
       do n=1,sd_num
         sd_id(n) = INVALID_i4
         dm_id(n) = INVALID_i4
@@ -599,8 +599,8 @@ contains
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'long_name', 'status of droplets: 01=liquid, 10=ice, 11=mixture') )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'units', '') )
 
-    write_forward_tracking = forward_tracking_enable
-    write_backward_tracking = backward_tracking_enable
+    write_forward_tracking = tracking_mode == 1
+    write_backward_tracking = tracking_mode == 2
     write_tracking = write_forward_tracking .or. write_backward_tracking
     write_coal = coalescence_output_enable
     if( write_backward_tracking ) then
@@ -724,7 +724,7 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF) of Super Droplet'
 
-    if( forward_tracking_enable .and. present(filetag) ) then
+    if( tracking_mode == 1 .and. present(filetag) ) then
       if( trim(filetag) == 'selected' ) then
         call sdm_write_tracking_id_file(basename_sd_out, sd_num, sd_id, dm_id)
       end if
@@ -748,7 +748,7 @@ contains
          PRC_MPIstop
     use m_sdm_common, only: &
          i2, sdm_cold, STAT_LIQ, STAT_ICE, STAT_MIX, sdicedef, &
-         INVALID_i4, forward_tracking_enable, backward_tracking_enable, coalescence_output_enable
+         INVALID_i4, tracking_mode, coalescence_output_enable
 
     implicit none
 
@@ -948,8 +948,8 @@ contains
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'long_name', 'status of droplets: 01=liquid, 10=ice, 11=mixture') )
     call check_netcdf( nf90_put_att(ncid, sd_liqice_id, 'units', '') )
 
-    write_forward_tracking = forward_tracking_enable
-    write_backward_tracking = backward_tracking_enable
+    write_forward_tracking = tracking_mode == 1
+    write_backward_tracking = tracking_mode == 2
     write_tracking = write_forward_tracking .or. write_backward_tracking
     write_coal = coalescence_output_enable
 
@@ -1099,13 +1099,13 @@ contains
 
     if( IO_L ) write(IO_FID_LOG,*) '*** Closed output file (NetCDF_HIST) of Super Droplet'
 
-    if( forward_tracking_enable .and. present(filetag) ) then
+    if( tracking_mode == 1 .and. present(filetag) ) then
       if( trim(filetag) == 'selected' ) then
         call sdm_write_tracking_id_file(basename_sd_out, sd_num, sd_id, dm_id)
       end if
     end if
 
-    if( backward_tracking_enable ) then
+    if( tracking_mode == 2 ) then
       call sdm_assign_tracking_subset(sd_num, sd_z, sd_r, sd_id, dm_id, if_coal)
     end if
 
@@ -1353,7 +1353,7 @@ contains
     use scale_process, only: &
          mype => PRC_myrank
     use m_sdm_common, only: &
-         sdm_cold, sdm_dmpitvl, forward_tracking_enable, backward_tracking_enable
+         sdm_cold, sdm_dmpitvl, tracking_mode
 
     implicit none
 
@@ -1397,13 +1397,13 @@ contains
     if( num_pair <= 0 ) return
 
     ftag = 'SD_coal_output'
-    write_tracking_ids = forward_tracking_enable .or. backward_tracking_enable
-    if( backward_tracking_enable ) then
+    write_tracking_ids = tracking_mode /= 0
+    if( tracking_mode == 2 ) then
       id1_name = 'pre_sdid1'
       id2_name = 'pre_sdid2'
       dm1_name = 'pre_dmid1'
       dm2_name = 'pre_dmid2'
-    else if( forward_tracking_enable ) then
+    else if( tracking_mode == 1 ) then
       id1_name = 'sd_id1'
       id2_name = 'sd_id2'
       dm1_name = 'dm_id1'

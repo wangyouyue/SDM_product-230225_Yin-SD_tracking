@@ -103,15 +103,12 @@ def _remove_legacy_keys(text: str) -> str:
 
 
 def _rewrite_tracking_block(text: str, spec: dict[str, str]) -> str:
-    start = re.search(r"^\s*forward_tracking_enable\s*=.*$", text, flags=re.MULTILINE)
-    if start is None:
-        start = re.search(r"^\s*backward_tracking_enable\s*=.*$", text, flags=re.MULTILINE)
+    start = re.search(r"^\s*tracking_mode\s*=.*$", text, flags=re.MULTILINE)
     end = re.search(r"^\s*tracking_fallback_to_random\s*=.*$", text, flags=re.MULTILINE)
     if start is None or end is None or end.start() < start.start():
         return text
     block = (
-        "forward_tracking_enable = .true.,  ! Master switch for forward tracking\n"
-        "backward_tracking_enable = .false., ! Master switch for backward tracking\n"
+        "tracking_mode = 1,                ! Tracking mode: 0=no tracking, 1=forward tracking, 2=backward tracking\n"
         f"tracking_fraction = {spec['fraction']},          ! Fraction of SDs to track (0-1]\n"
         "max_tracked_sds = 0,                ! Maximum number of tracked SDs (0 = unlimited)\n"
         f"tracking_selection_mode = \"{spec['mode']}\", ! \"random\" or \"stratified\"\n"
@@ -134,8 +131,7 @@ def _apply_case(case_dir: Path, spec: dict[str, str]) -> None:
     runconf = case_dir / "run.conf"
     text = runconf.read_text()
     text = _remove_legacy_keys(text)
-    text = _replace_key_value(text, "forward_tracking_enable", ".true.")
-    text = _replace_key_value(text, "backward_tracking_enable", ".false.")
+    text = _replace_key_value(text, "tracking_mode", "1")
     text = _replace_key_value(text, "max_tracked_sds", "0")
     text = _replace_key_value(text, "sdm_noise_amp", "0.d0")
     text = _rewrite_tracking_block(text, spec)

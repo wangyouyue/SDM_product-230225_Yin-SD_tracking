@@ -54,8 +54,7 @@ def _apply_runconf(path: Path, mode: str, fraction: float, seed_scale: int) -> N
     text = re.sub(r"^\s*random_perturbation_amp\s*=.*$\n?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*tracked_grid_coal_only\s*=.*$\n?", "", text, flags=re.MULTILINE)
     values = {
-        "forward_tracking_enable": ".true.",
-        "backward_tracking_enable": ".false.",
+        "tracking_mode": "1",
         "tracking_selection_mode": f'"{mode}"',
         "tracking_fraction": "1.d0" if fraction == 1.0 else f"{fraction:.2f}d0",
         "max_tracked_sds": "0",
@@ -90,7 +89,7 @@ def _rewrite_tracking_comment_block(path: Path) -> None:
     start = None
     end = None
     for idx, line in enumerate(lines):
-        if re.match(r"^\s*(forward_tracking_enable|backward_tracking_enable|tracking_fraction)\s*=", line):
+        if re.match(r"^\s*(tracking_mode|tracking_fraction)\s*=", line):
             start = idx
             break
     for idx, line in enumerate(lines):
@@ -106,8 +105,7 @@ def _rewrite_tracking_comment_block(path: Path) -> None:
 
     mode = _get("tracking_selection_mode", '"stratified"').strip('"')
     block = (
-        "forward_tracking_enable = .true.,  ! Master switch for forward tracking\n"
-        "backward_tracking_enable = .false., ! Master switch for backward tracking\n"
+        "tracking_mode = 1,                ! Tracking mode: 0=no tracking, 1=forward tracking, 2=backward tracking\n"
         f"tracking_fraction = {_get('tracking_fraction', '0.10d0')},          ! Fraction of SDs to track (0-1]\n"
         "max_tracked_sds = 0,                ! Maximum number of tracked SDs (0 = unlimited)\n"
         f"tracking_selection_mode = \"{mode}\", ! \"random\" or \"stratified\"\n"

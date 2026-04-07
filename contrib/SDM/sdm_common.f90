@@ -478,15 +478,14 @@ module m_sdm_common
   real(RP), save :: sdm_dmpitvb  = 0.e0  ! Time interval of binary output of all droplets [s]
   real(RP), save :: sdm_dmpitvl  = 0.e0  ! Time interval of binary output of large droplets [s]
   real(RP), save :: sdm_dmpsdsiz = 0.e0  ! Threshold radius to store large super droplets in binary format [m]
-  logical, save :: forward_tracking_enable = .false.
-  logical, save :: backward_tracking_enable = .true.
-  integer, save :: tracking_mode = -1
-                                             ! -1: compatibility mode (use forward_tracking_enable/backward_tracking_enable)
-                                             !  0: no tracking
-                                             !  1: forward tracking
-                                             !  2: backward tracking
-  character(len=32), save :: tracking_selection_mode = 'random'
-  real(RP), save :: tracking_fraction = 1.0_RP
+  integer, save :: tracking_mode = 0
+                                             ! 0: no tracking
+                                             ! 1: forward tracking
+                                             ! 2: backward tracking
+  logical, save :: forward_tracking_enable = .false.  ! Internal runtime flag derived from tracking_mode
+  logical, save :: backward_tracking_enable = .false. ! Internal runtime flag derived from tracking_mode
+  character(len=32), save :: tracking_selection_mode = 'random' ! random: Bernoulli sampling, stratified: per-bin quota sampling, none: request no additional random/stratified sampling mode
+  real(RP), save :: tracking_fraction = 1.0_RP       ! 1.0 disables downsampling; in the TPHT FW setup this leaves the configured height/radius window as the effective initialization filter
   integer, save :: max_tracked_sds = 0
   real(RP), save :: tracking_height_min = 400.0_RP
   real(RP), save :: tracking_height_max = 800.0_RP
@@ -499,7 +498,7 @@ module m_sdm_common
   character(len=H_LONG), save :: tracking_id_input_basename = ''
   character(len=H_LONG), save :: tracking_id_output_basename = ''
   logical, save :: tracking_interest_radius_enable = .false.
-  real(RP), save :: tracking_interest_radius_threshold = 0.0_RP
+  real(RP), save :: tracking_interest_radius_threshold = 0.0_RP ! SDs with radius >= this value are treated as interest targets
   logical, save :: tracking_interest_coalescence_enable = .false.
   logical, save :: tracking_sample_initialized = .false.
   real(DP), save :: tracking_time_id_assign = 0.0_DP
@@ -647,8 +646,6 @@ module m_sdm_common
        sdm_dmpitvl,         &
        sdm_dmpsdsiz,        &
        tracking_mode,       &
-       forward_tracking_enable, &
-       backward_tracking_enable, &
        tracking_selection_mode, &
        tracking_fraction,   &
        max_tracked_sds,     &

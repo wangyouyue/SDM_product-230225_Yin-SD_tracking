@@ -254,7 +254,7 @@ contains
     use scale_atmos_hydrometeor, only: &
        ATMOS_HYDROMETEOR_regist
     use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM, &
-         tracking_mode, forward_tracking_enable, backward_tracking_enable, &
+         tracking_mode, &
          tracking_sample_initialized, coalescence_output_enable, coal_output, &
          random_perturbation_enable, random_perturbation_amp, sdm_noise_amp
 
@@ -291,29 +291,22 @@ contains
 
     tracking_sample_initialized = .false.
     ! NOTE:
-    ! tracking_mode provides unified runtime control:
+    ! tracking_mode is the only user-facing mode selector:
     !   0=no tracking, 1=forward, 2=backward.
-    ! If tracking_mode is -1, keep compatibility with legacy logical switches.
-    if( tracking_mode >= 0 ) then
-       select case( tracking_mode )
-       case( 0 )
-          forward_tracking_enable  = .false.
-          backward_tracking_enable = .false.
-       case( 1 )
-          forward_tracking_enable  = .true.
-          backward_tracking_enable = .false.
-       case( 2 )
-          forward_tracking_enable  = .false.
-          backward_tracking_enable = .true.
-       case default
-          write(*,*) 'xxx tracking_mode should be one of -1/0/1/2. Check!'
-          call PRC_MPIstop
-       end select
-    endif
-    if( forward_tracking_enable .and. backward_tracking_enable ) then
-       write(*,*) 'xxx forward_tracking_enable and backward_tracking_enable cannot both be .true.. Check!'
+    select case( tracking_mode )
+    case( 0 )
+       forward_tracking_enable = .false.
+       backward_tracking_enable = .false.
+    case( 1 )
+       forward_tracking_enable = .true.
+       backward_tracking_enable = .false.
+    case( 2 )
+       forward_tracking_enable = .false.
+       backward_tracking_enable = .true.
+    case default
+       write(*,*) 'xxx tracking_mode should be one of 0/1/2. Check!'
        call PRC_MPIstop
-    endif
+    end select
     if( random_perturbation_enable ) then
        sdm_noise_amp = random_perturbation_amp
     else
