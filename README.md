@@ -27,7 +27,7 @@ This repository integrates SDM into SCALE version 5.2.6, leveraging both SDM’s
 Compared with the original SCALE-SDM branch, this merged branch introduces a unified, sampling-aware tracking framework with the following characteristics:
 - **Forward tracking (FW)** and **backward tracking (BW)** are supported within the same executable and are controlled by a unified switch (`tracking_mode`) while preserving legacy compatibility.
 - A common sampling subsystem is shared by FW and BW, with two selectable algorithms: `random` and `stratified`.
-- A new **Two-Pass Hybrid Tracking** workflow is supported: FW can first scan the whole SD population, accumulate only the SD IDs that satisfy user-defined interest conditions, and BW can then reinitialize from this cumulative ID set instead of from a fresh random/stratified sample.
+- A new **Two-Pass Hybrid Tracking (TPHT)** workflow is supported: FW can first scan the whole SD population, accumulate only the SD IDs that satisfy user-defined interest conditions, and BW can then reinitialize from this cumulative ID set instead of from a fresh random/stratified sample.
 - Direction-dependent tracking identifiers are incorporated into SD NetCDF outputs: FW writes `sd_id/dm_id`, BW writes `pre_sdid/pre_dmid`, and `if_coal` is written when coalescence-event output is enabled. Together these fields support trajectory-chain reconstruction in both directions during post-processing.
 - Collision–coalescence event outputs are written through a unified interface and appended to time-bucketed NetCDF files (`SD_coal_output_NetCDF_*`).
 - Random perturbation of SD motion is exposed through the namelist (`random_perturbation_enable`, `random_perturbation_amp`) and is physically inactive when the amplitude is zero.
@@ -47,7 +47,7 @@ The currently implemented interest conditions are:
 - radius threshold: `sd_r >= tracking_interest_radius_threshold`,
 - recorded coalescence participation: `if_coal > 0`.
 
-When `tracking_id_output_basename` is enabled together with at least one interest condition, FW no longer relies on `SD_selected_NetCDF_*` as the carrier of the target set. Instead, it appends unique `(dm_id, sd_id)` pairs to a separate NetCDF file and uses that file as the BW target definition in the second pass.
+When `tracking_id_output_basename` is enabled together with at least one interest condition, FW no longer relies on `SD_selected_NetCDF_*` as the carrier of the target set. Instead, it appends unique `(dm_id, sd_id)` pairs to a separate NetCDF file and mirrors the same unique pairs to a text `.ids` file for BW initialization in the second pass.
 
 ## 2. Core Tracking State Variables (`sd_id/dm_id`, `pre_sdid/pre_dmid`, `if_coal`)
 The merged implementation retains both identifier systems because FW and BW encode different trajectory semantics:
@@ -255,7 +255,7 @@ Main parameters under `&PARAM_ATMOS_PHY_MP_SDM` are summarized below with code d
 |---|---|---|---|
 | `tracking_mode` | integer | `0` | Unified tracking switch: `0` no tracking, `1` forward, `2` backward. |
 | `tracking_selection_mode` | string | `"random"` | Sampling algorithm selector: `"random"` applies Bernoulli sampling, `"stratified"` allocates per-bin quotas, and `"none"` means no additional random/stratified sampling mode is requested. |
-| `tracking_fraction` | real | `1.0` | Fraction of the candidate set retained after initialization. `1.0` means “do not downsample”; in the TPHT FW tutorial, this is the setting that leaves only the configured height/radius window as the effective filter. |
+| `tracking_fraction` | real | `1.0` | Fraction of the candidate set retained after initialization. `1.0` means “do not downsample”. |
 | `max_tracked_sds` | integer | `0` | Hard cap for tracked SD count (`0` means unlimited). |
 | `tracking_height_min` | real [m] | `400.0` | Lower height bound for stratified candidate filter. |
 | `tracking_height_max` | real [m] | `800.0` | Upper height bound for stratified candidate filter. |
@@ -270,16 +270,18 @@ Main parameters under `&PARAM_ATMOS_PHY_MP_SDM` are summarized below with code d
 | `tracking_interest_radius_enable` | logical | `.false.` | Enable radius-threshold interest detection during FW discovery. |
 | `tracking_interest_radius_threshold` | real [m] | `0.0` | Radius threshold used when `tracking_interest_radius_enable = .true.`; SDs with `sd_r >= tracking_interest_radius_threshold` are treated as interest targets. |
 | `tracking_interest_coalescence_enable` | logical | `.false.` | Enable interest detection for SDs that participated in at least one recorded coalescence event in the current SD-output interval. |
-| `tracking_sample_initialized` | logical | `.false.` | Internal state indicating whether tracked subset is already initialized. |
 | `coalescence_output_enable` | logical | `.true.` | Master switch for writing `SD_coal_output_NetCDF_*`. |
 | `random_perturbation_enable` | logical | `.false.` | Master switch of SD motion perturbation. |
 | `random_perturbation_amp` | real [m^1.5 s^-0.5] | `0.0` | User-facing perturbation amplitude; the configuration routine copies it to the internal runtime variable `sdm_noise_amp`. |
+
+`tracking_sample_initialized` is an internal runtime state variable rather than a user-facing namelist control, so it is intentionally omitted from the table above.
 
 ### 8.1 Namelist notes specific to TPHT
 - **FW discovery pass:** set `tracking_mode = 1`, set `tracking_id_output_basename`, enable one or both interest-condition switches, and typically use `sdm_dmpvar = 000`.
 - **BW reconstruction pass:** set `tracking_mode = 2` and point `tracking_id_input_basename` to the FW cumulative ID basename.
 - **Priority rule:** `tracking_id_input_basename` takes precedence over `tracking_fraction`, `tracking_selection_mode`, and the stratified bounds during BW initialization.
 - **Common recommendation:** in TPHT FW cases, use `tracking_selection_mode = "none"`, `tracking_fraction = 1.0`, and `max_tracked_sds = 0` so that no extra random/stratified downsampling is introduced before the interest-condition reduction step.
+- **Interest-condition combination:** `tracking_interest_radius_enable` and `tracking_interest_coalescence_enable` can each be used independently. If both are enabled, the current implementation uses logical OR; logical AND is not implemented in the present code.
 
 ## 9. Random Perturbations in SD Motion
 The motion update uses a single effective perturbation amplitude:
@@ -419,7 +421,7 @@ Each rank-local NetCDF file stores cumulative unique `(dm_id, sd_id)` pairs plus
 - `flag_radius`
 - `flag_coalescence`
 
-This file is the handoff artifact from FW to BW in TPHT.
+Here `sd_r` preserves the physical droplet radius at the earliest discovery time, while `flag_radius` records whether the radius criterion was one of the reasons that this pair entered the TPHT interest set. The NetCDF file is therefore a diagnostic record; the `.ids` companion file is the minimal BW handoff artifact.
 
 #### Step 6. Merge the FW rank-local ID files into one global handoff file
 Run the dedicated post-processing utility after FW finishes:
@@ -602,9 +604,9 @@ qsub run_py.pbs
 ### Current-version namelist settings used by these cases
 - `tracking_mode = 1` for forward cases and `tracking_mode = 2` for backward cases.
 - `tracking_selection_mode`, `tracking_fraction`, `max_tracked_sds`, and stratified bounds (`tracking_height_*`, `tracking_radius_*`) are used instead of legacy `num_selected/height_min/radius_min`.
-- `tracking_selection_mode="none"` means no additional random/stratified sampling mode is requested, while `tracking_fraction=1.0` disables any further downsampling; in the TPHT FW tutorial, that leaves only the configured height/radius window as the effective filter.
+- `tracking_selection_mode="none"` means no additional random/stratified sampling mode is requested, while `tracking_fraction=1.0` disables any further downsampling.
 - `tracking_id_output_basename` enables FW cumulative interest-ID output, and `tracking_id_input_basename` lets BW read that ID set back in either from a basename-expanded per-rank `.ids` file or from an exact merged `.ids` handoff file.
-- `tracking_interest_radius_enable`, `tracking_interest_radius_threshold`, and `tracking_interest_coalescence_enable` define the TPHT interest filter, with the radius condition evaluated as `sd_r >= tracking_interest_radius_threshold`.
+- `tracking_interest_radius_enable`, `tracking_interest_radius_threshold`, and `tracking_interest_coalescence_enable` define the TPHT interest filter, with the radius condition evaluated as `sd_r >= tracking_interest_radius_threshold`; if both switches are enabled, the current implementation uses logical OR.
 - `coalescence_output_enable` controls writing `SD_coal_output_NetCDF_*`, but it is forced to `.false.` when the microphysical coalescence process is disabled.
 - `random_perturbation_amp` is the user-facing amplitude, and `sdm_noise_amp` is its internal runtime copy.
 - `sdm_dmpvar = 100/200` writes `SD_selected_NetCDF_*`; `sdm_dmpvar = 010/020` writes `SD_all_NetCDF_*`.
