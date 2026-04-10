@@ -11,6 +11,7 @@
 
 source /etc/profile.d/modules.sh
 cd ${PBS_O_WORKDIR}
+mkdir -p fw_output fw_tracking
 
 #-----------program execution------------
 

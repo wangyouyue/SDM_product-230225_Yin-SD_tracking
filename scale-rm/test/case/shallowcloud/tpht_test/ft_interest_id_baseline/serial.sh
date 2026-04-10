@@ -6,6 +6,7 @@
 
 source /etc/profile.d/modules.sh
 cd ${PBS_O_WORKDIR}
+mkdir -p fw_output fw_tracking
 
 #------- Program execution -----------
 module load BaseCPU/2024 inteloneAPI/2023.2 hdf5/1.12.3.mpi netcdf-c/4.9.2 netcdf-fortran/4.6.1

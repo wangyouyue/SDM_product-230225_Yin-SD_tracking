@@ -266,7 +266,7 @@ Main parameters under `&PARAM_ATMOS_PHY_MP_SDM` are summarized below with code d
 | `tracking_min_per_bin` | integer | `1` | Requested minimum tracked SDs in each non-empty bin (subject to global budget). |
 | `tracking_fallback_to_random` | logical | `.true.` | Fallback from stratified to random when stratified is not feasible. |
 | `tracking_id_input_basename` | string | `''` | Optional BW target-set input. If non-empty, BW reads tracked IDs from this basename and overrides random/stratified initialization. The runtime appends `.peXXXXXX.ids` when needed, and an exact `.nc` path is automatically mapped to its sibling `.ids` file. |
-| `tracking_id_output_basename` | string | `''` | Optional FW cumulative interest-ID output basename. When enabled together with at least one interest condition, FW appends unique `(dm_id, sd_id)` pairs to `tracking_id_output_basename.peXXXXXX.nc` and mirrors the same unique pairs to `tracking_id_output_basename.peXXXXXX.ids` for BW input. |
+| `tracking_id_output_basename` | string | `''` | Optional FW interest-ID output basename. When enabled together with at least one interest condition, FW appends selected `(dm_id, sd_id)` records to `tracking_id_output_basename.peXXXXXX.nc` and mirrors the same records to `tracking_id_output_basename.peXXXXXX.ids` for BW input and later offline deduplication. |
 | `tracking_interest_radius_enable` | logical | `.false.` | Enable radius-threshold interest detection during FW discovery. |
 | `tracking_interest_radius_threshold` | real [m] | `0.0` | Radius threshold used when `tracking_interest_radius_enable = .true.`; SDs with `sd_r >= tracking_interest_radius_threshold` are treated as interest targets. |
 | `tracking_interest_coalescence_enable` | logical | `.false.` | Enable interest detection for SDs that participated in at least one recorded coalescence event in the current SD-output interval. |
@@ -384,18 +384,19 @@ From the FW TPHT case directory, rebuild SCALE-RM with SDM enabled. A generic ex
 
 ```bash
 cd scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline
+module purge
+module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1
 make allclean
 time make -j SCALE_ENABLE_SDM=T SCALE_DISABLE_LOCALBIN=T SCALE_DYCOMS2_RF02_SDM=T
 ln -fsv `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* .
 ```
 
-If your platform requires explicit NetCDF settings, load the appropriate compiler/MPI/NetCDF modules before building.
-
 #### Step 4. Run the FW discovery pass
-Enter the FW TPHT case directory and submit the job:
+Enter the FW TPHT case directory, make sure the FW output directories exist, and submit the job:
 
 ```bash
 cd scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline
+mkdir -p fw_output fw_tracking
 qsub UoH_run.pbs
 ```
 
@@ -403,8 +404,11 @@ or on SQUID:
 
 ```bash
 cd scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline
+mkdir -p fw_output fw_tracking
 qsub squid_run.sh
 ```
+
+If you rerun the FW case, remove old `fw_tracking/` outputs first so that previously appended `tracking_interest_ids.pe*.nc/.ids` files do not contaminate the new TPHT handoff set.
 
 #### Step 5. Confirm that cumulative interest-ID files were generated
 After FW finishes, check that files like the following exist:
@@ -413,7 +417,7 @@ After FW finishes, check that files like the following exist:
 ls scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.nc
 ```
 
-Each rank-local NetCDF file stores cumulative unique `(dm_id, sd_id)` pairs plus the first discovery time and the reason flags:
+Each rank-local NetCDF file stores discovered `(dm_id, sd_id)` records plus the discovery time and the reason flags:
 - `dm_id`
 - `sd_id`
 - `first_time`
@@ -421,7 +425,7 @@ Each rank-local NetCDF file stores cumulative unique `(dm_id, sd_id)` pairs plus
 - `flag_radius`
 - `flag_coalescence`
 
-Here `sd_r` preserves the physical droplet radius at the earliest discovery time, while `flag_radius` records whether the radius criterion was one of the reasons that this pair entered the TPHT interest set. The NetCDF file is therefore a diagnostic record; the `.ids` companion file is the minimal BW handoff artifact.
+FW interest-ID output is evaluated every microphysics step so that transient coalescence events between regular SD dump times are also captured. Here `sd_r` preserves the physical droplet radius at the recorded discovery time, while `flag_radius` records whether the radius criterion was one of the reasons that this pair entered the TPHT interest set. Multiple records for the same pair can appear across output times; the later merge step removes duplicates, keeps the earliest `first_time`, and merges the reason flags. The NetCDF file is therefore a diagnostic record; the `.ids` companion file is the minimal BW handoff artifact.
 
 #### Step 6. Merge the FW rank-local ID files into one global handoff file
 Run the dedicated post-processing utility after FW finishes:
@@ -437,7 +441,7 @@ This creates:
 - `tracking_interest_ids_merged.nc` for diagnostics and post-processing
 - `tracking_interest_ids_merged.ids` as the BW-ready plain-text ID handoff file
 
-The merged files remove cross-rank duplicate `(dm_id, sd_id)` pairs, keep the earliest `first_time`, keep the corresponding `sd_r` at that earliest discovery time, and merge `flag_radius` / `flag_coalescence` with a logical OR.
+The merged files remove duplicate `(dm_id, sd_id)` pairs across both rank-local files and repeated output times, keep the earliest `first_time`, keep the corresponding `sd_r` at that earliest discovery time, and merge `flag_radius` / `flag_coalescence` with a logical OR.
 
 #### Step 7. Check the BW reconstruction namelist
 View:
@@ -455,11 +459,14 @@ Key BW TPHT settings are:
 
 In other words, BW no longer starts from a newly sampled subset; it starts from the FW-discovered target set. In the updated tutorial, the BW job reads the merged global handoff ID list directly, so the runtime does not need to collect the target set again from multiple per-rank FW files.
 
+`tracking_interest_ids*.ids` is sufficient only for defining **which SDs belong to the BW target set**. It is not a full SD restart. The actual SD state evolution still comes from the normal model initialization/restart inputs, while the ID file only filters the tracked subset. In the current TPHT tutorial, BW reruns from the same atmospheric/SD initial state as FW and reuses the FW-discovered ID list to initialize backward tracking; it does not read FW `superdroplet_restart` as an input requirement. The FW/BW `superdroplet_restart` files kept under `fw_output/` and `bw_output/` are output archives for restart/debugging, not the TPHT handoff definition itself.
+
 #### Step 8. Prepare the BW executable and run the reconstruction pass
 No rebuild is required if the BW case uses the same source tree and the same build options as the FW case, because the TPHT FW→BW handoff changes only the namelist input and the merged tracking-ID files. Before submission, place the executable in the BW case directory by linking or copying the already built FW executable. A minimal example is:
 
 ```bash
 cd scale-rm/test/case/shallowcloud/tpht_test/bt_interest_id_baseline
+mkdir -p bw_output
 ln -fsv ../ft_interest_id_baseline/scale-rm* .
 qsub UoH_run.pbs
 ```
@@ -468,6 +475,7 @@ or on SQUID:
 
 ```bash
 cd scale-rm/test/case/shallowcloud/tpht_test/bt_interest_id_baseline
+mkdir -p bw_output
 ln -fsv ../ft_interest_id_baseline/scale-rm* .
 qsub squid_run.sh
 ```
@@ -495,6 +503,23 @@ fw.close()
 PY
 ```
 
+An automated FW/BW consistency check is also available. It compares the merged FW handoff set with the union of predecessor IDs stored in the earliest BW `SD_selected_NetCDF_*` output group:
+
+```bash
+cd scale-rm/test/case/shallowcloud/tpht_test
+python check_tpht_consistency.py \
+  --fw-ids "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids" \
+  --bw-glob "./bt_interest_id_baseline/bw_output/SD_selected_NetCDF_*.pe*.nc"
+```
+
+The script reports:
+- `fw_unique_pairs`: unique `(dm_id, sd_id)` pairs in the merged FW handoff file
+- `bw_valid_records`: total valid BW predecessor records found in the earliest BW output-time group
+- `bw_unique_pairs`: unique BW predecessor pairs after rank-wise union
+- `missing_in_bw` / `extra_in_bw`: set differences between FW and BW
+
+The expected result is `missing_in_bw=0` and `extra_in_bw=0`.
+
 For trajectory reconstruction and visualization, you can then reuse the existing Python post-processing scripts in each case's `results/` directory.
 
 Concrete files to edit/check for these settings:
@@ -504,6 +529,7 @@ Concrete files to edit/check for these settings:
 - Forward TPHT discovery config: `scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/run.conf`
 - Backward TPHT reconstruction config: `scale-rm/test/case/shallowcloud/tpht_test/bt_interest_id_baseline/run.conf`
 - TPHT merge utility: `scale-rm/test/case/shallowcloud/tpht_test/merge_tracking_interest_ids.py`
+- TPHT consistency checker: `scale-rm/test/case/shallowcloud/tpht_test/check_tpht_consistency.py`
 - 2D forward case config: `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/run.conf`
 - 2D backward case config: `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/run.conf`
 - 2D backward no-coalescence/no-UV config: `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/run.conf`
