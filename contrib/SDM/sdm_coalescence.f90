@@ -1017,10 +1017,10 @@ contains
              sd_li2 = sd_liqice( icptc )
 
              if( write_coal .and. write_tracking_ids ) then
-                sd_id1_temp( num_pair ) = sd_id( icptc )
-                dm_id1_temp( num_pair ) = dm_id( icptc )
-                sd_id2_temp( num_pair ) = sd_id( icptp )
-                dm_id2_temp( num_pair ) = dm_id( icptp )
+                sd_id1_temp( num_pair ) = sd_id( icptp )
+                dm_id1_temp( num_pair ) = dm_id( icptp )
+                sd_id2_temp( num_pair ) = sd_id( icptc )
+                dm_id2_temp( num_pair ) = dm_id( icptc )
              end if
 
              do k=1,22

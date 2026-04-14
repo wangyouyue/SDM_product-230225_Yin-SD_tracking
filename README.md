@@ -35,8 +35,8 @@ Compared with the original SCALE-SDM branch, this merged branch introduces a uni
 
 ### 1.1 Two-Pass Hybrid Tracking (TPHT)
 This update adds a new workflow intended for “find first, trace later” studies:
-- **Pass 1 (FW discovery pass):** run forward tracking on the full valid SD population and write a cumulative unique ID list for SDs that satisfy one or more user-defined interest conditions.
-- **Pass 2 (BW reconstruction pass):** run backward tracking from the cumulative FW ID list so that BW follows exactly the SD set discovered in the FW scan.
+- **Pass 1 (FW discovery pass):** run forward tracking on the full valid SD population and append rank-local raw ID records for SDs that satisfy one or more user-defined interest conditions.
+- **Pass 2 (BW reconstruction pass):** offline-merge and deduplicate the FW ID records, then run backward tracking from the merged FW ID list so that BW follows exactly the SD set discovered in the FW scan.
 
 In this README, this workflow is referred to as **Two-Pass Hybrid Tracking**, abbreviated as **TPHT**. The word “hybrid” emphasizes that the method combines:
 - a forward discovery pass,
@@ -47,7 +47,7 @@ The currently implemented interest conditions are:
 - radius threshold: `sd_r >= tracking_interest_radius_threshold`,
 - recorded coalescence participation: `if_coal > 0`.
 
-When `tracking_id_output_basename` is enabled together with at least one interest condition, FW no longer relies on `SD_selected_NetCDF_*` as the carrier of the target set. Instead, it appends unique `(dm_id, sd_id)` pairs to a separate NetCDF file and mirrors the same unique pairs to a text `.ids` file for BW initialization in the second pass.
+When `tracking_id_output_basename` is enabled together with at least one interest condition, FW no longer relies on `SD_selected_NetCDF_*` as the carrier of the target set. Instead, it appends raw `(dm_id, sd_id)` pairs to rank-local `.ids` files for later offline merge/dedup. Each append block also writes a `# TPHT_META PRC_NUM_X PRC_NUM_Y PRC_nprocs` header so that BW can validate MPI-decomposition compatibility before accepting the handoff file.
 
 ## 2. Core Tracking State Variables (`sd_id/dm_id`, `pre_sdid/pre_dmid`, `if_coal`)
 The merged implementation retains both identifier systems because FW and BW encode different trajectory semantics:
@@ -143,7 +143,7 @@ Forward mode (`tracking_mode = 1`) records trajectories from earlier to later si
 2. Propagate `(dm_id, sd_id)` together with SD motion and MPI boundary exchanges.
 3. Record selected SD states to `SD_selected_NetCDF_*` when selected-output digit of `sdm_dmpvar` is enabled.
 4. Record collision events into `SD_coal_output_NetCDF_*` when coalescence event output is enabled.
-5. When `tracking_id_output_basename` is set and at least one interest-condition switch is enabled, FW additionally appends a cumulative unique interest-ID list to `tracking_id_output_basename.peXXXXXX.nc`.
+5. When `tracking_id_output_basename` is set and at least one interest-condition switch is enabled, FW additionally appends a raw per-rank interest-ID stream to `tracking_id_output_basename.peXXXXXX.ids`; duplicate removal is deferred to offline post-processing.
 
 In TPHT mode, the FW initialization keeps the original sampling interface intact, but the effective target subset for BW is no longer defined by the one-time FW sampling output. Instead, the final BW target set is the union of all FW SDs that ever satisfied the interest condition(s) during the run.
 
@@ -216,7 +216,7 @@ Collision events are evaluated at each microphysical coalescence sub-step. The e
   - all valid SDs are tagged as tracked, so `SD_selected_NetCDF_*` contains the full valid-SD set whenever the selected-output digit of `sdm_dmpvar` is enabled.
   - The 2nd digit of `sdm_dmpvar` may remain `0`; selected output depends on the 3rd digit and `sdm_dmpitvl`, not on all-SD output being enabled.
 - **TPHT interest-ID discovery (`tracking_id_output_basename` enabled with interest conditions):**
-  - FW may track the full valid-SD set for ID propagation while writing the BW target set to a separate cumulative NetCDF file.
+  - FW may track the full valid-SD set for ID propagation while writing the BW target set to a separate rank-local `.ids` handoff stream.
   - In the recommended TPHT configuration, `sdm_dmpvar = 000`, so `SD_selected_NetCDF_*` is not used as the carrier of the BW target definition.
 - **Sampling disabled or empty selection:**
   - selected-output pipeline still exists when enabled by `sdm_dmpvar`, but selected count can be zero.
@@ -230,7 +230,7 @@ Collision events are evaluated at each microphysical coalescence sub-step. The e
 - All-SD output: `SD_all_NetCDF_YYYYMMDD-hhmmss.mmm.peXXXXXX`
 - Selected-SD output: `SD_selected_NetCDF_YYYYMMDD-hhmmss.mmm.peXXXXXX`
 - Coalescence events: `SD_coal_output_NetCDF_YYYYMMDD-hhmmss.mmm.peXXXXXX`
-- TPHT cumulative interest-ID output: `tracking_id_output_basename.peXXXXXX.nc`
+- TPHT rank-local interest-ID output: `tracking_id_output_basename.peXXXXXX.ids`
 - In this document and scripts, `YYYYMMDD` is the real simulation date token and is not fixed to `00000101`.
 
 ### 7.4 Supported/unsupported `sdm_dmpvar` modes in this tracking workflow
@@ -265,8 +265,8 @@ Main parameters under `&PARAM_ATMOS_PHY_MP_SDM` are summarized below with code d
 | `tracking_nr_bin` | integer | `10` | Number of radius bins in stratified sampling. |
 | `tracking_min_per_bin` | integer | `1` | Requested minimum tracked SDs in each non-empty bin (subject to global budget). |
 | `tracking_fallback_to_random` | logical | `.true.` | Fallback from stratified to random when stratified is not feasible. |
-| `tracking_id_input_basename` | string | `''` | Optional BW target-set input. If non-empty, BW reads tracked IDs from this basename and overrides random/stratified initialization. The runtime appends `.peXXXXXX.ids` when needed, and an exact `.nc` path is automatically mapped to its sibling `.ids` file. |
-| `tracking_id_output_basename` | string | `''` | Optional FW interest-ID output basename. When enabled together with at least one interest condition, FW appends selected `(dm_id, sd_id)` records to `tracking_id_output_basename.peXXXXXX.nc` and mirrors the same records to `tracking_id_output_basename.peXXXXXX.ids` for BW input and later offline deduplication. |
+| `tracking_id_input_basename` | string | `''` | Optional BW target-set input. If non-empty, BW reads tracked IDs from this basename and overrides random/stratified initialization. The runtime appends `.peXXXXXX.ids` when needed, and an exact `.nc` path is automatically mapped to its sibling `.ids` file. BW also validates the embedded `TPHT_META` decomposition header and aborts if `PRC_NUM_X`, `PRC_NUM_Y`, or total MPI rank count do not match the FW handoff file. |
+| `tracking_id_output_basename` | string | `''` | Optional FW interest-ID output basename. When enabled together with at least one interest condition, FW appends selected `(dm_id, sd_id)` records to `tracking_id_output_basename.peXXXXXX.ids`. Duplicate removal is performed offline, and each append block writes `# TPHT_META PRC_NUM_X PRC_NUM_Y PRC_nprocs` so that BW and merge tools can verify decomposition compatibility. |
 | `tracking_interest_radius_enable` | logical | `.false.` | Enable radius-threshold interest detection during FW discovery. |
 | `tracking_interest_radius_threshold` | real [m] | `0.0` | Radius threshold used when `tracking_interest_radius_enable = .true.`; SDs with `sd_r >= tracking_interest_radius_threshold` are treated as interest targets. |
 | `tracking_interest_coalescence_enable` | logical | `.false.` | Enable interest detection for SDs that participated in at least one recorded coalescence event in the current SD-output interval. |
@@ -281,6 +281,7 @@ Main parameters under `&PARAM_ATMOS_PHY_MP_SDM` are summarized below with code d
 - **BW reconstruction pass:** set `tracking_mode = 2` and point `tracking_id_input_basename` to the FW cumulative ID basename.
 - **Priority rule:** `tracking_id_input_basename` takes precedence over `tracking_fraction`, `tracking_selection_mode`, and the stratified bounds during BW initialization.
 - **Common recommendation:** in TPHT FW cases, use `tracking_selection_mode = "none"`, `tracking_fraction = 1.0`, and `max_tracked_sds = 0` so that no extra random/stratified downsampling is introduced before the interest-condition reduction step.
+- **MPI decomposition must match between FW and BW:** `PRC_NUM_X`, `PRC_NUM_Y`, and total MPI rank count must match the FW run that produced the handoff IDs. BW now checks the `TPHT_META` header in the input `.ids` file and aborts on mismatch.
 - **Interest-condition combination:** `tracking_interest_radius_enable` and `tracking_interest_coalescence_enable` can each be used independently. If both are enabled, the current implementation uses logical OR; logical AND is not implemented in the present code.
 
 ## 9. Random Perturbations in SD Motion
@@ -361,7 +362,7 @@ Key TPHT FW settings are:
 | Parameter | Recommended tutorial value | Purpose |
 |---|---|---|
 | `tracking_mode` | `1` | Enable FW discovery pass. |
-| `tracking_id_output_basename` | `"./fw_tracking/tracking_interest_ids"` | Basename of cumulative interest-ID file. |
+| `tracking_id_output_basename` | `"./fw_tracking/tracking_interest_ids"` | Basename of the raw per-rank interest-ID output stream that is later merged and deduplicated offline. |
 | `SD_OUT_BASENAME` | `"./fw_output/superdroplet_restart"` | Keep FW restart output separate from BW when both cases live under `tpht_test/`. |
 | `tracking_interest_radius_enable` | `.true.` | Enable radius-based discovery. |
 | `tracking_interest_radius_threshold` | `1.0d-6` | Mark SDs with radius greater than or equal to this value as “interest” targets. |
@@ -369,8 +370,8 @@ Key TPHT FW settings are:
 | `tracking_selection_mode` | `"none"` | Do not request any additional random/stratified sampling mode in the FW discovery pass. |
 | `tracking_fraction` | `1.0d0` | Disable downsampling so the effective FW initialization reduces to the configured height/radius window. |
 | `max_tracked_sds` | `0` | No artificial cap on discovery candidates. |
-| `sdm_dmpvar` | `000` | Disable `SD_selected_NetCDF_*`; use the separate cumulative interest-ID file instead. |
-| `HISTORY_DEFAULT_TINTERVAL` | `0.0D0` | FW discovery can disable history output because the TPHT handoff artifact is `tracking_interest_ids.pe*.nc`, not the Eulerian history stream. |
+| `sdm_dmpvar` | `000` | Disable `SD_selected_NetCDF_*`; use the separate raw interest-ID stream instead. |
+| `HISTORY_DEFAULT_TINTERVAL` | `0.0D0` | FW discovery can disable history output because the TPHT handoff artifact is `tracking_interest_ids.pe*.ids`, not the Eulerian history stream. |
 
 Notes:
 - `tracking_mode` already drives FW/BW enablement, so `forward_tracking_enable` / `backward_tracking_enable` are not user-facing namelist keys in the current TPHT tutorial cases; they remain only as internal runtime flags derived from `tracking_mode`.
@@ -408,24 +409,21 @@ mkdir -p fw_output fw_tracking
 qsub squid_run.sh
 ```
 
-If you rerun the FW case, remove old `fw_tracking/` outputs first so that previously appended `tracking_interest_ids.pe*.nc/.ids` files do not contaminate the new TPHT handoff set.
+If you rerun the FW case, remove old `fw_tracking/` outputs first so that previously appended `tracking_interest_ids.pe*.ids` files do not contaminate the new TPHT handoff set.
 
-#### Step 5. Confirm that cumulative interest-ID files were generated
+#### Step 5. Confirm that rank-local interest-ID files were generated
 After FW finishes, check that files like the following exist:
 
 ```bash
-ls scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.nc
+ls scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.ids
 ```
 
-Each rank-local NetCDF file stores discovered `(dm_id, sd_id)` records plus the discovery time and the reason flags:
-- `dm_id`
-- `sd_id`
-- `first_time`
-- `sd_r`
-- `flag_radius`
-- `flag_coalescence`
+Each rank-local `.ids` file stores raw discovered `(dm_id, sd_id)` records in append order. Each append block begins with:
+- `# TPHT_META PRC_NUM_X PRC_NUM_Y PRC_nprocs`
 
-FW interest-ID output is evaluated every microphysics step so that transient coalescence events between regular SD dump times are also captured. Here `sd_r` preserves the physical droplet radius at the recorded discovery time, while `flag_radius` records whether the radius criterion was one of the reasons that this pair entered the TPHT interest set. Multiple records for the same pair can appear across output times; the later merge step removes duplicates, keeps the earliest `first_time`, and merges the reason flags. The NetCDF file is therefore a diagnostic record; the `.ids` companion file is the minimal BW handoff artifact.
+This metadata is later preserved by the merge utility and checked again by BW before it accepts the handoff file.
+
+FW interest-ID output is evaluated every microphysics step so that transient coalescence events between regular SD dump times are also captured. Multiple records for the same pair can appear across output times by design; the later merge step removes duplicates and produces the BW-ready single-file handoff artifact.
 
 #### Step 6. Merge the FW rank-local ID files into one global handoff file
 Run the dedicated post-processing utility after FW finishes:
@@ -433,15 +431,15 @@ Run the dedicated post-processing utility after FW finishes:
 ```bash
 cd scale-rm/test/case/shallowcloud/tpht_test
 python merge_tracking_interest_ids.py \
-  --input-glob "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.nc" \
-  --output "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.nc"
+  --input-glob "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.ids" \
+  --output "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids"
 ```
 
 This creates:
-- `tracking_interest_ids_merged.nc` for diagnostics and post-processing
 - `tracking_interest_ids_merged.ids` as the BW-ready plain-text ID handoff file
+- a preserved `# TPHT_META PRC_NUM_X PRC_NUM_Y PRC_nprocs` header at the top of the merged file
 
-The merged files remove duplicate `(dm_id, sd_id)` pairs across both rank-local files and repeated output times, keep the earliest `first_time`, keep the corresponding `sd_r` at that earliest discovery time, and merge `flag_radius` / `flag_coalescence` with a logical OR.
+The merged file removes duplicate `(dm_id, sd_id)` pairs across both rank-local files and repeated output times while preserving the FW decomposition metadata required by BW runtime validation.
 
 #### Step 7. Check the BW reconstruction namelist
 View:
@@ -484,8 +482,8 @@ If you changed the source code or the build flags after finishing the FW pass, r
 
 #### Step 9. Verify the handoff and analyze results
 The minimum practical validation checks are:
-1. FW produced `fw_tracking/tracking_interest_ids.peXXXXXX.nc`.
-2. The merge step produced both `fw_tracking/tracking_interest_ids_merged.nc` and `fw_tracking/tracking_interest_ids_merged.ids`.
+1. FW produced `fw_tracking/tracking_interest_ids.peXXXXXX.ids`.
+2. The merge step produced `fw_tracking/tracking_interest_ids_merged.ids`.
 3. BW started successfully without falling back to random/stratified sampling.
 4. The BW outputs contain only SD chains whose `(dm_id, sd_id)` appeared in the merged FW handoff ID list.
 
@@ -495,11 +493,14 @@ A simple manual check is:
 wc -l scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids
 
 python - <<'PY'
-from netCDF4 import Dataset
-fw = Dataset('scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.nc')
-print('tracked_id count =', len(fw.dimensions['tracked_id']))
-print('variables =', list(fw.variables))
-fw.close()
+from pathlib import Path
+path = Path('scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids')
+with path.open() as f:
+    for _ in range(5):
+        line = f.readline()
+        if not line:
+            break
+        print(line.rstrip())
 PY
 ```
 
@@ -631,7 +632,7 @@ qsub run_py.pbs
 - `tracking_mode = 1` for forward cases and `tracking_mode = 2` for backward cases.
 - `tracking_selection_mode`, `tracking_fraction`, `max_tracked_sds`, and stratified bounds (`tracking_height_*`, `tracking_radius_*`) are used instead of legacy `num_selected/height_min/radius_min`.
 - `tracking_selection_mode="none"` means no additional random/stratified sampling mode is requested, while `tracking_fraction=1.0` disables any further downsampling.
-- `tracking_id_output_basename` enables FW cumulative interest-ID output, and `tracking_id_input_basename` lets BW read that ID set back in either from a basename-expanded per-rank `.ids` file or from an exact merged `.ids` handoff file.
+- `tracking_id_output_basename` enables FW raw per-rank interest-ID output, and `tracking_id_input_basename` lets BW read the merged ID set back in either from a basename-expanded per-rank `.ids` file or from an exact merged `.ids` handoff file.
 - `tracking_interest_radius_enable`, `tracking_interest_radius_threshold`, and `tracking_interest_coalescence_enable` define the TPHT interest filter, with the radius condition evaluated as `sd_r >= tracking_interest_radius_threshold`; if both switches are enabled, the current implementation uses logical OR.
 - `coalescence_output_enable` controls writing `SD_coal_output_NetCDF_*`, but it is forced to `.false.` when the microphysical coalescence process is disabled.
 - `random_perturbation_amp` is the user-facing amplitude, and `sdm_noise_amp` is its internal runtime copy.

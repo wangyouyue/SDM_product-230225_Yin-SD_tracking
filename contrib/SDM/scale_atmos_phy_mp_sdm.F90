@@ -2046,8 +2046,16 @@ contains
          call sdm_select_particles_from_id_file(sdnum_s2c, tracking_id_input_basename, tracking_sample_initialized, &
               sdid_s2c, dmid_s2c, ifcoal_s2c, status_rdm)
          if( status_rdm /= 0 ) then
-            write(*,*) 'ATMOS_PHY_MP_sdm_init', 'Failed to initialize BW tracking IDs from input file', &
-                 trim(tracking_id_input_basename), status_rdm
+            if( status_rdm == 3 ) then
+               write(*,*) 'ATMOS_PHY_MP_sdm_init', 'BW tracking ID file is missing TPHT_META decomposition metadata', &
+                    trim(tracking_id_input_basename), status_rdm
+            else if( status_rdm == 4 ) then
+               write(*,*) 'ATMOS_PHY_MP_sdm_init', 'BW tracking ID file MPI decomposition does not match current run', &
+                    trim(tracking_id_input_basename), status_rdm
+            else
+               write(*,*) 'ATMOS_PHY_MP_sdm_init', 'Failed to initialize BW tracking IDs from input file', &
+                    trim(tracking_id_input_basename), status_rdm
+            end if
             call PRC_MPIstop
          end if
       else if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &

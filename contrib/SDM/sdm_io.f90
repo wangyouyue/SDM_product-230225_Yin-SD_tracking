@@ -195,18 +195,24 @@ contains
       return
     end if
 
-    if( tracking_fraction >= 1.0_RP .and. max_tracked_sds <= 0 ) then
-      do n=1,sd_num
-        sd_id(n) = n
-        dm_id(n) = mype
-        if_coal(n) = 0_i2
-      end do
-      tracking_sample_initialized = .true.
-      return
-    end if
-
     tracked_cnt = 0
     if( .not. tracking_sample_initialized ) then
+      if( tracking_fraction >= 1.0_RP .and. max_tracked_sds <= 0 ) then
+        do n=1,sd_num
+          if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
+            sd_id(n) = n
+            dm_id(n) = mype
+            if_coal(n) = 0_i2
+          else
+            sd_id(n) = INVALID_i4
+            dm_id(n) = INVALID_i4
+            if_coal(n) = 0_i2
+          end if
+        end do
+        tracking_sample_initialized = .true.
+        return
+      end if
+
       use_stratified = trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
            trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
            trim(adjustl(tracking_selection_mode)) == 'Stratified'
@@ -443,9 +449,6 @@ contains
     else
       do n=1,sd_num
         do_track = ( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 )
-        if( do_track .and. max_tracked_sds > 0 ) then
-          if( tracked_cnt >= max_tracked_sds ) do_track = .false.
-        end if
         if( do_track ) then
           tracked_cnt = tracked_cnt + 1
           sd_id(n) = n
@@ -1191,13 +1194,15 @@ contains
   end subroutine sdm_append_tracking_id_pairs
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_interest_id_outnetcdf(otime, sd_num, sd_r, sd_id, dm_id, if_coal)
-    use netcdf
     use scale_precision
     use scale_stdio
     use scale_process, only: &
-         mype => PRC_myrank
+         mype => PRC_myrank, &
+         PRC_nprocs
     use scale_process, only: &
          PRC_MPIstop
+    use scale_rm_process, only: &
+         PRC_NUM_X, PRC_NUM_Y
     use m_sdm_common, only: &
          i2, INVALID_i4, tracking_id_output_basename, &
          tracking_interest_radius_enable, tracking_interest_radius_threshold, &
@@ -1214,24 +1219,12 @@ contains
 
     character(len=H_LONG) :: tracking_id_filename
     character(len=H_LONG) :: tracking_id_text_filename
-    integer :: n, ncid, dimid, status, nf90_real_precision, fid, ierr
-    integer :: dm_id_varid, sd_id_varid, time_varid, radius_varid
-    integer :: radius_flag_varid, coal_flag_varid
-    integer :: existing_count, append_count, candidate_count
-    integer, dimension(1) :: start1, count1
-    logical :: file_exists, selected
-    integer :: dm_id_buf(1), sd_id_buf(1), radius_flag_buf(1), coal_flag_buf(1)
-    real(RP) :: radius_buf(1)
-    real(DP) :: time_buf(1)
+    integer :: n, fid, ierr
+    integer :: candidate_count
+    logical :: selected
 
     if( len_trim(tracking_id_output_basename) == 0 ) return
     if( .not. tracking_interest_radius_enable .and. .not. tracking_interest_coalescence_enable ) return
-
-    if(RP == SP)then
-       nf90_real_precision = NF90_FLOAT
-    else
-       nf90_real_precision = NF90_DOUBLE
-    end if
 
     if( len_trim(tracking_id_output_basename) >= 3 ) then
       if( tracking_id_output_basename(len_trim(tracking_id_output_basename)-2:len_trim(tracking_id_output_basename)) == '.nc' ) then
@@ -1268,40 +1261,16 @@ contains
 
     if( candidate_count <= 0 ) return
 
-    inquire(file=trim(tracking_id_filename), exist=file_exists)
-
-    if( file_exists ) then
-      call check_netcdf( nf90_open(trim(tracking_id_filename), NF90_WRITE, ncid) )
-      call check_netcdf( nf90_inq_dimid(ncid, 'tracked_id', dimid) )
-      call check_netcdf( nf90_inquire_dimension(ncid, dimid, len=existing_count) )
-      call check_netcdf( nf90_inq_varid(ncid, 'dm_id', dm_id_varid) )
-      call check_netcdf( nf90_inq_varid(ncid, 'sd_id', sd_id_varid) )
-      call check_netcdf( nf90_inq_varid(ncid, 'first_time', time_varid) )
-      call check_netcdf( nf90_inq_varid(ncid, 'sd_r', radius_varid) )
-      call check_netcdf( nf90_inq_varid(ncid, 'flag_radius', radius_flag_varid) )
-      call check_netcdf( nf90_inq_varid(ncid, 'flag_coalescence', coal_flag_varid) )
-    else
-      call check_netcdf( nf90_create(trim(tracking_id_filename), NF90_NETCDF4, ncid) )
-      call check_netcdf( nf90_def_dim(ncid, 'tracked_id', NF90_UNLIMITED, dimid) )
-      call check_netcdf( nf90_def_var(ncid, 'dm_id', NF90_INT, dimid, dm_id_varid) )
-      call check_netcdf( nf90_def_var(ncid, 'sd_id', NF90_INT, dimid, sd_id_varid) )
-      call check_netcdf( nf90_def_var(ncid, 'first_time', NF90_DOUBLE, dimid, time_varid) )
-      call check_netcdf( nf90_def_var(ncid, 'sd_r', nf90_real_precision, dimid, radius_varid) )
-      call check_netcdf( nf90_def_var(ncid, 'flag_radius', NF90_INT, dimid, radius_flag_varid) )
-      call check_netcdf( nf90_def_var(ncid, 'flag_coalescence', NF90_INT, dimid, coal_flag_varid) )
-      call check_netcdf( nf90_put_att(ncid, NF90_GLOBAL, 'tracking_id_output_basename', trim(tracking_id_output_basename)) )
-      call check_netcdf( nf90_enddef(ncid) )
-      existing_count = 0
-    end if
-
-    append_count = 0
     fid = IO_get_available_fid()
+    ! TPHT FW emits a raw per-rank ID stream here and relies on offline merge/dedup later.
     open(fid, file=trim(tracking_id_text_filename), access='sequential', status='unknown', position='append', &
          form='formatted', iostat=ierr)
     if( ierr /= 0 ) then
       write(*,*) 'sdm_interest_id_outnetcdf', 'Write error', trim(tracking_id_text_filename), mype
       call PRC_MPIstop
     end if
+
+    write(fid,'(A,1X,I0,1X,I0,1X,I0)') '# TPHT_META', PRC_NUM_X, PRC_NUM_Y, PRC_nprocs
 
     do n = 1, sd_num
       if( sd_id(n) <= INVALID_i4 .or. dm_id(n) <= INVALID_i4 ) cycle
@@ -1314,41 +1283,10 @@ contains
       end if
       if( .not. selected ) cycle
 
-      append_count = append_count + 1
-      existing_count = existing_count + 1
-      dm_id_buf(1) = dm_id(n)
-      sd_id_buf(1) = sd_id(n)
-      time_buf(1) = otime
-      radius_buf(1) = real(sd_r(n), kind=RP)
-      if( tracking_interest_radius_enable .and. sd_r(n) >= tracking_interest_radius_threshold ) then
-        radius_flag_buf(1) = 1
-      else
-        radius_flag_buf(1) = 0
-      end if
-      if( tracking_interest_coalescence_enable .and. if_coal(n) > 0_i2 ) then
-        coal_flag_buf(1) = 1
-      else
-        coal_flag_buf(1) = 0
-      end if
-      start1(1) = existing_count
-      count1(1) = 1
-      call check_netcdf( nf90_put_var(ncid, dm_id_varid, dm_id_buf, start=start1, count=count1) )
-      call check_netcdf( nf90_put_var(ncid, sd_id_varid, sd_id_buf, start=start1, count=count1) )
-      call check_netcdf( nf90_put_var(ncid, time_varid, time_buf, start=start1, count=count1) )
-      call check_netcdf( nf90_put_var(ncid, radius_varid, radius_buf, start=start1, count=count1) )
-      call check_netcdf( nf90_put_var(ncid, radius_flag_varid, radius_flag_buf, start=start1, count=count1) )
-      call check_netcdf( nf90_put_var(ncid, coal_flag_varid, coal_flag_buf, start=start1, count=count1) )
-      write(fid,'(I0,1X,I0)') dm_id_buf(1), sd_id_buf(1)
+      write(fid,'(I0,1X,I0)') dm_id(n), sd_id(n)
     end do
 
-    status = nf90_close(ncid)
-    if( status /= nf90_noerr ) then
-      write(*,*) 'sdm_interest_id_outnetcdf', 'Write error', trim(tracking_id_filename), mype
-      call PRC_MPIstop
-    end if
     close(fid)
-
-    if( IO_L .and. append_count > 0 ) write(IO_FID_LOG,*) '*** Updated tracking interest ID file:', trim(tracking_id_filename), append_count
 
     return
   end subroutine sdm_interest_id_outnetcdf

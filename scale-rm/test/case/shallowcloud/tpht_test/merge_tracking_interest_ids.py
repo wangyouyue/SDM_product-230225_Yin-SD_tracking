@@ -10,26 +10,39 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input-glob",
-        default="./ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.nc",
+        default="./ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.ids",
     )
     parser.add_argument(
         "--output",
-        default="./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.nc",
+        default="./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids",
     )
     return parser.parse_args()
 
 
-def collect_records(file_paths):
+def collect_records_nc(file_paths):
     from netCDF4 import Dataset
 
     merged = {}
     tracking_id_output_basename = ""
     radius_datatype = "f8"
+    tpht_meta = None
 
     for file_path in file_paths:
         with Dataset(file_path, "r") as nc:
             if not tracking_id_output_basename and "tracking_id_output_basename" in nc.ncattrs():
                 tracking_id_output_basename = nc.getncattr("tracking_id_output_basename")
+            if tpht_meta is None:
+                attrs = nc.ncattrs()
+                if (
+                    "tpht_prc_num_x" in attrs
+                    and "tpht_prc_num_y" in attrs
+                    and "tpht_prc_nprocs" in attrs
+                ):
+                    tpht_meta = (
+                        int(nc.getncattr("tpht_prc_num_x")),
+                        int(nc.getncattr("tpht_prc_num_y")),
+                        int(nc.getncattr("tpht_prc_nprocs")),
+                    )
 
             radius_datatype = nc.variables["sd_r"].datatype
             dm_id = nc.variables["dm_id"][:]
@@ -58,10 +71,58 @@ def collect_records(file_paths):
                     record["first_time"] = float(first_time[idx])
                     record["sd_r"] = float(sd_r[idx])
 
-    return merged, tracking_id_output_basename, radius_datatype
+    return merged, tracking_id_output_basename, radius_datatype, tpht_meta
 
 
-def write_output(output_path, merged, tracking_id_output_basename, radius_datatype, source_count):
+def collect_records_ids(file_paths):
+    merged = set()
+    tpht_meta = None
+
+    for file_path in file_paths:
+        with open(file_path, "r") as ids_in:
+            for raw_line in ids_in:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith("#"):
+                    parts = line.split()
+                    if len(parts) >= 5 and parts[0] == "#" and parts[1] == "TPHT_META":
+                        current_meta = (int(parts[2]), int(parts[3]), int(parts[4]))
+                        if tpht_meta is None:
+                            tpht_meta = current_meta
+                        elif tpht_meta != current_meta:
+                            raise SystemExit(
+                                "Inconsistent TPHT_META across input files: {0} vs {1}".format(
+                                    tpht_meta, current_meta
+                                )
+                            )
+                    continue
+
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                merged.add((int(parts[0]), int(parts[1])))
+
+    if tpht_meta is None:
+        raise SystemExit("Missing TPHT_META header in input ID files.")
+
+    return merged, tpht_meta
+
+
+def write_ids_output(output_ids_path, sorted_pairs, tpht_meta):
+    output_dir = output_ids_path.rsplit("/", 1)[0] if "/" in output_ids_path else "."
+    if output_dir and not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    with open(output_ids_path, "w") as ids_out:
+        ids_out.write("# TPHT_META {0} {1} {2}\n".format(tpht_meta[0], tpht_meta[1], tpht_meta[2]))
+        for dm_id, sd_id in sorted_pairs:
+            ids_out.write("{0} {1}\n".format(dm_id, sd_id))
+
+    return output_ids_path
+
+
+def write_output_nc(output_path, merged, tracking_id_output_basename, radius_datatype, source_count, tpht_meta):
     from netCDF4 import Dataset
 
     sorted_items = sorted(
@@ -91,15 +152,18 @@ def write_output(output_path, merged, tracking_id_output_basename, radius_dataty
         if tracking_id_output_basename:
             nc.setncattr("tracking_id_output_basename", tracking_id_output_basename)
         nc.setncattr("merge_source_file_count", source_count)
+        if tpht_meta is not None:
+            nc.setncattr("tpht_prc_num_x", tpht_meta[0])
+            nc.setncattr("tpht_prc_num_y", tpht_meta[1])
+            nc.setncattr("tpht_prc_nprocs", tpht_meta[2])
 
     if output_path.endswith(".nc"):
         output_ids_path = output_path[:-3] + ".ids"
     else:
         output_ids_path = output_path + ".ids"
 
-    with open(output_ids_path, "w") as ids_out:
-        for index in range(len(dm_id)):
-            ids_out.write("{0} {1}\n".format(dm_id[index], sd_id[index]))
+    sorted_pairs = list(zip(dm_id, sd_id))
+    write_ids_output(output_ids_path, sorted_pairs, tpht_meta)
 
     return output_ids_path
 
@@ -110,9 +174,26 @@ def main():
     if not input_files:
         raise SystemExit("No files matched: {0}".format(args.input_glob))
 
-    merged, tracking_id_output_basename, radius_datatype = collect_records(input_files)
+    first_ext = os.path.splitext(input_files[0])[1].lower()
     output_path = args.output
-    output_ids_path = write_output(output_path, merged, tracking_id_output_basename, radius_datatype, len(input_files))
+
+    if first_ext == ".ids":
+        merged, tpht_meta = collect_records_ids(input_files)
+        sorted_pairs = sorted(merged)
+        if output_path.endswith(".nc"):
+            output_ids_path = output_path[:-3] + ".ids"
+        else:
+            output_ids_path = output_path
+            if not output_ids_path.endswith(".ids"):
+                output_ids_path = output_ids_path + ".ids"
+        write_ids_output(output_ids_path, sorted_pairs, tpht_meta)
+        print("input_files={0}".format(len(input_files)))
+        print("unique_pairs={0}".format(len(merged)))
+        print("output_ids={0}".format(output_ids_path))
+        return
+
+    merged, tracking_id_output_basename, radius_datatype, tpht_meta = collect_records_nc(input_files)
+    output_ids_path = write_output_nc(output_path, merged, tracking_id_output_basename, radius_datatype, len(input_files), tpht_meta)
 
     print("input_files={0}".format(len(input_files)))
     print("unique_pairs={0}".format(len(merged)))

@@ -536,7 +536,10 @@ contains
     use scale_stdio, only: &
          H_LONG, IO_L, IO_FID_LOG, IO_get_available_fid
     use scale_process, only: &
-         mype => PRC_myrank
+         mype => PRC_myrank, &
+         PRC_nprocs
+    use scale_rm_process, only: &
+         PRC_NUM_X, PRC_NUM_Y
     use m_sdm_common, only: &
          i2, INVALID_i4
 
@@ -554,10 +557,15 @@ contains
     character(len=512) :: linebuf
     integer :: fid, ierr, n, m, pair_cnt, ios
     integer :: input_len
+    integer :: file_prc_num_x, file_prc_num_y, file_nprocs
     integer, allocatable :: target_sd_id(:), target_dm_id(:)
-    logical :: do_track, file_exists
+    logical :: do_track, file_exists, meta_found
 
     status_rdm = 0
+    meta_found = .false.
+    file_prc_num_x = -1
+    file_prc_num_y = -1
+    file_nprocs = -1
     input_filename = trim(adjustl(tracking_id_input_basename))
 
     if( len_trim(input_filename) == 0 ) then
@@ -593,11 +601,39 @@ contains
       read(fid,'(A)',iostat=ierr) linebuf
       if( ierr /= 0 ) exit
       if( len_trim(linebuf) == 0 ) cycle
-      if( linebuf(1:1) == '#' ) cycle
+      if( linebuf(1:1) == '#' ) then
+        if( index(adjustl(linebuf), '# TPHT_META') == 1 ) then
+          read(linebuf(12:),*,iostat=ios) file_prc_num_x, file_prc_num_y, file_nprocs
+          if( ios == 0 ) meta_found = .true.
+        end if
+        cycle
+      end if
       read(linebuf,*,iostat=ios) m, n
       if( ios /= 0 ) cycle
       pair_cnt = pair_cnt + 1
     end do
+
+    if( .not. meta_found ) then
+      close(fid)
+      if( IO_L ) then
+        write(IO_FID_LOG,*) '*** ERROR (sdm_select_particles_from_id_file): missing TPHT_META header in BW ID file.'
+        write(IO_FID_LOG,*) '    file=', trim(input_filename)
+      end if
+      status_rdm = 3
+      return
+    end if
+
+    if( file_prc_num_x /= PRC_NUM_X .or. file_prc_num_y /= PRC_NUM_Y .or. file_nprocs /= PRC_nprocs ) then
+      close(fid)
+      if( IO_L ) then
+        write(IO_FID_LOG,*) '*** ERROR (sdm_select_particles_from_id_file): BW ID file MPI layout does not match current run.'
+        write(IO_FID_LOG,*) '    file=', trim(input_filename)
+        write(IO_FID_LOG,*) '    file_layout(PRC_NUM_X,PRC_NUM_Y,PRC_nprocs)=', file_prc_num_x, file_prc_num_y, file_nprocs
+        write(IO_FID_LOG,*) '    run_layout (PRC_NUM_X,PRC_NUM_Y,PRC_nprocs)=', PRC_NUM_X, PRC_NUM_Y, PRC_nprocs
+      end if
+      status_rdm = 4
+      return
+    end if
 
     rewind(fid)
 
