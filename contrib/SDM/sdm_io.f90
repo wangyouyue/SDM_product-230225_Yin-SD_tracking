@@ -733,10 +733,6 @@ contains
       end if
     end if
 
-    if( write_coal ) then
-      if_coal(1:sd_num) = 0
-    end if
-
     return
 
   end subroutine sdm_outnetcdf

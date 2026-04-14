@@ -557,8 +557,10 @@ contains
     character(len=512) :: linebuf
     integer :: fid, ierr, n, m, pair_cnt, ios
     integer :: input_len
+    integer :: valid_before, matched_cnt
     integer :: file_prc_num_x, file_prc_num_y, file_nprocs
     integer, allocatable :: target_sd_id(:), target_dm_id(:)
+    logical, allocatable :: local_track_mask(:)
     logical :: do_track, file_exists, meta_found
 
     status_rdm = 0
@@ -595,6 +597,8 @@ contains
       status_rdm = 2
       return
     end if
+
+    write(IO_FID_LOG,*) "*** BW_ID_DEBUG open file=", trim(input_filename), " rank=", mype
 
     pair_cnt = 0
     do
@@ -635,7 +639,13 @@ contains
       return
     end if
 
+    write(IO_FID_LOG,*) "*** BW_ID_DEBUG meta/pairs rank,file_prc_num_x,file_prc_num_y,file_nprocs,pair_cnt=", &
+         mype, file_prc_num_x, file_prc_num_y, file_nprocs, pair_cnt
+
     rewind(fid)
+
+    valid_before = 0
+    matched_cnt = 0
 
     if( pair_cnt <= 0 ) then
       close(fid)
@@ -644,6 +654,7 @@ contains
         dm_id(n) = INVALID_i4
         if_coal(n) = 0_i2
       end do
+      write(IO_FID_LOG,*) "*** BW_ID_DEBUG local valid_before,matched_cnt,sd_num,rank=", valid_before, matched_cnt, sd_num, mype
       tracking_sample_initialized = .true.
       return
     end if
@@ -663,24 +674,39 @@ contains
     end do
     close(fid)
 
-    do n = 1, sd_num
-      do_track = .false.
-      if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
-        do m = 1, pair_cnt
-          if( dm_id(n) == target_dm_id(m) .and. sd_id(n) == target_sd_id(m) ) then
-            do_track = .true.
-            exit
+    valid_before = sd_num
+    matched_cnt = 0
+
+    allocate(local_track_mask(sd_num))
+    local_track_mask(:) = .false.
+
+    do m = 1, pair_cnt
+      if( target_dm_id(m) == mype ) then
+        if( target_sd_id(m) >= 1 .and. target_sd_id(m) <= sd_num ) then
+          if( .not. local_track_mask(target_sd_id(m)) ) then
+            local_track_mask(target_sd_id(m)) = .true.
+            matched_cnt = matched_cnt + 1
           end if
-        end do
+        end if
       end if
-      if( .not. do_track ) then
+    end do
+
+    do n = 1, sd_num
+      do_track = local_track_mask(n)
+      if( do_track ) then
+        sd_id(n) = n
+        dm_id(n) = mype
+      else
         sd_id(n) = INVALID_i4
         dm_id(n) = INVALID_i4
       end if
       if_coal(n) = 0_i2
     end do
 
+    write(IO_FID_LOG,*) "*** BW_ID_DEBUG local valid_before,matched_cnt,sd_num,rank=", valid_before, matched_cnt, sd_num, mype
+
     tracking_sample_initialized = .true.
+    deallocate(local_track_mask)
     deallocate(target_dm_id, target_sd_id)
 
     return

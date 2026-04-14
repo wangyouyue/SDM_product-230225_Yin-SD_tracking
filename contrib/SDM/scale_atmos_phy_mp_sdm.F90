@@ -862,6 +862,7 @@ contains
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
     logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3, did_sdm_dump
+    logical :: did_coal_flag_dump
     integer :: tracking_chain_count
     character(len=64) :: tracking_id_label
     real(DP) :: tracking_mem_mb, coal_mem_mb
@@ -975,6 +976,7 @@ contains
     call fapp_start("sdm_out",0,0)
 #endif
     did_sdm_dump = .false.
+    did_coal_flag_dump = .false.
 
     if( (mod(sdm_dmpvar,10)==1) .and. sdm_dmpitva>0.0_RP .and. &
          mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
@@ -1035,6 +1037,7 @@ contains
                         sdm_dmpnskip,filetag='all')
        end if
       did_sdm_dump = .true.
+      if( coalescence_output_enable ) did_coal_flag_dump = .true.
     end if
 
     if( ((mod(sdm_dmpvar,1000))/100>=1) .and. sdm_dmpitvl>0.0_RP .and. &
@@ -1095,6 +1098,7 @@ contains
                         sdm_dmpnskip,filetag='selected')
        end if
       did_sdm_dump = .true.
+      if( coalescence_output_enable ) did_coal_flag_dump = .true.
 
        nullify(sdx_tmp)
        nullify(sdy_tmp)
@@ -1112,6 +1116,10 @@ contains
        nullify(sdid_tmp)
        nullify(dmid_tmp)
 
+    end if
+
+    if( did_coal_flag_dump ) then
+       ifcoal_s2c(1:sdnum_s2c) = 0_i2
     end if
 
     if( IO_L .and. ( forward_tracking_enable .or. backward_tracking_enable ) .and. did_sdm_dump ) then

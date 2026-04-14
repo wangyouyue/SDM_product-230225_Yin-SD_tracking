@@ -16,6 +16,15 @@ def parse_args():
         "--output",
         default="./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids",
     )
+    parser.add_argument(
+        "--rank-bucket-basename",
+        default="",
+        help=(
+            "Optional basename for deduplicated per-rank ID outputs. "
+            "Example: ./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_dedup "
+            "writes *.pe000000.ids, *.pe000001.ids, ..."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -122,6 +131,38 @@ def write_ids_output(output_ids_path, sorted_pairs, tpht_meta):
     return output_ids_path
 
 
+def write_rank_bucket_ids_output(rank_bucket_basename, sorted_pairs, tpht_meta):
+    if not rank_bucket_basename:
+        return []
+
+    if rank_bucket_basename.endswith(".ids"):
+        rank_bucket_basename = rank_bucket_basename[:-4]
+
+    output_dir = rank_bucket_basename.rsplit("/", 1)[0] if "/" in rank_bucket_basename else "."
+    if output_dir and not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    nprocs = int(tpht_meta[2])
+    buckets = {rank: [] for rank in range(nprocs)}
+    for dm_id, sd_id in sorted_pairs:
+        if dm_id < 0 or dm_id >= nprocs:
+            raise SystemExit(
+                "dm_id {0} is outside TPHT_META nprocs={1}".format(dm_id, nprocs)
+            )
+        buckets[dm_id].append((dm_id, sd_id))
+
+    output_paths = []
+    for rank in range(nprocs):
+        output_path = "{0}.pe{1:06d}.ids".format(rank_bucket_basename, rank)
+        with open(output_path, "w") as ids_out:
+            ids_out.write("# TPHT_META {0} {1} {2}\n".format(tpht_meta[0], tpht_meta[1], tpht_meta[2]))
+            for dm_id, sd_id in buckets[rank]:
+                ids_out.write("{0} {1}\n".format(dm_id, sd_id))
+        output_paths.append(output_path)
+
+    return output_paths
+
+
 def write_output_nc(output_path, merged, tracking_id_output_basename, radius_datatype, source_count, tpht_meta):
     from netCDF4 import Dataset
 
@@ -187,18 +228,31 @@ def main():
             if not output_ids_path.endswith(".ids"):
                 output_ids_path = output_ids_path + ".ids"
         write_ids_output(output_ids_path, sorted_pairs, tpht_meta)
+        rank_bucket_paths = write_rank_bucket_ids_output(
+            args.rank_bucket_basename, sorted_pairs, tpht_meta
+        )
         print("input_files={0}".format(len(input_files)))
         print("unique_pairs={0}".format(len(merged)))
         print("output_ids={0}".format(output_ids_path))
+        if rank_bucket_paths:
+            print("rank_bucket_file_count={0}".format(len(rank_bucket_paths)))
+            print("rank_bucket_first={0}".format(rank_bucket_paths[0]))
         return
 
     merged, tracking_id_output_basename, radius_datatype, tpht_meta = collect_records_nc(input_files)
     output_ids_path = write_output_nc(output_path, merged, tracking_id_output_basename, radius_datatype, len(input_files), tpht_meta)
+    sorted_pairs = sorted(merged)
+    rank_bucket_paths = write_rank_bucket_ids_output(
+        args.rank_bucket_basename, sorted_pairs, tpht_meta
+    )
 
     print("input_files={0}".format(len(input_files)))
     print("unique_pairs={0}".format(len(merged)))
     print("output_nc={0}".format(output_path))
     print("output_ids={0}".format(output_ids_path))
+    if rank_bucket_paths:
+        print("rank_bucket_file_count={0}".format(len(rank_bucket_paths)))
+        print("rank_bucket_first={0}".format(rank_bucket_paths[0]))
 
 
 if __name__ == "__main__":

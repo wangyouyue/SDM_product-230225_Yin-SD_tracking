@@ -7,7 +7,6 @@
 #PBS -l elapstim_req=40:00:00
 #PBS -T intmpi
 #PBS -N ft_radius_min_1e6
-#PBS -M yinchongzhi@gmail.com
 
 source /etc/profile.d/modules.sh
 cd ${PBS_O_WORKDIR}

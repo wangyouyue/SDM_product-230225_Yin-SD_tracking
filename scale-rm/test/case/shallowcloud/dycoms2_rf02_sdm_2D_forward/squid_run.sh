@@ -7,7 +7,6 @@
 #PBS -l elapstim_req=01:00:00
 #PBS -T intmpi
 #PBS -N bw_tracking
-#PBS -M yinchongzhi@gmail.com
 
 source /etc/profile.d/modules.sh
 cd ${PBS_O_WORKDIR}
