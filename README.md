@@ -101,7 +101,7 @@ Sampling is executed by `sdm_select_stratified_random_particles` and is shared b
 
 ### 3.1 Random sampling
 - Candidate set: all valid SDs (`sd_rk > VALID2INVALID`).
-- Randomization rule: for each candidate, the code calls `random_number(rand_tracking)` and keeps the SD when `rand_tracking <= tracking_fraction`.
+- Randomization rule: for each candidate, the code draws from the tracking-specific RNG initialized by `tracking_sampling_seed + rank` and keeps the SD when `rand_tracking <= tracking_fraction`.
 - Cap control: if `max_tracked_sds > 0`, accepted count is hard-capped; once the cap is reached, later candidates in the loop are rejected.
 - Corner behavior:
   - `tracking_fraction <= 0`: no SD is tracked.
@@ -257,6 +257,7 @@ Main parameters under `&PARAM_ATMOS_PHY_MP_SDM` are summarized below with code d
 | `tracking_selection_mode` | string | `"random"` | Sampling algorithm selector: `"random"` applies Bernoulli sampling, `"stratified"` allocates per-bin quotas, and `"none"` means no additional random/stratified sampling mode is requested. |
 | `tracking_fraction` | real | `1.0` | Fraction of the candidate set retained after initialization. `1.0` means “do not downsample”. |
 | `max_tracked_sds` | integer | `0` | Hard cap for tracked SD count (`0` means unlimited). |
+| `tracking_sampling_seed` | integer | `0` | Dedicated seed for random/stratified tracking sampling. It initializes a per-rank tracking RNG as `tracking_sampling_seed + rank` and does not change SDM initialization, coalescence, or the main SDM RNG stream. |
 | `tracking_height_min` | real [m] | `400.0` | Lower height bound for stratified candidate filter. |
 | `tracking_height_max` | real [m] | `800.0` | Upper height bound for stratified candidate filter. |
 | `tracking_radius_min` | real [m] | `1.0e-6` | Lower radius bound for stratified candidate filter. |
@@ -354,8 +355,12 @@ The tutorial pair is:
 These two tutorial cases are placed under the same `tpht_test/` parent directory so that the FW-to-BW handoff path stays short and FW/BW restart outputs can be isolated with `fw_output/` and `bw_output/`.
 
 #### Step 2. Check the FW discovery namelist
-View:
-- `vi scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/run.conf`
+Enter the FW tutorial directory first:
+
+```bash
+cd scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline
+vi ./run.conf
+```
 
 Key TPHT FW settings are:
 
@@ -371,20 +376,19 @@ Key TPHT FW settings are:
 | `tracking_fraction` | `1.0d0` | Disable downsampling so the effective FW initialization reduces to the configured height/radius window. |
 | `max_tracked_sds` | `0` | No artificial cap on discovery candidates. |
 | `sdm_dmpvar` | `000` | Disable `SD_selected_NetCDF_*`; use the separate raw interest-ID stream instead. |
-| `HISTORY_DEFAULT_TINTERVAL` | `0.0D0` | FW discovery can disable history output because the TPHT handoff artifact is `tracking_interest_ids.pe*.ids`, not the Eulerian history stream. |
+| `HISTORY_DEFAULT_TINTERVAL` | `0.0D0` | Disable Eulerian history output in the FW discovery pass; the TPHT handoff artifact is `tracking_interest_ids.pe*.ids`. |
 
 Notes:
 - `tracking_mode` already drives FW/BW enablement, so `forward_tracking_enable` / `backward_tracking_enable` are not user-facing namelist keys in the current TPHT tutorial cases; they remain only as internal runtime flags derived from `tracking_mode`.
 - `tracking_selection_mode="none"` means no additional random/stratified sampling mode is requested.
 - `tracking_fraction=1.0d0` means the post-initialization downsampling step is disabled. In the TPHT FW tutorial, that leaves the configured height/radius window as the effective initialization filter.
-- For the shallowcloud tracking cases in this repository, `ATMOS_DYN_TYPE` is set to `HEVE`, the sponge layer starts at `ATMOS_DYN_wdamp_height = 1400.D0`, and `ATMOS_DYN_wdamp_tau = 0.2D0` matches `10 * TIME_DT_ATMOS_DYN` because `TIME_DT_ATMOS_DYN = 0.02D0`.
+- For the shallowcloud tracking cases in this repository, `ATMOS_DYN_TYPE` is set to `HEVI`, `TIME_DT = 0.1D0`, `TIME_DT_ATMOS_DYN = 0.05D0`, other atmospheric physics time steps are `0.1D0`, the sponge layer starts at `ATMOS_DYN_wdamp_height = 1400.D0`, and `ATMOS_DYN_wdamp_tau = 0.5D0`.
 - `ATMOS_PHY_TB_SMG_horizontal` remains `.false.` here because these tutorial cases use `ATMOS_PHY_TB_TYPE = 'SMAGORINSKY'`, not the HYBRID gray-zone/RANS setting that requires horizontal LES viscosity.
 
 #### Step 3. Build the executable
-From the FW TPHT case directory, rebuild SCALE-RM with SDM enabled. A generic example is:
+From the same FW TPHT case directory, rebuild SCALE-RM with SDM enabled. A generic example is:
 
 ```bash
-cd scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline
 module purge
 module load intel/2022.3.1 mpt hdf5/1.14.3 netcdf-c/4.9.2 netcdf-fortran/4.6.1
 make allclean
@@ -393,10 +397,9 @@ ln -fsv `grep ^TOPDIR Makefile | sed s/\)//g | awk '{print $NF}'`/bin/scale-rm* 
 ```
 
 #### Step 4. Run the FW discovery pass
-Enter the FW TPHT case directory, make sure the FW output directories exist, and submit the job:
+Still in the FW TPHT case directory, make sure the FW output directories exist, and submit the job:
 
 ```bash
-cd scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline
 mkdir -p fw_output fw_tracking
 qsub UoH_run.pbs
 ```
@@ -404,7 +407,6 @@ qsub UoH_run.pbs
 or on SQUID:
 
 ```bash
-cd scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline
 mkdir -p fw_output fw_tracking
 qsub squid_run.sh
 ```
@@ -415,7 +417,7 @@ If you rerun the FW case, remove old `fw_tracking/` outputs first so that previo
 After FW finishes, check that files like the following exist:
 
 ```bash
-ls scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.ids
+ls ./fw_tracking/tracking_interest_ids.pe*.ids
 ```
 
 Each rank-local `.ids` file stores raw discovered `(dm_id, sd_id)` records in append order. Each append block begins with:
@@ -429,7 +431,7 @@ FW interest-ID output is evaluated every microphysics step so that transient coa
 Run the dedicated post-processing utility after FW finishes:
 
 ```bash
-cd scale-rm/test/case/shallowcloud/tpht_test
+cd ..
 python merge_tracking_interest_ids.py \
   --input-glob "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids.pe*.ids" \
   --output "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids" \
@@ -444,8 +446,11 @@ This creates:
 The post-processing step removes duplicate `(dm_id, sd_id)` pairs across both rank-local files and repeated output times while preserving the FW decomposition metadata required by BW runtime validation. It then repartitions the unique pairs by `dm_id` so that each BW rank reads only its own target subset.
 
 #### Step 7. Check the BW reconstruction namelist
-View:
-- `vi scale-rm/test/case/shallowcloud/tpht_test/bt_interest_id_baseline/run.conf`
+Still in the `tpht_test/` parent directory, view:
+
+```bash
+vi ./bt_interest_id_baseline/run.conf
+```
 
 Key BW TPHT settings are:
 
@@ -459,13 +464,13 @@ Key BW TPHT settings are:
 
 In other words, BW no longer starts from a newly sampled subset; it starts from the FW-discovered target set. In the updated tutorial, the BW job reads the deduplicated per-rank handoff basename directly, so each rank consumes only its own target bucket.
 
-`tracking_interest_ids*.ids` is sufficient only for defining **which SDs belong to the BW target set**. It is not a full SD restart. The actual SD state evolution still comes from the normal model initialization/restart inputs, while the ID file only filters the tracked subset. In the current TPHT tutorial, BW reruns from the same atmospheric/SD initial state as FW and reuses the FW-discovered ID list to initialize backward tracking; it does not read FW `superdroplet_restart` as an input requirement. The FW/BW `superdroplet_restart` files kept under `fw_output/` and `bw_output/` are output archives for restart/debugging, not the TPHT handoff definition itself.
+`tracking_interest_ids*.ids` is sufficient only for defining **which SDs belong to the BW target set**. It is not a full SD restart. The actual SD state evolution still comes from the same initial physical state used by FW, while the ID file only filters the tracked subset. BW must not read any FW discovery `superdroplet_restart` written at a later time, because those evolved SD IDs no longer represent the initial-time ID mapping that BW needs for reconstruction. The FW/BW `superdroplet_restart` files kept under `fw_output/` and `bw_output/` are output archives for restart/debugging, not the TPHT handoff definition itself.
 
 #### Step 8. Prepare the BW executable and run the reconstruction pass
 No rebuild is required if the BW case uses the same source tree and the same build options as the FW case, because the TPHT FW→BW handoff changes only the namelist input and the deduplicated tracking-ID files. Before submission, place the executable in the BW case directory by linking or copying the already built FW executable. A minimal example is:
 
 ```bash
-cd scale-rm/test/case/shallowcloud/tpht_test/bt_interest_id_baseline
+cd ./bt_interest_id_baseline
 mkdir -p bw_output
 ln -fsv ../ft_interest_id_baseline/scale-rm* .
 qsub UoH_run.pbs
@@ -474,7 +479,7 @@ qsub UoH_run.pbs
 or on SQUID:
 
 ```bash
-cd scale-rm/test/case/shallowcloud/tpht_test/bt_interest_id_baseline
+cd ./bt_interest_id_baseline
 mkdir -p bw_output
 ln -fsv ../ft_interest_id_baseline/scale-rm* .
 qsub squid_run.sh
@@ -492,11 +497,12 @@ The minimum practical validation checks are:
 A simple manual check is:
 
 ```bash
-wc -l scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids
+cd ..
+wc -l ./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids
 
 python - <<'PY'
 from pathlib import Path
-path = Path('scale-rm/test/case/shallowcloud/tpht_test/ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids')
+path = Path('./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids')
 with path.open() as f:
     for _ in range(5):
         line = f.readline()
@@ -506,22 +512,37 @@ with path.open() as f:
 PY
 ```
 
-An automated FW/BW consistency check is also available. It compares the merged FW handoff set with the union of predecessor IDs stored in the earliest BW `SD_selected_NetCDF_*` output group:
+An automated strict FW/BW consistency check is also available. It compares the deduplicated per-rank FW handoff set with the predecessor-ID pairs stored in the earliest BW `SD_selected_NetCDF_*` output group:
 
 ```bash
-cd scale-rm/test/case/shallowcloud/tpht_test
-python check_tpht_consistency.py \
-  --fw-ids "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_merged.ids" \
-  --bw-glob "./bt_interest_id_baseline/bw_output/SD_selected_NetCDF_*.pe*.nc"
+python verify_tpht_restart_consistency.py \
+  --ids-basename "./ft_interest_id_baseline/fw_tracking/tracking_interest_ids_dedup" \
+  --bw-glob "./bt_interest_id_baseline/SD_selected_NetCDF_*"
 ```
 
 The script reports:
-- `fw_unique_pairs`: unique `(dm_id, sd_id)` pairs in the merged FW handoff file
-- `bw_valid_records`: total valid BW predecessor records found in the earliest BW output-time group
-- `bw_unique_pairs`: unique BW predecessor pairs after rank-wise union
-- `missing_in_bw` / `extra_in_bw`: set differences between FW and BW
+- `BW_MATCH rank=...`: per-rank exact-set comparison against the deduplicated FW handoff bucket
+- `fw_unique_pairs` / `bw_unique_pairs`: global unique `(dm_id, sd_id)` counts
+- `RESULT: PASS/FAIL`: whether the earliest BW output reproduces the TPHT handoff exactly
 
-The expected result is `missing_in_bw=0` and `extra_in_bw=0`.
+An optional TPHT trajectory/collision-history summary can then be generated from the BW outputs:
+
+```bash
+python analyze_tpht_tracks.py \
+  --bw-glob "./bt_interest_id_baseline/SD_selected_NetCDF_*" \
+  --coal-glob "./bt_interest_id_baseline/SD_coal_output_NetCDF_*" \
+  --output-dir "./tpht_analysis"
+```
+
+This writes:
+- `tpht_time_summary.csv`: per-output-time tracked-count and spatial/radius summary
+- `tpht_pair_timeseries.csv`: full TPHT pair-wise trajectory table keyed by `(pre_dmid, pre_sdid)`
+- `tpht_pair_overview.csv`: per-pair lifetime, radius envelope, and collision-summary table
+- `tpht_collision_summary.csv`: non-zero collision history summary, using `SD_coal_output_NetCDF_*` when available and `if_coal` flags otherwise
+- `tpht_trajectory_samples.csv`: a compact sample of representative TPHT trajectories
+- `tpht_analysis_summary.json`: machine-readable summary of the whole analysis run
+
+For the strict consistency check above, the expected result is `RESULT: PASS`.
 
 For trajectory reconstruction and visualization, you can then reuse the existing Python post-processing scripts in each case's `results/` directory.
 
@@ -616,8 +637,8 @@ Notes:
 
 ### Post-processing workflow
 - **Python trajectory extraction (`results/sd_output.py`)**: reads SD NetCDF snapshots and reconstructs trajectory chains.
-- **Python plotting (`results/traj_plot.py` or `random_traj.py`)**: visualizes sampled trajectory paths for sanity checks.
-- **Fortran tracer (`particle_tracer_opt.f90`, available in 2D cases)**: fast binary NetCDF traversal for large trajectory datasets.
+- **Python plotting (`results/traj_plot.py`)**: visualizes sampled trajectory paths for sanity checks.
+- The old per-case `random_traj.py` and `particle_tracer_opt.f90` helper copies have been removed from the shallowcloud test tree; use the maintained GMD2026 analysis scripts for manuscript diagnostics.
 
 2D backward no-coalescence post-processing example:
 ```bash
@@ -659,7 +680,7 @@ Case generation script:
   - two reference full-tracking cases (`fraction = 1.0`) for `stratified` and `random`,
   - ensemble sampled cases for fractions `0.05`, `0.10`, `0.20`,
   - 10 seeds per (mode, fraction) group,
-  - deterministic namelist seeding via `RANDOM_SEED_SCALE`.
+  - deterministic tracking-sampling seeding via `tracking_sampling_seed`.
 
 ### 11.3 Execution steps
 1. Build binaries for target architecture.

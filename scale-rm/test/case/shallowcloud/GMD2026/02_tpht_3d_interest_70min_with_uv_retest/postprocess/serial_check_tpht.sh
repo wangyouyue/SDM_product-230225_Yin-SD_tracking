@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#PBS -q SQUID
+#PBS --group=hp250136
+#PBS -m b
+#PBS -b 1
+#PBS -l cpunum_job=1
+#PBS -l elapstim_req=01:00:00
+#PBS -N tpht_uv_check
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+mkdir -p logs
+
+if [ -n "${GMD_PYTHON_VENV:-}" ]; then
+  source "${GMD_PYTHON_VENV}/bin/activate"
+elif [ -f /etc/profile.d/modules.sh ]; then
+  source /etc/profile.d/modules.sh
+  module purge
+  module load BasePy/2026
+fi
+
+python3 check_tpht_consistency.py \
+  --fw-ids "../fw_discovery/fw_tracking/tracking_interest_ids_merged.ids" \
+  --bw-glob "../bw_reconstruction/bw_output/SD_selected_NetCDF_*.pe*.nc" \
+  > logs/check_tpht_consistency.log 2>&1

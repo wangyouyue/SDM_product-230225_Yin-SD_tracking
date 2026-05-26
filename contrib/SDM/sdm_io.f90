@@ -155,6 +155,8 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_assign_tracking_subset(sd_num, sd_z, sd_r, sd_id, dm_id, if_coal)
     use scale_precision
+    use rng_uniform_mt, only: &
+         rng_init, rng_generate
     use scale_stdio, only: &
          IO_L, IO_FID_LOG
     use scale_process, only: &
@@ -162,7 +164,7 @@ contains
     use m_sdm_common, only: &
          i2, INVALID_i4, tracking_mode, tracking_selection_mode, tracking_fraction, max_tracked_sds, &
          tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, tracking_nz_bin, tracking_nr_bin, &
-         tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized
+         tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, tracking_sampling_seed, rng_tracking_s2c
 
     implicit none
 
@@ -197,6 +199,7 @@ contains
 
     tracked_cnt = 0
     if( .not. tracking_sample_initialized ) then
+      call rng_init( rng_tracking_s2c, mype + tracking_sampling_seed )
       if( tracking_fraction >= 1.0_RP .and. max_tracked_sds <= 0 ) then
         do n=1,sd_num
           if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
@@ -389,7 +392,7 @@ contains
                 ibin = (iz-1)*tracking_nr_bin + ir
                 needed_in_bin = bin_quota(ibin) - bin_selected(ibin)
                 if( needed_in_bin > 0 .and. bin_remaining(ibin) > 0 ) then
-                  call random_number(rand_tracking)
+                  rand_tracking = real(rng_generate(rng_tracking_s2c), kind=RP)
                   if( rand_tracking <= real(needed_in_bin,kind=RP) / real(bin_remaining(ibin),kind=RP) ) then
                     do_track = .true.
                     bin_selected(ibin) = bin_selected(ibin) + 1
@@ -427,7 +430,7 @@ contains
           do n=1,sd_num
             do_track = .true.
             if( tracking_fraction < 1.0_RP ) then
-              call random_number(rand_tracking)
+              rand_tracking = real(rng_generate(rng_tracking_s2c), kind=RP)
               if( rand_tracking > tracking_fraction ) do_track = .false.
             end if
             if( max_tracked_sds > 0 ) then
@@ -1189,7 +1192,7 @@ contains
     return
   end subroutine sdm_append_tracking_id_pairs
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine sdm_interest_id_outnetcdf(otime, sd_num, sd_r, sd_id, dm_id, if_coal)
+  subroutine sdm_interest_id_outnetcdf(otime, sd_num, sd_r, sd_id, dm_id, if_coal, records_written)
     use scale_precision
     use scale_stdio
     use scale_process, only: &
@@ -1212,12 +1215,15 @@ contains
     integer, intent(in) :: sd_id(1:sd_num)
     integer, intent(in) :: dm_id(1:sd_num)
     integer(kind=i2), intent(in) :: if_coal(1:sd_num)
+    integer, intent(out), optional :: records_written
 
     character(len=H_LONG) :: tracking_id_filename
     character(len=H_LONG) :: tracking_id_text_filename
     integer :: n, fid, ierr
     integer :: candidate_count
     logical :: selected
+
+    if( present(records_written) ) records_written = 0
 
     if( len_trim(tracking_id_output_basename) == 0 ) return
     if( .not. tracking_interest_radius_enable .and. .not. tracking_interest_coalescence_enable ) return
@@ -1280,6 +1286,7 @@ contains
       if( .not. selected ) cycle
 
       write(fid,'(I0,1X,I0)') dm_id(n), sd_id(n)
+      if( present(records_written) ) records_written = records_written + 1
     end do
 
     close(fid)

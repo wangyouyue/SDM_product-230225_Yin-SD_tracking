@@ -1,0 +1,117 @@
+"""Parse TPHT target-set handoff .ids files."""
+
+from __future__ import annotations
+
+import re
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+from .table_utils import safe_ratio
+
+KEY_VALUE_RE = re.compile(r"([A-Za-z0-9_]+)\s*=\s*([^\s,]+)")
+RANK_RE = re.compile(r"pe(\d{6})")
+TPHT_META_KEYS = ("PRC_NUM_X", "PRC_NUM_Y", "PRC_nprocs", "TPHT_ID_EPOCH_SEC")
+
+
+def _parse_meta_value(value: str) -> Any:
+    """Parse a metadata value from a TPHT header."""
+    try:
+        number = float(value.replace("D", "E").replace("d", "e"))
+    except ValueError:
+        return value.strip().strip("\"'")
+    return int(number) if number.is_integer() else number
+
+
+def _parse_header_metadata(text: str) -> dict[str, Any]:
+    """Parse key-value or positional TPHT metadata headers.
+
+    Older TPHT sidecar files may use compact headers such as
+    ``# TPHT_META 8 8 64`` instead of ``PRC_NUM_X=8 PRC_NUM_Y=8``.  The
+    positional form is kept because it is enough to validate MPI decomposition
+    without requiring a simulation rerun.
+    """
+    metadata: dict[str, Any] = {}
+    for key, value in KEY_VALUE_RE.findall(text):
+        metadata[key] = _parse_meta_value(value)
+    if metadata:
+        return metadata
+
+    parts = text.lstrip("#").split()
+    if not parts or parts[0] != "TPHT_META":
+        return metadata
+    for key, value in zip(TPHT_META_KEYS, parts[1:]):
+        metadata[key] = _parse_meta_value(value)
+    return metadata
+
+
+def parse_id_file(path: Path) -> dict[str, Any]:
+    """Parse one TPHT .ids file into metadata and (dm_id, sd_id) pairs."""
+    metadata: dict[str, Any] = {}
+    pairs: list[tuple[int, int]] = []
+    rank_match = RANK_RE.search(path.name)
+    rank = int(rank_match.group(1)) if rank_match else None
+    if rank is not None:
+        metadata["rank"] = rank
+
+    if not path.exists():
+        return {"path": path, "metadata": metadata, "pairs": pairs, "warnings": [f"ID file missing: {path}"]}
+
+    warnings: list[str] = []
+    with path.open(errors="ignore") as handle:
+        for line in handle:
+            text = line.strip()
+            if not text:
+                continue
+            if text.startswith("#"):
+                metadata.update(_parse_header_metadata(text))
+                continue
+            parts = text.split()
+            integers: list[int] = []
+            for part in parts:
+                try:
+                    integers.append(int(part))
+                except ValueError:
+                    continue
+                if len(integers) == 2:
+                    break
+            if len(integers) >= 2:
+                pairs.append((integers[0], integers[1]))
+            else:
+                warnings.append(f"unparseable ID record in {path.name}: {text[:80]}")
+    return {"path": path, "metadata": metadata, "pairs": pairs, "warnings": warnings}
+
+
+def summarize_id_files(paths: list[Path]) -> tuple[dict[str, Any], list[tuple[int, int]], list[str]]:
+    """Summarize a collection of TPHT .ids files."""
+    warnings: list[str] = []
+    all_pairs: list[tuple[int, int]] = []
+    per_rank: Counter[int] = Counter()
+    metadata: dict[str, Any] = {}
+
+    for path in paths:
+        parsed = parse_id_file(path)
+        warnings.extend(parsed["warnings"])
+        all_pairs.extend(parsed["pairs"])
+        rank = parsed["metadata"].get("rank")
+        if rank is not None:
+            per_rank[int(rank)] += len(parsed["pairs"])
+        for key, value in parsed["metadata"].items():
+            metadata.setdefault(key, value)
+
+    unique_pairs = set(all_pairs)
+    mean_rank_count = sum(per_rank.values()) / len(per_rank) if per_rank else None
+    rank_imbalance_ratio = safe_ratio(max(per_rank.values()) if per_rank else None, mean_rank_count)
+    summary = {
+        "raw_id_records": len(all_pairs),
+        "unique_pairs": len(unique_pairs),
+        "deduplicated_pairs": len(unique_pairs),
+        "ids_per_rank": dict(sorted(per_rank.items())),
+        "dedup_reduction_ratio": safe_ratio(len(all_pairs), len(unique_pairs)),
+        "rank_imbalance_ratio": rank_imbalance_ratio,
+        "PRC_NUM_X": metadata.get("PRC_NUM_X"),
+        "PRC_NUM_Y": metadata.get("PRC_NUM_Y"),
+        "PRC_nprocs": metadata.get("PRC_nprocs"),
+        "TPHT_ID_EPOCH_SEC": metadata.get("TPHT_ID_EPOCH_SEC"),
+    }
+    return summary, sorted(unique_pairs), warnings

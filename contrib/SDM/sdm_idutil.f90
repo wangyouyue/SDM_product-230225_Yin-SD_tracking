@@ -83,6 +83,7 @@ end module sdm_sorting_module
 
 module m_sdm_idutil
   use scale_precision
+  use rng_uniform_mt, only: c_rng_uniform_mt, rng_generate
 
   implicit none
   private
@@ -713,6 +714,7 @@ contains
   end subroutine sdm_select_particles_from_id_file
 !---------------------------------------------------------------------------------------------------------------------------------
   subroutine sdm_select_stratified_random_particles(sd_num, sd_rk, sd_r,         &
+                                                    sd_rng,                    &
                                                     tracking_selection_mode,      &
                                                     tracking_fraction,             &
                                                     max_tracked_sds,              &
@@ -736,6 +738,7 @@ contains
     integer, intent(in) :: sd_num
     real(RP), intent(in) :: sd_rk(1:sd_num)
     real(RP), intent(in) :: sd_r(1:sd_num)
+    type(c_rng_uniform_mt), intent(inout) :: sd_rng
     character(len=*), intent(in) :: tracking_selection_mode
     real(RP), intent(in) :: tracking_fraction
     integer, intent(in) :: max_tracked_sds
@@ -765,7 +768,11 @@ contains
 
     status_rdm = 0
 
-    if( tracking_fraction <= 0.0_RP ) then
+    use_none = trim(adjustl(tracking_selection_mode)) == 'none' .or. &
+               trim(adjustl(tracking_selection_mode)) == 'NONE' .or. &
+               trim(adjustl(tracking_selection_mode)) == 'None'
+
+    if( tracking_fraction <= 0.0_RP .and. .not. use_none ) then
       do n = 1, sd_num
         sd_id(n) = INVALID_i4
         dm_id(n) = INVALID_i4
@@ -782,11 +789,24 @@ contains
       use_stratified = trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
                        trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
                        trim(adjustl(tracking_selection_mode)) == 'Stratified'
-      use_none = trim(adjustl(tracking_selection_mode)) == 'none' .or. &
-                 trim(adjustl(tracking_selection_mode)) == 'NONE' .or. &
-                 trim(adjustl(tracking_selection_mode)) == 'None'
       use_radius_upper_bound = tracking_radius_max > tracking_radius_min
       stratified_selected = .false.
+
+      if( use_none ) then
+        do n = 1, sd_num
+          if( sd_rk(n) > VALID2INVALID ) then
+            tracked_cnt = tracked_cnt + 1
+            sd_id(n) = n
+            dm_id(n) = mype
+          else
+            sd_id(n) = INVALID_i4
+            dm_id(n) = INVALID_i4
+          end if
+          if_coal(n) = 0_i2
+        end do
+        tracking_sample_initialized = .true.
+        return
+      end if
 
       if( use_stratified .and. tracking_nz_bin > 0 .and. tracking_nr_bin > 0 .and. &
           tracking_height_max > tracking_height_min ) then
@@ -919,7 +939,7 @@ contains
                 ibin = (iz-1)*tracking_nr_bin + ir
                 needed_in_bin = bin_quota(ibin) - bin_selected(ibin)
                 if( needed_in_bin > 0 .and. bin_remaining(ibin) > 0 ) then
-                  call random_number(rand_tracking)
+                  rand_tracking = real(rng_generate(sd_rng), kind=RP)
                   if( rand_tracking <= real(needed_in_bin,kind=RP) / real(bin_remaining(ibin),kind=RP) ) then
                     do_track = .true.
                     bin_selected(ibin) = bin_selected(ibin) + 1
@@ -956,14 +976,8 @@ contains
         else
           do n = 1, sd_num
             do_track = ( sd_rk(n) > VALID2INVALID )
-            if( do_track .and. use_none ) then
-              z_height = sd_rk(n) * DZ
-              do_track = z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
-                         sd_r(n) >= tracking_radius_min .and. &
-                         ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max )
-            end if
             if( do_track .and. tracking_fraction < 1.0_RP ) then
-              call random_number(rand_tracking)
+              rand_tracking = real(rng_generate(sd_rng), kind=RP)
               if( rand_tracking > tracking_fraction ) do_track = .false.
             end if
             if( do_track .and. max_tracked_sds > 0 .and. tracked_cnt >= max_tracked_sds ) do_track = .false.

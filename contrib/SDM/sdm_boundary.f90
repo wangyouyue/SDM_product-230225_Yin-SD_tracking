@@ -621,7 +621,7 @@ contains
          nisub, &
          dstw_sub, dste_sub, srcw_sub, srce_sub, &
          INVALID,INVALID_i8,INVALID_i2,INVALID_i4, &
-         tag,i2,sdm_cold
+         i2,sdm_cold
     ! Input variables
     integer, intent(in) :: wbc      ! Option for west boundary conditions
     integer, intent(in) :: ebc      ! Option for east boundaty conditions
@@ -692,6 +692,14 @@ contains
     integer :: siz_i4   ! Sending and receiving buffer size
     integer :: ierr     ! Error descriptor
     integer :: stat(mpi_status_size) ! Runtime status table
+    integer, parameter :: TAG_X_WEST_R8 = 1
+    integer, parameter :: TAG_X_EAST_R8 = 2
+    integer, parameter :: TAG_X_WEST_I8 = 3
+    integer, parameter :: TAG_X_EAST_I8 = 4
+    integer, parameter :: TAG_X_WEST_I2 = 5
+    integer, parameter :: TAG_X_EAST_I2 = 6
+    integer, parameter :: TAG_X_WEST_I4 = 7
+    integer, parameter :: TAG_X_EAST_I4 = 8
     !------------------------------------------------------------------
 
     ! Initialize
@@ -724,28 +732,20 @@ contains
 
        !### Send/Receive real8 ###!
 
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
-
        !### Call the sending and receiving MPI function (towards west)###!
 
-       call mpi_isend(sbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,dstw,tag, &
+       call mpi_isend(sbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,dstw,TAG_X_WEST_R8, &
             PRC_LOCAL_COMM_WORLD,statsw,ierr)
 
-       call mpi_irecv(rbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,srce,tag, &
+       call mpi_irecv(rbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,srce,TAG_X_WEST_R8, &
             PRC_LOCAL_COMM_WORLD,statre,ierr)
-
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
 
        !### Call the sending and receiving MPI function (towards east)###!
 
-       call mpi_isend(sbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,dste,tag, &
+       call mpi_isend(sbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,dste,TAG_X_EAST_R8, &
             PRC_LOCAL_COMM_WORLD,statse,ierr)
 
-       call mpi_irecv(rbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,srcw,tag, &
+       call mpi_irecv(rbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,srcw,TAG_X_EAST_R8, &
             PRC_LOCAL_COMM_WORLD,statrw,ierr)
 
        !### Call the waiting MPI function ###!
@@ -757,28 +757,20 @@ contains
 
        !### Send/Receive int8 ###!
 
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
-
        !### Call the sending and receiving MPI function (towards west)###!
 
-       call mpi_isend(sbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,dstw,tag, &
+       call mpi_isend(sbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,dstw,TAG_X_WEST_I8, &
             PRC_LOCAL_COMM_WORLD,statsw,ierr)
 
-       call mpi_irecv(rbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,srce,tag, &
+       call mpi_irecv(rbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,srce,TAG_X_WEST_I8, &
             PRC_LOCAL_COMM_WORLD,statre,ierr)
-
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
 
        !### Call the sending and receiving MPI function (towards east)###!
 
-       call mpi_isend(sbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,dste,tag, &
+       call mpi_isend(sbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,dste,TAG_X_EAST_I8, &
             PRC_LOCAL_COMM_WORLD,statse,ierr)
 
-       call mpi_irecv(rbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,srcw,tag, &
+       call mpi_irecv(rbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,srcw,TAG_X_EAST_I8, &
             PRC_LOCAL_COMM_WORLD,statrw,ierr)
 
        !### Call the waiting MPI function ###!
@@ -790,28 +782,20 @@ contains
 
        !### Send/Receive int2 ###!
 
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
-
        !### Call the sending and receiving MPI function (towards west)###!
 
-       call mpi_isend(sbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,dstw,tag, &
+       call mpi_isend(sbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,dstw,TAG_X_WEST_I2, &
             PRC_LOCAL_COMM_WORLD,statsw,ierr)
 
-       call mpi_irecv(rbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,srce,tag, &
+       call mpi_irecv(rbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,srce,TAG_X_WEST_I2, &
             PRC_LOCAL_COMM_WORLD,statre,ierr)
-
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
 
        !### Call the sending and receiving MPI function (towards east)###!
 
-       call mpi_isend(sbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,dste,tag, &
+       call mpi_isend(sbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,dste,TAG_X_EAST_I2, &
             PRC_LOCAL_COMM_WORLD,statse,ierr)
 
-       call mpi_irecv(rbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,srcw,tag, &
+       call mpi_irecv(rbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,srcw,TAG_X_EAST_I2, &
             PRC_LOCAL_COMM_WORLD,statrw,ierr)
 
        !### Call the waiting MPI function ###!
@@ -825,28 +809,20 @@ contains
 
        !if( sdm_cold ) then
 
-          !### Incliment the message tag ###!
-
-          tag = tag + 1
-
           !### Call the sending and receiving MPI function (towards west)###!
 
-          call mpi_isend(sbuf_i4(1,1,1),siz_i4,MPI_INTEGER,dstw,tag, &
+          call mpi_isend(sbuf_i4(1,1,1),siz_i4,MPI_INTEGER,dstw,TAG_X_WEST_I4, &
                PRC_LOCAL_COMM_WORLD,statsw,ierr)
 
-          call mpi_irecv(rbuf_i4(1,1,1),siz_i4,MPI_INTEGER,srce,tag, &
+          call mpi_irecv(rbuf_i4(1,1,1),siz_i4,MPI_INTEGER,srce,TAG_X_WEST_I4, &
                PRC_LOCAL_COMM_WORLD,statre,ierr)
-
-          !### Incliment the message tag ###!
-
-          tag = tag + 1
 
           !### Call the sending and receiving MPI function (towards east)###!
 
-          call mpi_isend(sbuf_i4(1,1,2),siz_i4,MPI_INTEGER,dste,tag, &
+          call mpi_isend(sbuf_i4(1,1,2),siz_i4,MPI_INTEGER,dste,TAG_X_EAST_I4, &
                PRC_LOCAL_COMM_WORLD,statse,ierr)
 
-          call mpi_irecv(rbuf_i4(1,1,2),siz_i4,MPI_INTEGER,srcw,tag, &
+          call mpi_irecv(rbuf_i4(1,1,2),siz_i4,MPI_INTEGER,srcw,TAG_X_EAST_I4, &
                PRC_LOCAL_COMM_WORLD,statrw,ierr)
 
           !### Call the waiting MPI function ###!
@@ -1369,7 +1345,7 @@ contains
          njsub, &
          dsts_sub, dstn_sub, srcs_sub, srcn_sub, &
          INVALID,INVALID_i8,INVALID_i2,INVALID_i4, &
-         tag,i2,sdm_cold
+         i2,sdm_cold
 
     ! Input variables
     integer, intent(in) :: sbc      ! Option for south boundary conditions
@@ -1443,6 +1419,14 @@ contains
     integer :: ierr     ! Error descriptor
 
     integer :: stat(mpi_status_size) ! Runtime status table
+    integer, parameter :: TAG_Y_SOUTH_R8 = 9
+    integer, parameter :: TAG_Y_NORTH_R8 = 10
+    integer, parameter :: TAG_Y_SOUTH_I8 = 11
+    integer, parameter :: TAG_Y_NORTH_I8 = 12
+    integer, parameter :: TAG_Y_SOUTH_I2 = 13
+    integer, parameter :: TAG_Y_NORTH_I2 = 14
+    integer, parameter :: TAG_Y_SOUTH_I4 = 15
+    integer, parameter :: TAG_Y_NORTH_I4 = 16
     !--------------------------------------------------------------------
 
     ! Initialize
@@ -1475,28 +1459,20 @@ contains
 
        !### Send/Receive real8 ###!
 
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
-
        !### Call the sending and receiving MPI function ###!
 
-       call mpi_isend(sbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,dsts,tag, &
+       call mpi_isend(sbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,dsts,TAG_Y_SOUTH_R8, &
             MPI_COMM_WORLD,statss,ierr)
 
-       call mpi_irecv(rbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,srcn,tag, &
+       call mpi_irecv(rbuf_r8(1,1,1),siz_r8,MPI_DOUBLE_PRECISION,srcn,TAG_Y_SOUTH_R8, &
             MPI_COMM_WORLD,statrn,ierr)
-
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
 
        !### Call the sending and receiving MPI function ###!
 
-       call mpi_isend(sbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,dstn,tag, &
+       call mpi_isend(sbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,dstn,TAG_Y_NORTH_R8, &
             MPI_COMM_WORLD,statsn,ierr)
 
-       call mpi_irecv(rbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,srcs,tag, &
+       call mpi_irecv(rbuf_r8(1,1,2),siz_r8,MPI_DOUBLE_PRECISION,srcs,TAG_Y_NORTH_R8, &
             MPI_COMM_WORLD,statrs,ierr)
 
        !### Call the waiting MPI function ###!
@@ -1508,28 +1484,20 @@ contains
 
        !### Send/Receive int8 ###!
 
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
-
        !### Call the sending and receiving MPI function ###!
 
-       call mpi_isend(sbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,dsts,tag, &
+       call mpi_isend(sbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,dsts,TAG_Y_SOUTH_I8, &
             MPI_COMM_WORLD,statss,ierr)
 
-       call mpi_irecv(rbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,srcn,tag, &
+       call mpi_irecv(rbuf_i8(1,1,1),siz_i8,MPI_LONG_LONG_INT,srcn,TAG_Y_SOUTH_I8, &
             MPI_COMM_WORLD,statrn,ierr)
-
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
 
        !### Call the sending and receiving MPI function ###!
 
-       call mpi_isend(sbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,dstn,tag, &
+       call mpi_isend(sbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,dstn,TAG_Y_NORTH_I8, &
             MPI_COMM_WORLD,statsn,ierr)
 
-       call mpi_irecv(rbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,srcs,tag, &
+       call mpi_irecv(rbuf_i8(1,1,2),siz_i8,MPI_LONG_LONG_INT,srcs,TAG_Y_NORTH_I8, &
             MPI_COMM_WORLD,statrs,ierr)
 
        !### Call the waiting MPI function ###!
@@ -1541,28 +1509,20 @@ contains
 
        !### Send/Receive int2 ###!
 
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
-
        !### Call the sending and receiving MPI function ###!
 
-       call mpi_isend(sbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,dsts,tag, &
+       call mpi_isend(sbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,dsts,TAG_Y_SOUTH_I2, &
             MPI_COMM_WORLD,statss,ierr)
 
-       call mpi_irecv(rbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,srcn,tag, &
+       call mpi_irecv(rbuf_i2(1,1,1),siz_i2,MPI_INTEGER2,srcn,TAG_Y_SOUTH_I2, &
             MPI_COMM_WORLD,statrn,ierr)
-
-       !### Incliment the message tag ###!
-
-       tag = tag + 1
 
        !### Call the sending and receiving MPI function ###!
 
-       call mpi_isend(sbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,dstn,tag, &
+       call mpi_isend(sbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,dstn,TAG_Y_NORTH_I2, &
             MPI_COMM_WORLD,statsn,ierr)
 
-       call mpi_irecv(rbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,srcs,tag, &
+       call mpi_irecv(rbuf_i2(1,1,2),siz_i2,MPI_INTEGER2,srcs,TAG_Y_NORTH_I2, &
             MPI_COMM_WORLD,statrs,ierr)
 
        !### Call the waiting MPI function ###!
@@ -1576,28 +1536,20 @@ contains
 
        !if( sdm_cold ) then
 
-          !### Incliment the message tag ###!
-
-          tag = tag + 1
-
           !### Call the sending and receiving MPI function ###!
 
-          call mpi_isend(sbuf_i4(1,1,1),siz_i4,MPI_INTEGER,dsts,tag, &
+          call mpi_isend(sbuf_i4(1,1,1),siz_i4,MPI_INTEGER,dsts,TAG_Y_SOUTH_I4, &
                MPI_COMM_WORLD,statss,ierr)
 
-          call mpi_irecv(rbuf_i4(1,1,1),siz_i4,MPI_INTEGER,srcn,tag, &
+          call mpi_irecv(rbuf_i4(1,1,1),siz_i4,MPI_INTEGER,srcn,TAG_Y_SOUTH_I4, &
                MPI_COMM_WORLD,statrn,ierr)
-
-          !### Incliment the message tag ###!
-          
-          tag = tag + 1
 
           !### Call the sending and receiving MPI function ###!
 
-          call mpi_isend(sbuf_i4(1,1,2),siz_i4,MPI_INTEGER,dstn,tag, &
+          call mpi_isend(sbuf_i4(1,1,2),siz_i4,MPI_INTEGER,dstn,TAG_Y_NORTH_I4, &
                MPI_COMM_WORLD,statsn,ierr)
 
-          call mpi_irecv(rbuf_i4(1,1,2),siz_i4,MPI_INTEGER,srcs,tag, &
+          call mpi_irecv(rbuf_i4(1,1,2),siz_i4,MPI_INTEGER,srcs,TAG_Y_NORTH_I4, &
                MPI_COMM_WORLD,statrs,ierr)
 
           !### Call the waiting MPI function ###!

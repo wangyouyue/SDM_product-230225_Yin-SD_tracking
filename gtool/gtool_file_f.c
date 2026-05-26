@@ -350,7 +350,7 @@ void file_put_axis_( int32_t *fid,          // (in)
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char _dim_name[File_HSHORT+1];
-  int len;
+  size_t len;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
   fstr2cstr(_name, name, len);
@@ -384,7 +384,7 @@ void file_def_axis_( int32_t *fid,          // (in)
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char _dim_name[File_HSHORT+1];
-  int len;
+  size_t len;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
   fstr2cstr(_name, name, len);
@@ -394,8 +394,6 @@ void file_def_axis_( int32_t *fid,          // (in)
 
   len = units_len > File_HMID ? File_HMID : units_len;
   fstr2cstr(_units, units, len);
-
-
 
   len = dim_name_len > File_HSHORT ? File_HSHORT : dim_name_len;
   fstr2cstr(_dim_name, dim_name, len);
@@ -413,8 +411,7 @@ void file_write_axis_( int32_t *fid,          // (in)
                        fortran_charlen_t name_len)     // (in)
 {
   char _name[File_HSHORT+1];
-
-  int len;
+  size_t len;
   MPI_Offset start_[1], count_[1];
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
@@ -446,7 +443,7 @@ void file_put_associated_coordinates_( int32_t *fid,          // (in)
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char **_dim_names;
-  int len;
+  size_t len;
   int i;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
@@ -484,7 +481,7 @@ void file_def_associated_coordinates_( int32_t *fid,          // (in)
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char **_dim_names;
-  int len;
+  size_t len;
   int i;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
@@ -516,7 +513,8 @@ void file_write_associated_coordinates_( int32_t *fid,          // (in)
                                          fortran_charlen_t name_len)     // (in)
 {
   char _name[File_HSHORT+1];
-  int i, len;
+  int i;
+  size_t len;
   MPI_Offset start_[4], count_[4];
   /* all associated coordinates are up to 4D */
 
@@ -550,7 +548,7 @@ void file_add_variable_( int32_t  *vid,         // (out)
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char **_dims;
-  int len;
+  size_t len;
   int i;
 
   len = varname_len > File_HSHORT ? File_HSHORT : varname_len;

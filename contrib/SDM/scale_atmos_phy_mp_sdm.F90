@@ -157,6 +157,7 @@ module scale_atmos_phy_mp_sdm
      gadg_count_sort
   use rng_uniform_mt, only: &
      c_rng_uniform_mt,      &
+     rng_init,              &
      rng_save_state,        &
      rng_load_state,        &
      gen_rand_array => rng_generate_array
@@ -168,6 +169,16 @@ module scale_atmos_phy_mp_sdm
   implicit none
   private
   !-----------------------------------------------------------------------------
+  real(DP), save :: gmd_sd_output_write_time_last_s = 0.0_DP
+  real(DP), save :: gmd_sd_output_write_time_total_s = 0.0_DP
+  integer,  save :: gmd_sd_output_write_count = 0
+  real(DP), save :: gmd_coalescence_output_write_time_last_s = 0.0_DP
+  real(DP), save :: gmd_coalescence_output_write_time_total_s = 0.0_DP
+  integer,  save :: gmd_coalescence_output_write_count = 0
+  real(DP), save :: gmd_tpht_id_write_time_last_s = 0.0_DP
+  real(DP), save :: gmd_tpht_id_write_time_total_s = 0.0_DP
+  integer,  save :: gmd_tpht_id_write_count = 0
+  real(DP), save :: gmd_tpht_id_records_written_total = 0.0_DP
   !
   !++ Public procedure
   !
@@ -501,8 +512,6 @@ contains
     dstn_sub = PRC_next(PRC_N)
     srcs_sub = PRC_next(PRC_S)
     srcn_sub = PRC_next(PRC_N)
-
-    tag  = 0
 
     !--- read namelist
     rewind(IO_FID_CONF)
@@ -863,16 +872,45 @@ contains
     integer :: histitemid
     logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3, did_sdm_dump
     logical :: did_coal_flag_dump
+    logical :: output_selected_as_all
     integer :: tracking_chain_count
+    integer :: tracking_chain_count_sum, tracking_chain_count_max
+    integer :: mpi_ierr
     character(len=64) :: tracking_id_label
     real(DP) :: tracking_mem_mb, coal_mem_mb
+    real(DP) :: tracking_chain_count_mean
+    real(DP) :: tracking_id_memory_bytes_local, tracking_id_memory_bytes_sum
+    real(DP) :: if_coal_memory_bytes_local, if_coal_memory_bytes_sum
+    real(DP) :: rank_peak_memory_max_mib, rank_peak_memory_sum_mib
+    real(DP) :: rank_rss_max_mib, rank_rss_sum_mib
+    real(DP) :: gmd_time_start, gmd_time_end
+    real(DP) :: gmd_id_assignment_time_s, gmd_boundary_tracking_time_s
+    real(DP) :: gmd_sd_output_write_time_last_s_global, gmd_sd_output_write_time_total_s_global
+    real(DP) :: gmd_coalescence_output_write_time_last_s_global, gmd_coalescence_output_write_time_total_s_global
+    real(DP) :: gmd_tpht_id_write_time_last_s_global, gmd_tpht_id_write_time_total_s_global
+    real(DP) :: gmd_tpht_id_records_written_total_global
+    integer :: gmd_sd_output_write_count_global, gmd_coalescence_output_write_count_global
+    integer :: gmd_tpht_id_write_count_global, gmd_tpht_id_records_written
+    logical :: gmd_emit_diag
+    integer :: full_scan_chain_count, full_scan_chain_count_sum
     integer :: order_n
 
     !-------------------------------------------------------------------------------------------------------------------------------
 
+    gmd_tpht_id_records_written = 0
     if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
          ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
-       call sdm_interest_id_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c)
+       if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+       call sdm_interest_id_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c, &
+            gmd_tpht_id_records_written)
+       if( gmd_benchmark_diag_enable .and. gmd_tpht_id_records_written > 0 ) then
+          gmd_time_end = mpi_wtime()
+          gmd_tpht_id_write_time_last_s = gmd_time_end - gmd_time_start
+          gmd_tpht_id_write_time_total_s = gmd_tpht_id_write_time_total_s + gmd_tpht_id_write_time_last_s
+          gmd_tpht_id_write_count = gmd_tpht_id_write_count + 1
+          gmd_tpht_id_records_written_total = gmd_tpht_id_records_written_total + &
+               real(gmd_tpht_id_records_written,kind=DP)
+       end if
     end if
 
 #ifdef _FIPP_
@@ -1024,26 +1062,53 @@ contains
        end if
        !! Output
        if( (mod(sdm_dmpvar,100))/10==1) then
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
                         sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip,filetag='all')
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        else if( (mod(sdm_dmpvar,100))/10==2) then
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
                         sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip,filetag='all')
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        end if
       did_sdm_dump = .true.
       if( coalescence_output_enable ) did_coal_flag_dump = .true.
     end if
 
+    output_selected_as_all = len_trim(tracking_id_input_basename) == 0 .and. &
+         ( trim(adjustl(tracking_selection_mode)) == 'none' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'NONE' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'None' )
+
     if( ((mod(sdm_dmpvar,1000))/100>=1) .and. sdm_dmpitvl>0.0_RP .and. &
          mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
              int(1.E+3_RP*(sdm_dmpitvl+0.00010_RP))) == 0 ) then
-       if( IO_L ) write(IO_FID_LOG,*) ' *** Output Selected Super Droplet Data in NetCDF'
+       if( IO_L ) then
+          if( output_selected_as_all ) then
+             write(IO_FID_LOG,*) ' *** Output Super Droplet Data in NetCDF'
+          else
+             write(IO_FID_LOG,*) ' *** Output Selected Super Droplet Data in NetCDF'
+          end if
+       end if
 
        sdx_tmp  => sd_dtmp1
        sdy_tmp  => sd_dtmp2
@@ -1062,11 +1127,19 @@ contains
        dmid_tmp => sd_i4tmp2
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
-       call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
-            &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
-            &                    t_scale,sd_itmp1,sdtype='selected') ! options: 'all', 'large', 'activated','selected'
+       if( output_selected_as_all ) then
+          call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
+               &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+               &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
+               &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+               &                    t_scale,sd_itmp1,sdtype='all') ! options: 'all', 'large', 'activated','selected'
+       else
+          call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
+               &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+               &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
+               &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+               &                    t_scale,sd_itmp1,sdtype='selected') ! options: 'all', 'large', 'activated','selected'
+       end if
 
        !! Evaluate diagnostic variables
        !!! z
@@ -1085,17 +1158,49 @@ contains
 
        !! Output
        if( (mod(sdm_dmpvar,1000))/100==1) then
-          call sdm_outnetcdf(TIME_NOWSEC,                               &
-                        sdnum_tmp,sdnumasl_tmp,                    &
-                        sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                        sdm_dmpnskip,filetag='selected')
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+          if( output_selected_as_all ) then
+             call sdm_outnetcdf(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='all')
+          else
+             call sdm_outnetcdf(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='selected')
+          end if
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        else if( (mod(sdm_dmpvar,1000))/100==2) then
-          call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
-                        sdnum_tmp,sdnumasl_tmp,                    &
-                        sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                        sdm_dmpnskip,filetag='selected')
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+          if( output_selected_as_all ) then
+             call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='all')
+          else
+             call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='selected')
+          end if
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        end if
       did_sdm_dump = .true.
       if( coalescence_output_enable ) did_coal_flag_dump = .true.
@@ -1122,10 +1227,85 @@ contains
        ifcoal_s2c(1:sdnum_s2c) = 0_i2
     end if
 
+    tracking_chain_count = count( (sdid_s2c(1:sdnum_s2c) > INVALID_i4) .and. (dmid_s2c(1:sdnum_s2c) > INVALID_i4) )
+    tracking_id_memory_bytes_local = real(sdnum_s2c,kind=DP) * 8.0_DP
+    if_coal_memory_bytes_local = real(sdnum_s2c,kind=DP) * 2.0_DP
+
+    gmd_emit_diag = gmd_benchmark_diag_enable .and. sdm_dmpitvl > 0.0_RP .and. &
+         mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
+             int(1.E+3_RP*(sdm_dmpitvl+0.00010_RP))) == 0
+
+    if( gmd_emit_diag ) then
+       full_scan_chain_count = count( sdn_s2c(1:sdnum_s2c) > 0 )
+       call mpi_allreduce(tracking_chain_count, tracking_chain_count_sum, 1, mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(tracking_chain_count, tracking_chain_count_max, 1, mpi_integer, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(full_scan_chain_count, full_scan_chain_count_sum, 1, mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       tracking_chain_count_mean = real(tracking_chain_count_sum,kind=DP) / real(PRC_nprocs,kind=DP)
+       call mpi_allreduce(tracking_id_memory_bytes_local, tracking_id_memory_bytes_sum, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(if_coal_memory_bytes_local, if_coal_memory_bytes_sum, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call gmd_reduce_proc_memory(rank_peak_memory_max_mib, rank_peak_memory_sum_mib, rank_rss_max_mib, rank_rss_sum_mib)
+       gmd_id_assignment_time_s = -1.0_DP
+       if( tracking_count_id_assign > 0 ) then
+          gmd_id_assignment_time_s = tracking_time_id_assign / real(tracking_count_id_assign,kind=DP)
+       end if
+       gmd_boundary_tracking_time_s = -1.0_DP
+       if( tracking_count_boundary_x + tracking_count_boundary_y > 0 ) then
+          gmd_boundary_tracking_time_s = &
+               ( tracking_time_boundary_x + tracking_time_boundary_y ) / &
+               real(tracking_count_boundary_x + tracking_count_boundary_y,kind=DP)
+       end if
+       call mpi_allreduce(gmd_sd_output_write_time_last_s, gmd_sd_output_write_time_last_s_global, 1, &
+            mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_sd_output_write_time_total_s, gmd_sd_output_write_time_total_s_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_sd_output_write_count, gmd_sd_output_write_count_global, 1, &
+            mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_coalescence_output_write_time_last_s, gmd_coalescence_output_write_time_last_s_global, 1, &
+            mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_coalescence_output_write_time_total_s, gmd_coalescence_output_write_time_total_s_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_coalescence_output_write_count, gmd_coalescence_output_write_count_global, 1, &
+            mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_write_time_last_s, gmd_tpht_id_write_time_last_s_global, 1, &
+            mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_write_time_total_s, gmd_tpht_id_write_time_total_s_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_write_count, gmd_tpht_id_write_count_global, 1, &
+            mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_records_written_total, gmd_tpht_id_records_written_total_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       if( IO_L ) then
+          write(IO_FID_LOG,*) 'GMD_BENCH_DIAG time=', TIME_NOWSEC, &
+               ' tracking_mode=', tracking_mode, &
+               ' chain_count=', tracking_chain_count_sum, &
+               ' full_scan_chain_count=', full_scan_chain_count_sum, &
+               ' tracking_chain_count_mean=', tracking_chain_count_mean, &
+               ' tracking_chain_count_max=', tracking_chain_count_max, &
+               ' tracking_id_memory_bytes=', tracking_id_memory_bytes_sum, &
+               ' if_coal_memory_bytes=', if_coal_memory_bytes_sum, &
+               ' peak_memory_rank_max_mib=', rank_peak_memory_max_mib, &
+               ' peak_memory_rank_sum_mib=', rank_peak_memory_sum_mib, &
+               ' id_assignment_time_s=', gmd_id_assignment_time_s, &
+               ' boundary_tracking_time_s=', gmd_boundary_tracking_time_s
+          write(IO_FID_LOG,*) 'GMD_IO_DIAG time=', TIME_NOWSEC, &
+               ' sd_output_write_time_last_s=', gmd_sd_output_write_time_last_s_global, &
+               ' sd_output_write_time_total_s=', gmd_sd_output_write_time_total_s_global, &
+               ' sd_output_write_count=', gmd_sd_output_write_count_global, &
+               ' coalescence_output_write_time_last_s=', gmd_coalescence_output_write_time_last_s_global, &
+               ' coalescence_output_write_time_total_s=', gmd_coalescence_output_write_time_total_s_global, &
+               ' coalescence_output_write_count=', gmd_coalescence_output_write_count_global, &
+               ' tpht_id_write_time_last_s=', gmd_tpht_id_write_time_last_s_global, &
+               ' tpht_id_write_time_total_s=', gmd_tpht_id_write_time_total_s_global, &
+               ' tpht_id_write_count=', gmd_tpht_id_write_count_global, &
+               ' tpht_id_records_written_total=', gmd_tpht_id_records_written_total_global
+       end if
+    end if
+
     if( IO_L .and. ( forward_tracking_enable .or. backward_tracking_enable ) .and. did_sdm_dump ) then
-       tracking_chain_count = count( (sdid_s2c(1:sdnum_s2c) > INVALID_i4) .and. (dmid_s2c(1:sdnum_s2c) > INVALID_i4) )
-       tracking_mem_mb = real(sdnum_s2c,kind=DP) * 8.0_DP / 1048576.0_DP
-       coal_mem_mb = real(sdnum_s2c,kind=DP) * 2.0_DP / 1048576.0_DP
+       tracking_mem_mb = tracking_id_memory_bytes_local / 1048576.0_DP
+       coal_mem_mb = if_coal_memory_bytes_local / 1048576.0_DP
        write(IO_FID_LOG,*) '*** tracking_chain_count=', tracking_chain_count, ' / ', sdnum_s2c
        if( forward_tracking_enable ) then
           tracking_id_label = 'sd_id+dm_id'
@@ -2049,6 +2229,7 @@ contains
       end if
 
       time_id_start = mpi_wtime()
+      if( .not. tracking_sample_initialized ) call rng_init( rng_tracking_s2c, mype + tracking_sampling_seed )
       if( backward_tracking_enable .and. .not. tracking_sample_initialized .and. &
            len_trim(tracking_id_input_basename) > 0 ) then
          call sdm_select_particles_from_id_file(sdnum_s2c, tracking_id_input_basename, tracking_sample_initialized, &
@@ -2068,12 +2249,14 @@ contains
          end if
       else if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
            ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
-         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, tracking_selection_mode, 1.0_RP, &
+         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+              tracking_selection_mode, 1.0_RP, &
               0, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
               tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
               dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
       else
-         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, tracking_selection_mode, tracking_fraction, &
+         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+              tracking_selection_mode, tracking_fraction, &
               max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
               tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
               dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
@@ -2308,6 +2491,7 @@ contains
    integer(DP), allocatable :: sdn2_out(:)
    integer :: num_pair    ! number of super-droplet pairs
    real(RP) :: dz_inv
+   real(DP) :: gmd_time_start, gmd_time_end
   !---------------------------------------------------------------------
 
       ! Initialize and rename variables
@@ -2706,8 +2890,17 @@ contains
                             sd_dtmp1)
 
               if (allocated(num_col) .and. coal_output == 1) then
+                  if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
                   call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,sd_id1, sd_id2, dm_id1, dm_id2,&
                                 num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
+                  if( gmd_benchmark_diag_enable ) then
+                     gmd_time_end = mpi_wtime()
+                     gmd_coalescence_output_write_time_last_s = gmd_time_end - gmd_time_start
+                     gmd_coalescence_output_write_time_total_s = &
+                          gmd_coalescence_output_write_time_total_s + &
+                          gmd_coalescence_output_write_time_last_s
+                     gmd_coalescence_output_write_count = gmd_coalescence_output_write_count + 1
+                  end if
                   if (allocated(dm_id1)) deallocate(dm_id1)
                   if (allocated(dm_id2)) deallocate(dm_id2)
                   if (allocated(sd_id1)) deallocate(sd_id1)
@@ -4100,5 +4293,60 @@ contains
 
     return
   end subroutine ATMOS_PHY_MP_sdm_restart_write
+
+  !-----------------------------------------------------------------------------
+  subroutine gmd_read_proc_memory_mib(vm_hwm_mib, vm_rss_mib)
+    real(DP), intent(out) :: vm_hwm_mib
+    real(DP), intent(out) :: vm_rss_mib
+    character(len=256) :: line
+    integer :: unit_id, ios, value_kb
+
+    vm_hwm_mib = -1.0_DP
+    vm_rss_mib = -1.0_DP
+    unit_id = IO_get_available_fid()
+    open(unit=unit_id, file='/proc/self/status', status='old', action='read', iostat=ios)
+    if( ios /= 0 ) return
+
+    do
+       read(unit_id,'(A)',iostat=ios) line
+       if( ios /= 0 ) exit
+       if( index(line,'VmHWM:') == 1 ) then
+          read(line(7:),*,iostat=ios) value_kb
+          if( ios == 0 ) vm_hwm_mib = real(value_kb,kind=DP) / 1024.0_DP
+       else if( index(line,'VmRSS:') == 1 ) then
+          read(line(7:),*,iostat=ios) value_kb
+          if( ios == 0 ) vm_rss_mib = real(value_kb,kind=DP) / 1024.0_DP
+       end if
+    end do
+
+    close(unit_id)
+    return
+  end subroutine gmd_read_proc_memory_mib
+
+  !-----------------------------------------------------------------------------
+  subroutine gmd_reduce_proc_memory(rank_peak_max_mib, rank_peak_sum_mib, rank_rss_max_mib, rank_rss_sum_mib)
+    real(DP), intent(out) :: rank_peak_max_mib
+    real(DP), intent(out) :: rank_peak_sum_mib
+    real(DP), intent(out) :: rank_rss_max_mib
+    real(DP), intent(out) :: rank_rss_sum_mib
+    real(DP) :: local_peak_mib, local_rss_mib
+    real(DP) :: local_peak_sum_mib, local_rss_sum_mib
+    integer :: mpi_ierr
+
+    call gmd_read_proc_memory_mib(local_peak_mib, local_rss_mib)
+    local_peak_sum_mib = local_peak_mib
+    local_rss_sum_mib = local_rss_mib
+    if( local_peak_sum_mib < 0.0_DP ) local_peak_sum_mib = 0.0_DP
+    if( local_rss_sum_mib < 0.0_DP ) local_rss_sum_mib = 0.0_DP
+
+    call mpi_allreduce(local_peak_mib, rank_peak_max_mib, 1, mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+    call mpi_allreduce(local_peak_sum_mib, rank_peak_sum_mib, 1, mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+    call mpi_allreduce(local_rss_mib, rank_rss_max_mib, 1, mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+    call mpi_allreduce(local_rss_sum_mib, rank_rss_sum_mib, 1, mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+
+    if( rank_peak_max_mib < 0.0_DP ) rank_peak_sum_mib = -1.0_DP
+    if( rank_rss_max_mib < 0.0_DP ) rank_rss_sum_mib = -1.0_DP
+    return
+  end subroutine gmd_reduce_proc_memory
 end module scale_atmos_phy_mp_sdm
 !-------------------------------------------------------------------------------

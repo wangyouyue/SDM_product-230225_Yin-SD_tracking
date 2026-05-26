@@ -79,6 +79,7 @@ module m_sdm_common
   character(len=H_LONG), save :: RANDOM_IN_BASENAME = ''
   character(len=H_LONG), save :: RANDOM_OUT_BASENAME = ''
   type(c_rng_uniform_mt), save :: rng_s2c
+  type(c_rng_uniform_mt), save :: rng_tracking_s2c
   integer, save :: fid_sd_i, fid_sd_o
   integer, save :: fid_random_i, fid_random_o
   logical, save :: sd_rest_flg_in = .false. ! restart flg of Super Droplet
@@ -484,9 +485,10 @@ module m_sdm_common
                                              ! 2: backward tracking
   logical, save :: forward_tracking_enable = .false.  ! Internal runtime flag derived from tracking_mode
   logical, save :: backward_tracking_enable = .false. ! Internal runtime flag derived from tracking_mode
-  character(len=32), save :: tracking_selection_mode = 'random' ! random: Bernoulli sampling, stratified: per-bin quota sampling, none: request no additional random/stratified sampling mode
-  real(RP), save :: tracking_fraction = 1.0_RP       ! 1.0 disables downsampling; in the TPHT FW setup this leaves the configured height/radius window as the effective initialization filter
+  character(len=32), save :: tracking_selection_mode = 'random' ! random/stratified/none selection
+  real(RP), save :: tracking_fraction = 1.0_RP       ! 1.0 disables downsampling; ignored when tracking_selection_mode='none'
   integer, save :: max_tracked_sds = 0
+  integer, save :: tracking_sampling_seed = 0
   real(RP), save :: tracking_height_min = 400.0_RP
   real(RP), save :: tracking_height_max = 800.0_RP
   real(RP), save :: tracking_radius_min = 1.E-6_RP
@@ -508,6 +510,7 @@ module m_sdm_common
   integer, save :: tracking_count_boundary_x = 0
   integer, save :: tracking_count_boundary_y = 0
   logical, save :: coalescence_output_enable = .true. ! Master switch for SD_coal_output_NetCDF_* (default ON)
+  logical, save :: gmd_benchmark_diag_enable = .false. ! Optional GMD benchmark diagnostics; default OFF
   logical, save :: random_perturbation_enable = .false. ! Master switch for random perturbation in SD motion (default OFF)
   real(RP), save :: random_perturbation_amp = 0.0_RP ! Random perturbation amplitude [m^1.5 * s^-0.5]
   real(RP), save :: sdm_noise_amp = 0.0_RP ! amplitude of random noise [m^1.5 * s^-0.5]
@@ -543,7 +546,6 @@ module m_sdm_common
   integer, save :: bufsiz2_i2 ! buffer size for MPI (int2)
   integer, save :: bufsiz2_i4 ! buffer size for MPI (int4)
   integer, save :: ni_s2c, nj_s2c, nk_s2c
-  integer, save :: tag
   integer, parameter :: nomp = 1
   integer, save :: wbc=1, ebc=1, sbc=1, nbc=1  ! only periodic boundary is applied
   integer, save :: nsub   ! Number of sub domain in group domain
@@ -649,6 +651,7 @@ module m_sdm_common
        tracking_selection_mode, &
        tracking_fraction,   &
        max_tracked_sds,     &
+       tracking_sampling_seed, &
        tracking_height_min, &
        tracking_height_max, &
        tracking_radius_min, &
@@ -663,6 +666,7 @@ module m_sdm_common
        tracking_interest_radius_threshold, &
        tracking_interest_coalescence_enable, &
        coalescence_output_enable, &
+       gmd_benchmark_diag_enable, &
        random_perturbation_enable, &
        random_perturbation_amp, &
        sdm_noise_amp,       &
