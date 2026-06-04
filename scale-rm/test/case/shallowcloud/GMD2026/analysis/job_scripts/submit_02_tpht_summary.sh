@@ -4,7 +4,7 @@
 #PBS -m b
 #PBS -b 1
 #PBS -l cpunum_job=1
-#PBS -l elapstim_req=02:00:00
+#PBS -l elapstim_req=08:00:00
 #PBS -N gmd02_light
 set -euo pipefail
 if [ -f /etc/profile.d/modules.sh ]; then source /etc/profile.d/modules.sh; fi

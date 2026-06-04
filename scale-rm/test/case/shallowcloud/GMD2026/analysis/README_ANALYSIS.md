@@ -96,11 +96,20 @@ qsub analysis/job_scripts/submit_analysis_then_plots.sh
 
 The qsub scripts default to `GMD2026_ROOT=$(pwd)` and `GMD2026_OUTDIR=$(pwd)/analysis_outputs` when these variables are not set. They source the suite Python helper (`common/load_basepy_2026_quiet.sh`) before calling `${GMD2026_PYTHON}`, set `PYTHONUNBUFFERED=1`, write logs under `analysis_outputs/logs/`, and emit `*.analysis_job_metrics.json`.
 
-TPHT is split into light and heavy execution. The light part reads logs, `.ids` metadata, handoff integrity, and inexpensive rank-load summaries. The heavy part reads BW selected-output NetCDF variables for target categories, histories, and chain-validity diagnostics, so submit it as a background job:
+TPHT is split into light and heavy execution. The light part reads logs, `.ids` metadata, handoff integrity, and inexpensive rank-load summaries. The heavy part reads BW selected-output NetCDF variables for target categories, histories, chain-validity diagnostics, target trajectories, if_coal timelines, interval diagnostics, and target-linked event summaries.
+
+The serial TPHT jobs remain available:
 
 ```bash
 qsub analysis/job_scripts/submit_02_tpht_summary.sh
 qsub analysis/job_scripts/submit_02_tpht_heavy.sh
+```
+
+For large TPHT outputs, prefer the parallel jobs. They request 8 cores by default and use `TPHT_LIGHT_WORKERS` or `TPHT_HEAVY_WORKERS` to control the parser worker count:
+
+```bash
+qsub analysis/job_scripts/submit_02_tpht_summary_parallel.sh
+qsub analysis/job_scripts/submit_02_tpht_heavy_parallel.sh
 ```
 
 `submit_analysis_then_plots.sh` first tries `qsub --after "$job00:$job01:$job02l:$job02h:$job03:$job04:$job05"`. If SQUID rejects colon-separated dependencies, it creates a conservative polling aggregator job that waits for all analysis job IDs before running the plotting job.
@@ -116,14 +125,16 @@ export GMD2026_OUTDIR=$(pwd)/analysis_outputs
 
 qsub analysis/job_scripts/submit_00_restart.sh
 qsub analysis/job_scripts/submit_01_benchmark.sh
-qsub analysis/job_scripts/submit_02_tpht_summary.sh
+qsub analysis/job_scripts/submit_02_tpht_summary_parallel.sh
 ```
 
-After `submit_02_tpht_summary.sh` finishes, inspect `analysis_outputs/tables/02_tpht_summary.*` and `analysis_outputs/tables/02_tpht_analysis_feature_status.*`. If the TPHT handoff is valid and the BW selected output exists, submit the heavy TPHT job:
+After `submit_02_tpht_summary_parallel.sh` finishes, inspect `analysis_outputs/tables/02_tpht_summary.*`, `analysis_outputs/tables/02_tpht_consistency.*`, and `analysis_outputs/tables/02_tpht_analysis_feature_status.*`. If the TPHT handoff is valid and the BW selected output exists, submit the heavy TPHT job:
 
 ```bash
-qsub analysis/job_scripts/submit_02_tpht_heavy.sh
+qsub analysis/job_scripts/submit_02_tpht_heavy_parallel.sh
 ```
+
+Use the non-parallel scripts only when you intentionally want a single-worker diagnostic run or are debugging worker-specific parser behavior.
 
 Then submit the remaining full analyses:
 
@@ -170,14 +181,17 @@ The cost-estimator table is written as `.csv`, `.md`, and `.json`. The manuscrip
 | `01_benchmark/analyze_01_benchmark.py` | `tables/01_benchmark_summary.csv`, `.md`, `.tex`, `.json` | no-tracking baseline, coalescence-log overhead, FW/BW tracking overhead, wallclock/core-hours, memory, tracking chain count, I/O timing, output sizes, coalescence-event count, QC warnings | none |
 | `01_benchmark/plot_01_benchmark.py` | none | reads `01_benchmark_summary.csv` | `figures/01_wallclock_relative.*`, `01_core_hours.*`, `01_output_size.*`, `01_peak_memory.*`, `01_runtime_components.*`, `01_tracking_chain_count.*` |
 | `02_tpht/analyze_02_tpht.py` | `tables/02_tpht_summary.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_rank_load_balance.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_analysis_feature_status.csv`, `.md`, `.tex`, `.json` | FW/BW wallclock and core-hours, memory, ID handoff counts, missing/extra BW IDs, target reduction, storage estimates, rank load balance, implementation status of advanced TPHT diagnostics | none |
+| `02_tpht/analyze_02_tpht_light_parallel.py` | `tables/02_tpht_summary.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_rank_load_balance.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_analysis_feature_status.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_consistency.csv`, `.md`, `.tex`, `.json` | parallel light TPHT driver for summary, rank-load, feature-status, and consistency tables; uses `--workers` or `TPHT_LIGHT_WORKERS` for `.ids`/rank-file parsing | none |
 | `02_tpht/check_02_tpht_consistency.py` | `tables/02_tpht_consistency.csv`, `.md`, `.tex`, `.json` | TPHT consistency pass/fail fields: missing/extra BW IDs, epoch match, fallback-to-sampling status, decomposition match | none |
 | `02_tpht/analyze_02_tpht_targets.py` | `tables/02_tpht_target_categories.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_discovery_time.csv`, `.md`, `.tex`, `.json` | interest-condition decomposition (`radius_only`, `coal_only`, `both`, `unknown`) from stepwise BW predecessor-link chains; target first/last discovery time, new targets per time, target records per time | none |
 | `02_tpht/analyze_02_tpht_chains.py` | `tables/02_tpht_chain_validity.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_target_histories.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_chain_links_by_time.csv`, `.md`, `.tex`, `.json` | adjacent-output predecessor-link validity, reconstructed time coverage, memory-safe mean radius/height histories, compact chain-length distribution, and per-output link fractions | none |
-| `02_tpht/analyze_02_tpht_science.py` | `tables/02_tpht_science_summary.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_pathways.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_formation_height_bins.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_coalescence_counts.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_time_series.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_target_summary.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_target_occurrence_zt.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_chain_links_by_time.csv`, `.md`, `.tex`, `.json` | TPHT diagnostic characterization from stepwise BW predecessor-link chains; first threshold crossing, if_coal occurrence proxy, target height-time occurrence, linked coalescence-event counters when available | none |
+| `02_tpht/analyze_02_tpht_science.py` | `tables/02_tpht_science_summary.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_pathways.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_formation_height_bins.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_coalescence_counts.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_time_series.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_science_target_summary.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_target_occurrence_zt.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_chain_links_by_time.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_target_trajectory_records.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_target_ifcoal_timeline.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_target_interval_diagnostics.csv`, `.md`, `.tex`, `.json`; `tables/02_tpht_target_event_links.csv`, `.md`, `.tex`, `.json` | TPHT diagnostic characterization from stepwise BW predecessor-link chains; first threshold crossing, if_coal occurrence proxy, target height-time occurrence, target trajectory records, interval diagnostics, and linked coalescence-event counters when available | none |
+| `02_tpht/analyze_02_tpht_heavy_parallel.py` | heavy TPHT target, science, and chain tables listed above | parallel heavy TPHT driver for science, target, and chain diagnostics; uses `--workers` or `TPHT_HEAVY_WORKERS` for NetCDF/coalescence readers | none |
 | `02_tpht/plot_02_tpht_science.py` | none | reads TPHT science diagnostic tables | `figures/02_tpht_science_formation_pathways.*`, `02_tpht_science_formation_height.*`, `02_tpht_science_coalescence_counts.*`, `02_tpht_science_history.*`, `02_tpht_science_condition_composition.*` |
 | `02_tpht/plot_02_tpht_predecessor_tree.py` | `tables/02_tpht_predecessor_tree_examples.csv`, `.md`, `.tex`, `.json` when the cache is absent | reads or creates compact representative TPHT predecessor-tree example rows; branches are linked if_coal occurrence proxies using coalescence-log IDs and target height at the next selected-output level | `figures/02_tpht_predecessor_tree_examples.*` |
+| `02_tpht/plot_02_tpht_predecessor_tree_final_window.py` | `analysis_outputs_for_GMD/tables/supplement_candidates/supp_candidate_TPHT_predecessor_tree_examples_final10_selected_targets.*` | final-window supplementary predecessor-tree diagnostic examples using target trajectory and target-linked event tables; writes into the manuscript-candidate output tree | `analysis_outputs_for_GMD/figures/supplement_candidates/supp_candidate_TPHT_predecessor_tree_examples_*.{pdf,svg,png}` |
 | `02_tpht/plot_02_tpht.py` | none | reads the TPHT summary, rank-load, category, discovery-time, chain-validity, and target-history tables | `figures/02_tpht_workflow.*`, `02_tpht_cost.*`, `02_tpht_storage.*`, `02_tpht_id_counts.*`, `02_tpht_target_categories.*`, `02_tpht_discovery_time.*`, `02_tpht_rank_load_balance.*`, `02_tpht_chain_validity.*`, `02_tpht_target_histories.*` |
-| `03_sampling/analyze_03_sampling.py` | `tables/03_sampling_metrics.csv`, `.md`, `.tex`, `.json`; `tables/03_sampling_seed_statistics.csv`, `.md`, `.tex`, `.json` | short 2D sampling-verification metrics by time, sample mode, fraction, and seed; radius statistics; DSD/z-r histogram errors vs full reference; threshold fractions; seed counts and aggregate errors | none |
+| `03_sampling/analyze_03_sampling.py` | `tables/03_sampling_metrics.csv`, `.md`, `.tex`, `.json`; `tables/03_sampling_seed_statistics.csv`, `.md`, `.tex`, `.json` | short 2D sampling-verification metrics by time, sample mode, fraction, and seed; `sd_n` multiplicity-weighted radius statistics; weighted radius-distribution L1/L2 errors vs full reference; weighted threshold fractions; seed counts and aggregate errors | none |
 | `03_sampling/plot_03_sampling.py` | none | reads `03_sampling_metrics.csv` and `03_sampling_seed_statistics.csv` | `figures/03_sampling_error_boxplot.*`, `03_sampling_error_vs_fraction.*`, `03_sampling_radius_threshold_error.*`, `03_sampling_dsd_example.*` |
 | `04_sdnc_scaling/analyze_04_sdnc_scaling.py` | `tables/04_sdnc_scaling_summary.csv`, `.md`, `.tex`, `.json`; `tables/04_scaling_slopes.csv`, `.md`, `.tex`, `.json` | SDNC-dependent wallclock/core-hours, memory, output size, chain count, FW/BW overhead ratios, and log-log scaling slopes for wallclock, core-hours, memory, chain count, and output size | none |
 | `04_sdnc_scaling/plot_04_sdnc_scaling.py` | none | reads `04_sdnc_scaling_summary.csv` | `figures/04_wallclock_vs_sdnc.*`, `04_core_hours_vs_sdnc.*`, `04_memory_vs_sdnc.*`, `04_tracking_overhead_ratio.*`, `04_chain_count_vs_sdnc.*` |

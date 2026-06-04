@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import re
 from collections import defaultdict
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -19,6 +20,7 @@ RADIUS_NAMES = ("sd_r", "r", "radius", "rad")
 HEIGHT_NAMES = ("z", "height", "sd_z", "z_sd")
 TIME_NAMES = ("time", "t", "time_s")
 IF_COAL_NAMES = ("if_coal", "coal_flag", "coalesced")
+MULTIPLICITY_NAMES = ("sd_n", "n", "multiplicity")
 FW_ID_NAMES = (("dm_id", "sd_id"),)
 BW_ID_NAMES = (("pre_dmid", "pre_sdid"), ("pre_dm_id", "pre_sd_id"))
 
@@ -263,6 +265,37 @@ def validate_selected_output(paths: list[Path], mode: str) -> tuple[dict[str, An
     }, warnings
 
 
+def _read_selected_pairs_one(args: tuple[Path, tuple[tuple[str, str], ...], int | None, int]) -> tuple[set[tuple[int, int]], int, list[str]]:
+    """Read valid selected-output ID pairs from one NetCDF file."""
+    path, preferred, max_records, chunk_size = args
+    Dataset = _dataset_class()
+    if Dataset is None:
+        return set(), 0, ["NetCDF library unavailable; selected-output pairs skipped"]
+    warnings: list[str] = []
+    pairs: set[tuple[int, int]] = set()
+    valid_records = 0
+    try:
+        with Dataset(path, "r") as handle:
+            pair_vars = _find_pair_variables(handle.variables.keys(), preferred)
+            if pair_vars is None:
+                warnings.append(f"ID variables missing in {path}")
+                return pairs, valid_records, warnings
+            dm_var = handle.variables[pair_vars[0]]
+            sd_var = handle.variables[pair_vars[1]]
+            length = min(_variable_length(dm_var), _variable_length(sd_var))
+            for selection in _iter_first_dim_chunks(length, max_records, chunk_size):
+                dm_values = _flatten_int(dm_var[selection])
+                sd_values = _flatten_int(sd_var[selection])
+                for dm_id, sd_id in zip(dm_values, sd_values):
+                    if dm_id < 0 or sd_id < 0:
+                        continue
+                    valid_records += 1
+                    pairs.add((dm_id, sd_id))
+    except Exception as exc:
+        warnings.append(f"failed to read selected pairs from {path}: {exc}")
+    return pairs, valid_records, warnings
+
+
 def read_selected_pairs(
     paths: list[Path],
     mode: str,
@@ -271,6 +304,7 @@ def read_selected_pairs(
     chunk_size: int = 100000,
     metadata_only: bool = False,
     first_group_only: bool = False,
+    workers: int = 1,
 ) -> tuple[set[tuple[int, int]], int | None, list[str]]:
     """Read valid selected-output ID pairs from selected-output NetCDF files."""
     Dataset = _dataset_class()
@@ -287,26 +321,16 @@ def read_selected_pairs(
     warnings: list[str] = list(limit_warnings)
     pairs: set[tuple[int, int]] = set()
     valid_records = 0
-    for path in paths_to_read:
-        try:
-            with Dataset(path, "r") as handle:
-                pair_vars = _find_pair_variables(handle.variables.keys(), preferred)
-                if pair_vars is None:
-                    warnings.append(f"ID variables missing in {path}")
-                    continue
-                dm_var = handle.variables[pair_vars[0]]
-                sd_var = handle.variables[pair_vars[1]]
-                length = min(_variable_length(dm_var), _variable_length(sd_var))
-                for selection in _iter_first_dim_chunks(length, max_records, chunk_size):
-                    dm_values = _flatten_int(dm_var[selection])
-                    sd_values = _flatten_int(sd_var[selection])
-                    for dm_id, sd_id in zip(dm_values, sd_values):
-                        if dm_id < 0 or sd_id < 0:
-                            continue
-                        valid_records += 1
-                        pairs.add((dm_id, sd_id))
-        except Exception as exc:
-            warnings.append(f"failed to read selected pairs from {path}: {exc}")
+    worker_args = [(path, preferred, max_records, chunk_size) for path in paths_to_read]
+    if workers > 1 and len(worker_args) > 1:
+        with Pool(processes=workers) as pool:
+            results = pool.map(_read_selected_pairs_one, worker_args)
+    else:
+        results = [_read_selected_pairs_one(args) for args in worker_args]
+    for file_pairs, file_valid_records, file_warnings in results:
+        pairs.update(file_pairs)
+        valid_records += file_valid_records
+        warnings.extend(file_warnings)
     return pairs, valid_records, warnings
 
 
@@ -383,6 +407,8 @@ def read_radius_records(
                 height_var = handle.variables[height_name] if height_name else None
                 coal_name = _find_variable(names, IF_COAL_NAMES)
                 coal_var = handle.variables[coal_name] if coal_name else None
+                multiplicity_name = _find_variable(names, MULTIPLICITY_NAMES)
+                multiplicity_var = handle.variables[multiplicity_name] if multiplicity_name else None
                 time_name = _find_variable(names, TIME_NAMES)
                 time_var = handle.variables[time_name] if time_name else None
                 pair_vars = _find_pair_variables(names, BW_ID_NAMES) or _find_pair_variables(names, FW_ID_NAMES)
@@ -396,6 +422,7 @@ def read_radius_records(
                     radii = _flatten(radius_var[selection])
                     heights = _flatten(height_var[selection]) if height_var is not None else []
                     coal = _flatten(coal_var[selection]) if coal_var is not None else []
+                    multiplicities = _flatten(multiplicity_var[selection]) if multiplicity_var is not None else []
                     dm_values = _flatten_int(dm_var[selection]) if dm_var is not None else []
                     sd_values = _flatten_int(sd_var[selection]) if sd_var is not None else []
                     time_values = []
@@ -411,6 +438,7 @@ def read_radius_records(
                                 "radius_m": radius,
                                 "height_m": heights[index] if index < len(heights) else None,
                                 "if_coal": coal[index] if index < len(coal) else None,
+                                "multiplicity": multiplicities[index] if index < len(multiplicities) else None,
                                 "dm_id": dm_values[index] if index < len(dm_values) else None,
                                 "sd_id": sd_values[index] if index < len(sd_values) else None,
                                 "record_order": record_order,

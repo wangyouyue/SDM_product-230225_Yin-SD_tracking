@@ -39,3 +39,5 @@ bash submit_tpht_squid.sh
 ```
 
 If `check_with_uv_source.sh` fails, do not submit the run. The experiment would otherwise be physically mixed and hard to interpret.
+
+The TPHT merge step uses the same post-processing scripts as the main `02_tpht_3d_interest_70min` case. `postprocess/serial_merge_ids.sh` requests 8 SQUID cores, defaults `TPHT_MERGE_WORKERS=8`, writes `postprocess/logs/merge_tracking_interest_ids.log`, and preserves the same `.ids` merge/dedup semantics as the no-UV TPHT workflow.

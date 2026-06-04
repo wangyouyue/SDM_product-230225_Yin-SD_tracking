@@ -83,6 +83,7 @@ def analyze(root: Path, outdir: Path, strict: bool, options: dict | None = None)
         max_records=options.get("max_records"),
         chunk_size=options.get("chunk_size", 100000),
         metadata_only=options.get("metadata_only", False) or options.get("skip_heavy_netcdf", False),
+        workers=int(options.get("workers", 1) or 1),
     )
     warnings.extend(pair_warnings)
     netcdf_stats, netcdf_warnings = inspect_netcdf_files(

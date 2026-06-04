@@ -53,12 +53,12 @@ CASE_LABELS = {
 CLAIMS = {
     "main_candidate_framework_experiment_design": "The revised framework separates practical sampled FW/BW tracking from TPHT, where FW discovery identifies an interest-restricted target set and BW reconstructs only those targets from the same initial physical state.",
     "main_candidate_controlled_benchmark_overhead": "The controlled cold-start 3D benchmark quantifies the runtime, memory, and I/O overheads of practical sampled FW/BW tracking relative to no-tracking and coalescence-log-only baselines.",
-    "main_candidate_TPHT_handoff_storage": "TPHT reconstructed 86,428 deduplicated targets with no missing or extra BW targets and reduced the estimated full-population backward storage burden by about a factor of 135.",
+    "main_candidate_TPHT_handoff_storage": "TPHT handoff diagnostics compare all-time selected records, deduplicated target identities, BW-reconstructed target histories, and estimated full-population backward storage.",
     "main_candidate_TPHT_target_diagnostics": "The TPHT diagnostics show that most classified targets were selected by the radius criterion and remained near the 15 micrometer threshold, with first threshold-crossing occurrences concentrated around 750-1000 m.",
     "main_candidate_scalability_io_sensitivity": "Tracking cost and output burden increase with the number of super-droplets and selected-SD output frequency, motivating sampled and output-frequency-aware tracking configurations.",
     "supp_candidate_restart_sanity": "The cold-start setup and optional restart sanity outputs completed with expected timing and file generation.",
     "supp_candidate_full_benchmark_diagnostics": "Detailed diagnostics support the controlled benchmark summary shown in the main-candidate figure.",
-    "supp_candidate_2D_sampling_verification": "In the short quasi-2D verification, sampling errors decrease with sampling fraction and stratified sampling reduces seed-to-seed variability relative to random sampling.",
+    "supp_candidate_2D_sampling_verification": "In the short quasi-2D verification, random and stratified sampling are evaluated against their own full-reference outputs rather than against each other.",
     "supp_candidate_TPHT_rank_load_dedup": "The raw FW ID stream contains repeated detections that are reduced by deduplication and repartitioning.",
     "supp_candidate_TPHT_chain_validity_proxy": "Proxy diagnostics quantify reconstructed target-history coverage, while direct chain-validity metrics remain limited by available output variables.",
     "supp_candidate_TPHT_target_histories": "The reconstructed target histories illustrate TPHT diagnostic capability without implying a causal mechanism.",
@@ -148,6 +148,24 @@ def bytes_to_mib(value_bytes: float | None) -> float | None:
 def bytes_to_gib(value_bytes: float | None) -> float | None:
     """Convert bytes to GiB while preserving missing values."""
     return None if value_bytes is None else value_bytes / 1024.0**3
+
+
+def sd_write_time_per_rank_file(row: dict[str, Any]) -> float | None:
+    """Return mean SD-output write time per rank-file write.
+
+    Newer diagnostics may provide the mean directly.  Older GMD2026 outputs
+    often have only the rank-summed total time and rank-summed write count, so
+    the same quantity is derived as total/count without treating missing values
+    as zero.
+    """
+    direct_mean = num(row, "sd_output_write_time_mean_s")
+    if direct_mean is not None:
+        return direct_mean
+    total = num(row, "sd_output_write_time_total_s")
+    count = num(row, "sd_output_write_count")
+    if total is None or count is None or count <= 0.0:
+        return None
+    return total / count
 
 
 def finite(values: list[float | None]) -> list[float]:
@@ -558,7 +576,7 @@ def plot_benchmark(input_dir: Path, outdir: Path) -> dict[str, Any]:
 
     ax = axes[1, 1]
     components = [
-        ("ID assign", "id_assignment_time_s", OKABE_ITO["blue"]),
+        ("ID/selection", "id_assignment_time_s", OKABE_ITO["blue"]),
         ("boundary", "boundary_tracking_time_s", OKABE_ITO["vermillion"]),
         ("SD write", "sd_output_write_time_total_s", OKABE_ITO["bluish_green"]),
         ("coal write", "coalescence_output_write_time_total_s", OKABE_ITO["orange"]),
@@ -575,8 +593,7 @@ def plot_benchmark(input_dir: Path, outdir: Path) -> dict[str, Any]:
         ax.set_ylim(min(positive) / 3.0, max(positive) * 3.0)
         for bars in component_bars:
             annotate_bars_adaptive(ax, bars, compact_number_label, log_scale=True)
-    ax.set_ylabel("Runtime component (s, log10 scale)")
-    ax.text(0.02, 0.97, "diagnostic components only", ha="left", va="top", transform=ax.transAxes, fontsize=7)
+    ax.set_ylabel("Diagnostic timing (s, log10 scale)")
     set_clean_categorical_axis(ax, labels, 25)
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
     add_panel_label(ax, "d")
@@ -588,14 +605,14 @@ def plot_benchmark(input_dir: Path, outdir: Path) -> dict[str, Any]:
         "claim": CLAIMS["main_candidate_controlled_benchmark_overhead"],
         "source_tables": "01_benchmark_summary.csv",
         "panel_labels": "a,b,c,d",
-        "axis_labels": "Wall-clock / NT (-); Output size (MiB); Peak memory (MiB, log10 scale); Runtime component (s, log10 scale)",
+        "axis_labels": "Wall-clock / NT (-); Output size (MiB); Peak memory (MiB, log10 scale); Diagnostic timing (s, log10 scale)",
         "width_mm": 170,
         "x_tick_count_max": len(labels),
         "x_tick_label_max_chars": max((len(label) for label in labels), default=0),
         "legend_status": "outside axes where needed",
         "estimated_marked": "not applicable",
         "unknown_category_included": "not applicable",
-        "notes": "controlled cold-start computational benchmark; no-tracking baseline; coalescence-log-only baseline; selected SD output; rank peak memory.",
+        "notes": "controlled cold-start computational benchmark; no-tracking baseline; coalescence-log-only baseline; selected SD output; rank peak memory; ID/selection timing is a mean bookkeeping call time, not a cumulative wall-clock component.",
     }
 
 
@@ -618,16 +635,21 @@ def plot_tpht_handoff_storage(input_dir: Path, outdir: Path) -> dict[str, Any]:
     add_panel_label(ax, "a")
 
     ax = axes[0, 1]
-    id_labels = ["raw\nrecords", "FW\nunique", "dedup\ntargets", "BW\nunique"]
+    dedup_targets = num(row, "deduplicated_target_pairs", 86428.0)
+    target_ratio = num(row, "target_reduction_ratio")
+    full_valid_sd = dedup_targets / target_ratio if dedup_targets is not None and target_ratio is not None and target_ratio > 0.0 else None
+    id_labels = ["all-time\nselected\nrecords", "unique\ntarget\nidentities", "BW target\nhistories", "approx.\nall valid\nSD IDs"]
     id_values = [
         num(row, "fw_raw_id_records", 152617704.0),
-        num(row, "fw_unique_pairs", 86428.0),
-        num(row, "deduplicated_target_pairs", 86428.0),
-        num(row, "bw_unique_pairs", 86428.0),
+        dedup_targets,
+        num(row, "bw_unique_pairs", dedup_targets),
+        full_valid_sd,
     ]
-    bars = ax.bar(range(len(id_labels)), [v or 0.0 for v in id_values], color=[OKABE_ITO["blue"], OKABE_ITO["sky_blue"], OKABE_ITO["bluish_green"], OKABE_ITO["vermillion"]], edgecolor="black", linewidth=0.5)
+    bars = ax.bar(range(len(id_labels)), [v or 0.0 for v in id_values], color=[OKABE_ITO["blue"], OKABE_ITO["bluish_green"], OKABE_ITO["vermillion"], "0.70"], edgecolor="black", linewidth=0.5)
+    bars[-1].set_hatch("..")
+    bars[-1].set_alpha(0.70)
     ax.set_yscale("log")
-    ax.set_ylabel("ID records / targets (log10 scale)")
+    ax.set_ylabel("Records or identities (log10 scale)")
     set_clean_categorical_axis(ax, id_labels, 20)
     annotate_inside(ax, bars, "{:.0f}", log_scale=True)
     add_panel_label(ax, "b")
@@ -647,7 +669,6 @@ def plot_tpht_handoff_storage(input_dir: Path, outdir: Path) -> dict[str, Any]:
     ax.set_ylabel("Storage (GiB, log10 scale)")
     set_clean_categorical_axis(ax, storage_labels, 25)
     annotate_bars_adaptive(ax, bars, storage_label_gib, log_scale=True)
-    ax.text(0.02, 0.97, "hatched bar: estimated full-BW output", transform=ax.transAxes, ha="left", va="top", fontsize=7)
     add_panel_label(ax, "c")
 
     ax = axes[1, 1]
@@ -672,14 +693,14 @@ def plot_tpht_handoff_storage(input_dir: Path, outdir: Path) -> dict[str, Any]:
         "claim": CLAIMS["main_candidate_TPHT_handoff_storage"],
         "source_tables": "02_tpht_summary.csv; 02_tpht_consistency.csv",
         "panel_labels": "a,b,c,d",
-        "axis_labels": "Number of ID records / targets (log10 scale); Storage size (GiB, log10 scale)",
+        "axis_labels": "Records or identities (log10 scale); Storage size (GiB, log10 scale)",
         "width_mm": 170,
         "x_tick_count_max": 5,
         "x_tick_label_max_chars": 13,
         "legend_status": "no legend",
         "estimated_marked": "yes: hatched estimated full-BW output",
         "unknown_category_included": "not applicable",
-        "notes": "TPHT; Two-Pass Hybrid Tracking; target reduction ratio; deduplicated target pairs; missing_in_bw; extra_in_bw; estimated full-BW output; estimated storage reduction.",
+        "notes": "TPHT; Two-Pass Hybrid Tracking; all-time selected records; deduplicated target pairs; BW reconstructed target histories; missing_in_bw; extra_in_bw; estimated full-BW output; estimated storage reduction. The approximate all-valid-SD bar is inferred from deduplicated targets / target_reduction_ratio.",
     }
 
 
@@ -795,7 +816,7 @@ def plot_scalability_io(input_dir: Path, outdir: Path) -> dict[str, Any]:
     filtered_io = [row for row in io_rows if row.get("tracking_label") in ("FW005", "BW005")]
     for ax, key, ylabel, panel in (
         (axes[1, 0], "sd_selected_output_bytes", "Selected SD output size (MiB)", "c"),
-        (axes[1, 1], "sd_output_write_time_total_s", "SD output write time (s)", "d"),
+        (axes[1, 1], "number_of_output_files", "Output files (count)", "d"),
     ):
         for mode in ("FW005", "BW005"):
             rows = sorted([row for row in filtered_io if row.get("tracking_label") == mode], key=lambda row: num(row, "output_interval_s") or 0.0)
@@ -818,7 +839,7 @@ def plot_scalability_io(input_dir: Path, outdir: Path) -> dict[str, Any]:
         "claim": CLAIMS["main_candidate_scalability_io_sensitivity"],
         "source_tables": "04_sdnc_scaling_summary.csv; 05_outint_io_summary.csv",
         "panel_labels": "a,b,c,d",
-        "axis_labels": "Initial SD number per grid cell; Wall-clock time (s); Peak memory (MiB); SD output interval (s); Selected SD output size (MiB); SD output write time (s)",
+        "axis_labels": "Initial SD number per grid cell; Wall-clock time (s); Peak memory (MiB); SD output interval (s); Selected SD output size (MiB); Output files (count)",
         "width_mm": 170,
         "x_tick_count_max": 4,
         "x_tick_label_max_chars": 5,
@@ -895,62 +916,173 @@ def plot_full_benchmark_supp(input_dir: Path, outdir: Path) -> dict[str, Any]:
 
 def plot_sampling_supp(input_dir: Path, outdir: Path) -> dict[str, Any]:
     """Draw 2D sampling-procedure verification supplement candidate."""
-    rows = [row for row in read_rows(input_dir, "03_sampling_metrics") if row.get("sampling_fraction") not in ("1.0", NA)]
+    all_rows = read_rows(input_dir, "03_sampling_metrics")
+    rows = [row for row in all_rows if (num(row, "sampling_fraction") is not None and num(row, "sampling_fraction") < 1.0)]
+    mode_specs = [
+        ("random", "random\nall valid SD", OKABE_ITO["blue"]),
+        ("stratified", "stratified\n400-800 m", OKABE_ITO["vermillion"]),
+    ]
+
+    def fractions_for(mode: str) -> list[float]:
+        return sorted({value for value in (num(row, "sampling_fraction") for row in rows if row.get("sample_mode") == mode) if value is not None})
+
+    def values_for(mode: str, fraction: float, key: str, scale: float = 1.0) -> list[float]:
+        return finite([num(row, key) * scale if num(row, key) is not None else None for row in rows if row.get("sample_mode") == mode and num(row, "sampling_fraction") == fraction])
+
+    def mean_and_std(values: list[float]) -> tuple[float | None, float | None]:
+        vals = finite(values)
+        if not vals:
+            return None, None
+        mean = sum(vals) / len(vals)
+        if len(vals) == 1:
+            return mean, 0.0
+        variance = sum((value - mean) ** 2 for value in vals) / (len(vals) - 1)
+        return mean, math.sqrt(variance)
+
+    def reference_lookup(key: str, scale: float = 1.0) -> dict[tuple[str, float | None], float]:
+        lookup: dict[tuple[str, float | None], float] = {}
+        for row in all_rows:
+            if num(row, "sampling_fraction") != 1.0:
+                continue
+            value = num(row, key)
+            if value is not None:
+                lookup[(row.get("sample_mode", ""), num(row, "time_s"))] = value * scale
+        return lookup
+
+    def seed_level_values(mode: str, fraction: float, key: str, scale: float = 1.0, reference_error: bool = False) -> list[float]:
+        lookup = reference_lookup(key, scale) if reference_error else {}
+        by_seed: dict[str, list[float]] = {}
+        for row in rows:
+            if row.get("sample_mode") != mode or num(row, "sampling_fraction") != fraction:
+                continue
+            seed = str(row.get("seed", ""))
+            if seed in ("", NA):
+                continue
+            value = num(row, key)
+            if value is None:
+                continue
+            metric = value * scale
+            if reference_error:
+                reference = lookup.get((mode, num(row, "reference_time_s")))
+                if reference is None:
+                    continue
+                metric = abs(metric - reference)
+            by_seed.setdefault(seed, []).append(metric)
+        return [sum(values) / len(values) for seed, values in sorted(by_seed.items()) if values]
+
+    def mean_absolute_reference_error(mode: str, fraction: float, key: str, scale: float = 1.0) -> float | None:
+        lookup = reference_lookup(key, scale)
+        vals = []
+        for row in rows:
+            if row.get("sample_mode") != mode or num(row, "sampling_fraction") != fraction:
+                continue
+            value = num(row, key)
+            reference = lookup.get((mode, num(row, "reference_time_s")))
+            if value is not None and reference is not None:
+                vals.append(abs(value * scale - reference))
+        return sum(vals) / len(vals) if vals else None
+
+    def overlay_seed_points(ax, grouped_values: list[list[float]], colors: list[str]) -> None:
+        """Show every seed-level value on top of the boxplot."""
+        for index, (values, color) in enumerate(zip(grouped_values, colors), start=1):
+            if not values:
+                continue
+            if len(values) == 1:
+                offsets = [0.0]
+            else:
+                step = 0.18 / (len(values) - 1)
+                offsets = [-0.09 + step * i for i in range(len(values))]
+            ax.scatter(
+                [index + offset for offset in offsets],
+                values,
+                s=10,
+                color=color,
+                edgecolors="black",
+                linewidths=0.25,
+                alpha=0.85,
+                zorder=3,
+            )
+
     plt = configure_matplotlib()
     fig, axes = plt.subplots(2, 2, figsize=(MAIN_WIDTH, MAIN_WIDTH * 0.72), constrained_layout=True)
 
     ax = axes[0, 0]
-    labels = ["random", "stratified"]
-    grouped = [[num(row, "dsd_l1_error_vs_full_reference") for row in rows if row.get("sample_mode") == label] for label in labels]
-    grouped = [[v for v in group if v is not None] for group in grouped]
-    ax.boxplot(grouped, tick_labels=labels, patch_artist=True, boxprops={"facecolor": OKABE_ITO["sky_blue"], "alpha": 0.45})
-    ax.set_ylabel("DSD L1 error (-)")
+    labels = []
+    grouped = []
+    box_colors = []
+    for mode, _label, color in mode_specs:
+        for fraction in fractions_for(mode):
+            vals = seed_level_values(mode, fraction, "dsd_l1_error_vs_full_reference")
+            if vals:
+                labels.append(f"{mode}\n{fraction:g}")
+                grouped.append(vals)
+                box_colors.append(color)
+    if grouped:
+        box = ax.boxplot(grouped, tick_labels=labels, patch_artist=True, showfliers=False)
+        for patch, color in zip(box["boxes"], box_colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.45)
+        overlay_seed_points(ax, grouped, box_colors)
+        ax.set_yscale("log")
+        ax.tick_params(axis="x", rotation=35)
+    else:
+        no_data_panel(ax, "Within-design DSD L1")
+    ax.set_ylabel("Seed-mean weighted L1 (-)")
+    ax.set_title("Within-design DSD L1")
     add_panel_label(ax, "a")
 
     ax = axes[0, 1]
-    for mode, color in (("random", OKABE_ITO["blue"]), ("stratified", OKABE_ITO["vermillion"])):
-        fractions = sorted({num(row, "sampling_fraction") for row in rows if row.get("sample_mode") == mode and num(row, "sampling_fraction") is not None})
+    for mode, label, color in mode_specs:
+        fractions = fractions_for(mode)
         means = []
+        errors = []
         for fraction in fractions:
-            vals = [num(row, "dsd_l1_error_vs_full_reference") for row in rows if row.get("sample_mode") == mode and num(row, "sampling_fraction") == fraction]
-            vals = finite(vals)
-            means.append(sum(vals) / len(vals) if vals else math.nan)
-        ax.plot([f * 100.0 for f in fractions], means, marker="o", label=mode, color=color)
+            mean, std = mean_and_std(seed_level_values(mode, fraction, "dsd_l1_error_vs_full_reference"))
+            means.append(mean if mean is not None else math.nan)
+            errors.append(std if std is not None else 0.0)
+        ax.errorbar([f * 100.0 for f in fractions], means, yerr=errors, marker="o", markersize=3.2, capsize=2.5, elinewidth=0.8, capthick=0.8, label=label.replace("\n", " "), color=color)
+    ax.set_yscale("log")
     ax.set_xlabel("Sampling fraction (%)")
-    ax.set_ylabel("Mean DSD L1 error (-)")
+    ax.set_ylabel("Seed-mean weighted L1 (-)")
+    ax.set_title("Convergence to own reference")
     ax.legend(frameon=False)
     add_panel_label(ax, "b")
 
     ax = axes[1, 0]
-    for mode, color in (("random", OKABE_ITO["blue"]), ("stratified", OKABE_ITO["vermillion"])):
-        fractions = sorted({num(row, "sampling_fraction") for row in rows if row.get("sample_mode") == mode and num(row, "sampling_fraction") is not None})
+    for mode, label, color in mode_specs:
+        fractions = fractions_for(mode)
         means = []
+        errors = []
         for fraction in fractions:
-            vals = [abs((num(row, "fraction_r_ge_15um") or 0.0)) for row in rows if row.get("sample_mode") == mode and num(row, "sampling_fraction") == fraction]
-            means.append(sum(vals) / len(vals) if vals else math.nan)
-        ax.plot([f * 100.0 for f in fractions], means, marker="o", label=mode, color=color)
+            mean, std = mean_and_std(seed_level_values(mode, fraction, "fraction_r_ge_15um", reference_error=True))
+            means.append(mean if mean is not None else math.nan)
+            errors.append(std if std is not None else 0.0)
+        ax.errorbar([f * 100.0 for f in fractions], means, yerr=errors, marker="o", markersize=3.2, capsize=2.5, elinewidth=0.8, capthick=0.8, label=label.replace("\n", " "), color=color)
+    ax.set_yscale("log")
     ax.set_xlabel("Sampling fraction (%)")
-    ax.set_ylabel(f"Fraction r>=15 {MICRON} (-)")
+    ax.set_ylabel("Seed-mean tail-fraction error (-)")
+    ax.set_title("Threshold-tail representativeness")
     add_panel_label(ax, "c")
 
     ax = axes[1, 1]
-    full_rows = [row for row in read_rows(input_dir, "03_sampling_metrics") if row.get("sampling_fraction") == "1.0"]
-    dsd_labels = [row.get("sample_mode", "") for row in full_rows]
-    med = [(num(row, "weighted_median_radius") or 0.0) * 1.0e6 for row in full_rows]
-    q95 = [(num(row, "radius_q95") or 0.0) * 1.0e6 for row in full_rows]
-    width = 0.35
-    xs = list(range(len(dsd_labels)))
-    bars_med = ax.bar([i - width / 2 for i in xs], med, width=width, label="median", color=OKABE_ITO["blue"], edgecolor="black", linewidth=0.4)
-    bars_q95 = ax.bar([i + width / 2 for i in xs], q95, width=width, label="q95", color=OKABE_ITO["orange"], edgecolor="black", linewidth=0.4)
-    ax.set_ylabel(f"Radius ({MICRON})")
-    set_clean_categorical_axis(ax, dsd_labels, 0)
-    annotate_bars_adaptive(ax, bars_med, "{:.2f}")
-    annotate_bars_adaptive(ax, bars_q95, "{:.2f}")
+    for mode, label, color in mode_specs:
+        fractions = fractions_for(mode)
+        means = []
+        errors = []
+        for fraction in fractions:
+            mean, std = mean_and_std(seed_level_values(mode, fraction, "weighted_median_radius", 1.0e6, reference_error=True))
+            means.append(mean if mean is not None else math.nan)
+            errors.append(std if std is not None else 0.0)
+        ax.errorbar([f * 100.0 for f in fractions], means, yerr=errors, marker="o", markersize=3.2, capsize=2.5, elinewidth=0.8, capthick=0.8, label=label.replace("\n", " "), color=color)
+    ax.set_yscale("log")
+    ax.set_xlabel("Sampling fraction (%)")
+    ax.set_ylabel(f"Seed-mean median-radius error ({MICRON})")
+    ax.set_title("Median-radius representativeness")
     ax.legend(frameon=False)
     add_panel_label(ax, "d")
     save_figure(fig, outdir / SUPP_FIG_DIR, "supp_candidate_2D_sampling_verification")
     plt.close(fig)
-    return manifest_row("supp_candidate_2D_sampling_verification", "supplement_candidate", "03_sampling_metrics.csv; 03_sampling_seed_statistics.csv", "DSD L1 error (-); Sampling fraction (%); Fraction r>=15 micrometer (-); Radius (micrometer)", 170, CLAIMS["supp_candidate_2D_sampling_verification"], "2D sampling-procedure verification; not 3D representativeness; random sampling; stratified sampling; sampling error", "a,b,c,d")
+    return manifest_row("supp_candidate_2D_sampling_verification", "supplement_candidate", "03_sampling_metrics.csv; 03_sampling_seed_statistics.csv", "Seed-mean weighted radius-distribution L1 error (-); Sampling fraction (%); Seed-mean threshold-tail fraction error (-); Seed-mean weighted median-radius error (micrometer)", 170, CLAIMS["supp_candidate_2D_sampling_verification"], "2D sampling-procedure verification; not 3D representativeness; each sampling mode is evaluated against its own full-reference population; metrics are first averaged over output times for each seed and then summarized across 10 seeds", "a,b,c,d")
 
 
 def plot_rank_load_supp(input_dir: Path, outdir: Path) -> dict[str, Any]:
@@ -1092,14 +1224,19 @@ def plot_io_details_supp(input_dir: Path, outdir: Path) -> dict[str, Any]:
     specs = [
         ("sd_selected_output_bytes", "Selected SD output (MiB)"),
         ("number_of_output_files", "Output files (count)"),
-        ("sd_output_write_time_total_s", "SD output write time (s)"),
+        ("sd_output_write_time_per_rank_file_s", "Mean SD write time (s/write)"),
         ("wallclock_overhead_vs_nt_s", "Wall-clock overhead vs NT (s)"),
     ]
     for ax, (key, ylabel), panel in zip(axes.ravel(), specs, ["a", "b", "c", "d"]):
         for mode, color in (("FW005", OKABE_ITO["blue"]), ("BW005", OKABE_ITO["vermillion"])):
             subset = sorted([row for row in rows if row.get("tracking_label") == mode], key=lambda row: num(row, "output_interval_s") or 0.0)
             xs = [num(row, "output_interval_s") for row in subset]
-            ys = [bytes_to_mib(num(row, key)) if key.endswith("_bytes") else num(row, key) for row in subset]
+            if key.endswith("_bytes"):
+                ys = [bytes_to_mib(num(row, key)) for row in subset]
+            elif key == "sd_output_write_time_per_rank_file_s":
+                ys = [sd_write_time_per_rank_file(row) for row in subset]
+            else:
+                ys = [num(row, key) for row in subset]
             ax.plot(xs, ys, marker="o", label=CASE_LABELS.get(mode, mode), color=color)
         ax.set_xlabel("SD output interval (s)")
         ax.set_ylabel(ylabel)
@@ -1107,7 +1244,7 @@ def plot_io_details_supp(input_dir: Path, outdir: Path) -> dict[str, Any]:
         add_panel_label(ax, panel)
     save_figure(fig, outdir / SUPP_FIG_DIR, "supp_candidate_output_interval_io_details")
     plt.close(fig)
-    return manifest_row("supp_candidate_output_interval_io_details", "supplement_candidate", "05_outint_io_summary.csv", "SD output interval (s); Selected SD output (MiB); Output files (count); SD output write time (s); Wall-clock overhead vs NT (s)", 170, CLAIMS["supp_candidate_output_interval_io_details"], "output interval I/O sensitivity", "a,b,c,d")
+    return manifest_row("supp_candidate_output_interval_io_details", "supplement_candidate", "05_outint_io_summary.csv", "SD output interval (s); Selected SD output (MiB); Output files (count); Mean SD write time (s/write); Wall-clock overhead vs NT (s)", 170, CLAIMS["supp_candidate_output_interval_io_details"], "output interval I/O sensitivity; write-time panel uses sd_output_write_time_mean_s or total/count when mean is unavailable", "a,b,c,d")
 
 
 OPTIONAL_TPHT_SPECS: list[dict[str, Any]] = [
@@ -1400,9 +1537,7 @@ def plot_optional_predecessor_tree(rows: list[dict[str, str]], outdir: Path, ste
         scatter = None
         for panel_index, (ax, example) in enumerate(zip(axes.ravel(), batch_examples)):
             subset = sorted([row for row in rows if row.get("example_id") == example], key=lambda row: (num(row, "time_s") or -math.inf, str(row.get("node_id"))))
-            node_by_id = {str(row.get("node_id")): row for row in subset if row.get("node_id") not in (None, "", "NA")}
             trunk_rows = [row for row in subset if row.get("node_role") == "tracked_target_output"]
-            branch_rows = [row for row in subset if row.get("node_role") == "coalescence_partner_proxy"]
             trunk_x = [(num(row, "time_s") or math.nan) / 60.0 for row in trunk_rows]
             trunk_y = [num(row, "height_m") or math.nan for row in trunk_rows]
             if len(trunk_rows) >= 2:
@@ -1413,7 +1548,6 @@ def plot_optional_predecessor_tree(rows: list[dict[str, str]], outdir: Path, ste
                 if threshold_rows:
                     important.append(threshold_rows[0])
                 important.append(max(trunk_rows, key=lambda row: num(row, "radius_um") or -math.inf))
-                important.extend([row for row in trunk_rows if _ifcoal_flag(row)])
             seen_nodes: set[str] = set()
             important = [row for row in important if not (str(row.get("node_id")) in seen_nodes or seen_nodes.add(str(row.get("node_id"))))]
             if important:
@@ -1435,26 +1569,18 @@ def plot_optional_predecessor_tree(rows: list[dict[str, str]], outdir: Path, ste
                 ax.scatter(
                     [(num(row, "time_s") or math.nan) / 60.0 for row in ifcoal_rows],
                     [num(row, "height_m") or math.nan for row in ifcoal_rows],
-                    marker="x",
-                    color=OKABE_ITO["vermillion"],
-                    s=28,
-                    linewidths=0.9,
+                    c=[num(row, "radius_um") or math.nan for row in ifcoal_rows],
+                    cmap=cmap,
+                    norm=norm,
+                    marker="^",
+                    s=24,
+                    edgecolor="black",
+                    linewidths=0.3,
+                    alpha=0.62,
                     zorder=4,
-                    label="x: if_coal flag",
+                    label="_nolegend_",
                 )
-            for row in branch_rows:
-                predecessor = node_by_id.get(str(row.get("predecessor_id")))
-                x0 = num(row, "time_s")
-                y0 = num(row, "height_m")
-                radius = num(row, "radius_um")
-                if predecessor is None or x0 is None or y0 is None:
-                    continue
-                x1 = num(predecessor, "time_s")
-                y1 = num(predecessor, "height_m")
-                if x1 is not None and y1 is not None:
-                    color = cmap(norm(radius if radius is not None else radius_min))
-                    ax.plot([x0 / 60.0, x1 / 60.0], [y0, y1], color=color, linewidth=0.8, alpha=0.75, zorder=0)
-                ax.scatter([x0 / 60.0], [y0], marker="^", s=34, color=cmap(norm(radius if radius is not None else radius_min)), edgecolor="black", linewidth=0.3, zorder=4, label="triangle: linked partner")
+                ax.scatter([], [], marker="^", s=24, facecolor=OKABE_ITO["black"], edgecolor=OKABE_ITO["black"], label="if_coal output node")
             ax.set_ylabel("Height (m)")
             ax.set_title(f"{chr(97 + panel_index)}  target {example}", loc="left", fontsize=8, pad=2)
         axes.ravel()[-1].set_xlabel("Time (min)")

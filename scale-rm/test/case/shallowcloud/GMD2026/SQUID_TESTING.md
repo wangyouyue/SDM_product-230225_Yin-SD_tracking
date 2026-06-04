@@ -78,21 +78,27 @@ cd scale-rm/test/case/shallowcloud/GMD2026/01_bench_3d_samp_30min
 bash submit_bench_3d_squid.sh
 ```
 
-The submission script enters each case directory before `qsub` and chains jobs with one `--after` dependency at a time:
+The submission script enters each case directory before `qsub` and chains model jobs with one `--after` dependency at a time:
 
 ```text
-nt_nolog -> nt_coallog -> fw005_coallog -> bw005_coallog -> serial_postprocess -> serial_collect_failures
+nt_nolog -> nt_coallog -> fw005_coallog -> bw005_coallog
 ```
 
 This is slower than submitting all four model jobs concurrently, but it is robust on the SQUID configuration that rejects colon-separated multi-job dependencies.
-The post-processing job scripts also include `#PBS --group=hp250136`; if model jobs submit but post-processing does not, check that you are using the updated GMD2026 scripts from this package.
+Use the suite-level `analysis/` jobs for tables and figures after the model outputs exist.
 
-After jobs and post-processing finish:
+After jobs finish, generate benchmark tables and figures through the unified analysis workflow from the suite root. For a group-specific run:
 
 ```bash
-python postprocess/collect_bench_3d_table.py
-python postprocess/plot_bench_3d_overhead.py
-ls bench_3d_samp_30min_summary.*
+cd scale-rm/test/case/shallowcloud/GMD2026
+source common/load_basepy_2026_quiet.sh
+"${GMD2026_PYTHON}" analysis/01_benchmark/analyze_01_benchmark.py \
+  --root "$(pwd)" \
+  --outdir "$(pwd)/analysis_outputs"
+"${GMD2026_PYTHON}" analysis/01_benchmark/plot_01_benchmark.py \
+  --root "$(pwd)" \
+  --outdir "$(pwd)/analysis_outputs"
+ls analysis_outputs/tables/01_benchmark_summary.*
 ```
 
 Check that benchmark runs start from the initial physical state and use the 64-rank decomposition:
@@ -148,10 +154,12 @@ cd postprocess
 qsub serial_merge_ids.sh
 # or, for an interactive check after loading the Python environment:
 bash serial_merge_ids.sh
-tail -n 40 logs/merge.log
+tail -n 40 logs/merge_tracking_interest_ids.log
 ```
 
 `common/squid_model_job.sh` also performs this same `.ids` preflight before starting BW. This is intentional: SQUID `qsub --after` starts dependent jobs after the previous job finishes, not necessarily only after it succeeds.
+
+The merge job uses `serial_merge_ids.sh`, but it is no longer single-core: the SQUID script requests 8 cores, defaults `TPHT_MERGE_WORKERS=8`, and writes its Python log to `postprocess/logs/merge_tracking_interest_ids.log`.
 
 Verify the rule before submission:
 
@@ -177,8 +185,6 @@ After the TPHT chain finishes:
 ls fw_discovery/fw_tracking/tracking_interest_ids.pe*.ids
 ls fw_discovery/fw_tracking/tracking_interest_ids_dedup.pe*.ids
 python postprocess/check_tpht_consistency.py
-python postprocess/analyze_tpht_summary.py
-python postprocess/plot_tpht_targets.py
 ```
 
 Expected strict consistency:
@@ -192,6 +198,16 @@ If `missing_in_bw` or `extra_in_bw` is non-zero, first check whether BW accident
 
 BW shares only FW's initial files. It must not use FW output at a non-initial time as a physical restart.
 
+Full TPHT summary tables and plots are generated from the suite-level `analysis/` workflow, not from `02_tpht_3d_interest_70min/postprocess/`. For large outputs, prefer:
+
+```bash
+cd scale-rm/test/case/shallowcloud/GMD2026
+export GMD2026_ROOT=$(pwd)
+export GMD2026_OUTDIR=$(pwd)/analysis_outputs
+qsub analysis/job_scripts/submit_02_tpht_summary_parallel.sh
+qsub analysis/job_scripts/submit_02_tpht_heavy_parallel.sh
+```
+
 ## 6. 2D representativeness test
 
 ```bash
@@ -199,18 +215,24 @@ cd scale-rm/test/case/shallowcloud/GMD2026/03_fw_rep_2d_600s
 bash submit_fw_rep_2d_squid.sh
 ```
 
-The script chains all generated 2D cases and then runs `postprocess/parallel_evaluate.sh`.
+The script chains all generated 2D cases. Use the suite-level `analysis/03_sampling/` scripts for tables and figures after the model outputs exist.
 
 After completion:
 
 ```bash
-python postprocess/evaluate_representativeness.py
-python postprocess/plot_representativeness.py
-ls postprocess/representativeness_metrics.*
+cd scale-rm/test/case/shallowcloud/GMD2026
+source common/load_basepy_2026_quiet.sh
+"${GMD2026_PYTHON}" analysis/03_sampling/analyze_03_sampling.py \
+  --root "$(pwd)" \
+  --outdir "$(pwd)/analysis_outputs"
+"${GMD2026_PYTHON}" analysis/03_sampling/plot_03_sampling.py \
+  --root "$(pwd)" \
+  --outdir "$(pwd)/analysis_outputs"
+ls analysis_outputs/tables/03_sampling_metrics.*
 ```
 
 Interpret this group only as a short sampling-procedure verification test, not as proof of long-time 3D representativeness.
-The 60 s SD output interval over a 600 s quasi-2D run gives 11 output times, which is more useful for checking whether sampling errors are stable in time. It is still not sufficient to claim 3D spatial representativeness. Use the 3D benchmark/TPHT groups, or add a dedicated optional 3D sampling test, for manuscript-level spatial-representativeness claims.
+The 60 s SD output interval over a 600 s quasi-2D run gives 11 output times, which is more useful for checking whether sampling errors are stable in time. The analysis uses `sd_n` multiplicity-weighted radius distributions and compares each sampling design against its own full-reference output. It is still not sufficient to claim 3D spatial representativeness. Use the 3D benchmark/TPHT groups, or add a dedicated optional 3D sampling test, for manuscript-level spatial-representativeness claims.
 
 ## 7. Optional groups
 
@@ -222,7 +244,7 @@ bash submit_sdnc_scaling_squid.sh
 ```
 
 This group runs SDNC = 10, 20, 40, and 80 for NT/FW005/BW005, all as 30 min cold-start performance cases without Eulerian history output.
-The submission order is the shell-sorted case list, followed by `postprocess/serial_postprocess.sh`.
+The submission order is the shell-sorted case list. Generate tables and figures through `analysis/04_sdnc_scaling/` after the model jobs finish.
 Within each SDNC value, the NT case provides the shared init for FW/BW. NT uses `tracking_selection_mode = "none"` and writes no SD output; it is a compute baseline, not an I/O-equivalent output baseline.
 
 Output-interval I/O scaling:
@@ -233,7 +255,7 @@ bash submit_outint_io_squid.sh
 ```
 
 This group runs 10 min cold-start FW005/BW005 cases for 30, 60, and 120 s SD output intervals plus `nt_nolog_10min`.
-The submission order is `nt_nolog_10min`, then the shell-sorted FW/BW output-interval cases, followed by `postprocess/serial_postprocess.sh`.
+The submission order is `nt_nolog_10min`, then the shell-sorted FW/BW output-interval cases. Generate tables and figures through `analysis/05_outint_io/` after the model jobs finish.
 `nt_nolog_10min` provides the shared init for the FW/BW output-interval cases.
 
 ## 8. Central failure summary
@@ -263,14 +285,17 @@ Inspect `job_failure_summary.md` first when a chain fails.
 
 ## 9. Final files to collect
 
-Collect these files for the manuscript-response benchmark archive:
+Collect these files for the manuscript-response benchmark archive after `analysis_outputs/` and, if needed, `analysis_outputs_for_GMD/` are current:
 
 ```bash
 cd scale-rm/test/case/shallowcloud/GMD2026
 ls config_audit.* restart_audit.* benchmark_diagnostics_availability.*
 ls job_failure_summary.*
-ls 01_bench_3d_samp_30min/bench_3d_samp_30min_summary.*
-ls 02_tpht_3d_interest_70min/tpht_summary.*
-ls 03_fw_rep_2d_600s/postprocess/representativeness_metrics.*
+ls analysis_outputs/tables/01_benchmark_summary.*
+ls analysis_outputs/tables/02_tpht_summary.*
+ls analysis_outputs/tables/03_sampling_metrics.*
+ls analysis_outputs/tables/04_sdnc_scaling_summary.*
+ls analysis_outputs/tables/05_outint_io_summary.*
+ls analysis_outputs_for_GMD/README_GMD_CANDIDATES.md
 find . -name "*.pdf" -o -name "*.svg" -o -name "*.png"
 ```

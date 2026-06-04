@@ -40,8 +40,8 @@ def analyze(root: Path, outdir: Path, strict: bool, options: dict | None = None)
     cases = {case["case_name"]: case for case in iter_cases(config, "02_tpht_3d_interest_70min")}
     fw_dir = case_path(root, cases["fw_discovery"])
     options = options or {}
-    summary, summary_warnings = build_summary(root, options)
-    warnings = list(summary_warnings)
+    summary: dict = {}
+    warnings: list[str] = []
 
     cached_target_rows = read_csv_rows(outdir / "tables" / "02_tpht_science_target_summary.csv")
     counter: Counter[str] = Counter()
@@ -59,6 +59,8 @@ def analyze(root: Path, outdir: Path, strict: bool, options: dict | None = None)
         warnings.extend(metric_warnings + chain_warnings)
         counter = Counter((state.get("first_selected_category") or "unknown") for state in targets.values())
     if not counter:
+        summary, summary_warnings = build_summary(root, options)
+        warnings.extend(summary_warnings)
         counter["unknown"] = safe_float(summary.get("deduplicated_target_pairs")) or None
 
     total = sum(value for value in counter.values() if value is not None)

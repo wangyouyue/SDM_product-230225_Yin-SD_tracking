@@ -107,7 +107,7 @@ def _combine_fallback_to_sampling(*values: object) -> bool | None:
     return False if saw_false else None
 
 
-def build_summary(root: Path, options: dict | None = None) -> tuple[dict, list[str]]:
+def build_summary(root: Path, options: dict | None = None, summary_cache: dict[str, dict] | None = None) -> tuple[dict, list[str]]:
     """Build the TPHT summary row without writing outputs."""
     config = load_config()
     cases = {case["case_name"]: case for case in iter_cases(config, "02_tpht_3d_interest_70min")}
@@ -125,12 +125,16 @@ def build_summary(root: Path, options: dict | None = None) -> tuple[dict, list[s
     merged_file = fw_tracking / "tracking_interest_ids_merged.ids"
     dedup_files = sorted(path for path in fw_tracking.glob("tracking_interest_ids_dedup.pe*.ids") if path.is_file())
 
-    raw_summary, raw_pairs, raw_warnings = summarize_id_files(raw_files)
+    workers = int(options.get("workers", 1) or 1)
+    raw_summary, raw_pairs, raw_warnings = summarize_id_files(raw_files, workers=workers)
     warnings.extend(raw_warnings)
-    merged_summary, merged_pairs, merged_warnings = summarize_id_files([merged_file] if merged_file.exists() else [])
+    merged_summary, merged_pairs, merged_warnings = summarize_id_files([merged_file] if merged_file.exists() else [], workers=workers)
     warnings.extend(merged_warnings)
-    dedup_summary, dedup_pairs, dedup_warnings = summarize_id_files(dedup_files)
+    dedup_summary, dedup_pairs, dedup_warnings = summarize_id_files(dedup_files, workers=workers)
     warnings.extend(dedup_warnings)
+    if summary_cache is not None:
+        summary_cache["raw_summary"] = raw_summary
+        summary_cache["dedup_summary"] = dedup_summary
 
     if not raw_files:
         warnings.append("fw_discovery must have raw .ids files")
@@ -153,6 +157,7 @@ def build_summary(root: Path, options: dict | None = None) -> tuple[dict, list[s
         chunk_size=options.get("chunk_size", 100000),
         metadata_only=options.get("metadata_only", False),
         first_group_only=True,
+        workers=workers,
     )
     warnings.extend(bw_pair_warnings)
     bw_unique_pair_count = len(bw_pairs) if bw_valid_record_rows is not None else None
@@ -256,15 +261,25 @@ def build_summary(root: Path, options: dict | None = None) -> tuple[dict, list[s
     return row, warnings
 
 
-def build_rank_load_rows(root: Path) -> tuple[list[dict], list[str]]:
+def build_rank_load_rows(
+    root: Path,
+    options: dict | None = None,
+    raw_summary: dict | None = None,
+    dedup_summary: dict | None = None,
+) -> tuple[list[dict], list[str]]:
     """Build TPHT dedup-efficiency and rank-load-balance rows."""
-    config = load_config()
-    fw_case = {case["case_name"]: case for case in iter_cases(config, "02_tpht_3d_interest_70min")}["fw_discovery"]
-    fw_tracking = case_path(root, fw_case) / "fw_tracking"
-    raw_files = sorted(path for path in fw_tracking.glob("tracking_interest_ids.pe*.ids") if path.is_file())
-    dedup_files = sorted(path for path in fw_tracking.glob("tracking_interest_ids_dedup.pe*.ids") if path.is_file())
-    raw_summary, _raw_pairs, raw_warnings = summarize_id_files(raw_files)
-    dedup_summary, _dedup_pairs, dedup_warnings = summarize_id_files(dedup_files)
+    options = options or {}
+    workers = int(options.get("workers", 1) or 1)
+    raw_warnings: list[str] = []
+    dedup_warnings: list[str] = []
+    if raw_summary is None or dedup_summary is None:
+        config = load_config()
+        fw_case = {case["case_name"]: case for case in iter_cases(config, "02_tpht_3d_interest_70min")}["fw_discovery"]
+        fw_tracking = case_path(root, fw_case) / "fw_tracking"
+        raw_files = sorted(path for path in fw_tracking.glob("tracking_interest_ids.pe*.ids") if path.is_file())
+        dedup_files = sorted(path for path in fw_tracking.glob("tracking_interest_ids_dedup.pe*.ids") if path.is_file())
+        raw_summary, _raw_pairs, raw_warnings = summarize_id_files(raw_files, workers=workers)
+        dedup_summary, _dedup_pairs, dedup_warnings = summarize_id_files(dedup_files, workers=workers)
     raw_per_rank = raw_summary.get("ids_per_rank") or {}
     dedup_per_rank = dedup_summary.get("ids_per_rank") or {}
     ranks = sorted(set(raw_per_rank) | set(dedup_per_rank))
@@ -355,8 +370,14 @@ def build_feature_status_rows() -> list[dict]:
 
 def analyze(root: Path, outdir: Path, strict: bool, options: dict | None = None) -> None:
     """Write the TPHT core summary table."""
-    row, warnings = build_summary(root, options)
-    rank_rows, rank_warnings = build_rank_load_rows(root)
+    summary_cache: dict[str, dict] = {}
+    row, warnings = build_summary(root, options, summary_cache)
+    rank_rows, rank_warnings = build_rank_load_rows(
+        root,
+        options,
+        summary_cache.get("raw_summary"),
+        summary_cache.get("dedup_summary"),
+    )
     warnings.extend(rank_warnings)
     if strict and warnings:
         raise RuntimeError("; ".join(warnings))

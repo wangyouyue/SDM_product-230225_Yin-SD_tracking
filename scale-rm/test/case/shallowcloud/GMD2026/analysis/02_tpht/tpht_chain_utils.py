@@ -13,6 +13,7 @@ import math
 import re
 import sys
 from collections import defaultdict
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -357,8 +358,9 @@ def _build_category_occurrence_accumulator(
     return by_time_height, warnings
 
 
-def _read_selected_level(paths: list[Path], file_time_s: float | None, options: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """Read one BW selected-output time level across ranks."""
+def _read_selected_file(args: tuple[Path, float | None, dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Read one BW selected-output rank file."""
+    path, file_time_s, options = args
     Dataset = _dataset_class()
     if Dataset is None:
         return [], ["NetCDF library unavailable; BW selected-output level skipped"]
@@ -367,74 +369,94 @@ def _read_selected_level(paths: list[Path], file_time_s: float | None, options: 
     chunk_size = int(options.get("chunk_size", 100000) or 100000)
     max_records = options.get("max_records")
     record_order = 0
-    for path in paths:
-        try:
-            with Dataset(path, "r") as handle:
-                names = handle.variables.keys()
-                pair_vars = _find_pair_variables(names, BW_ID_NAMES)
-                radius_name = _find_variable(names, RADIUS_NAMES)
-                if pair_vars is None:
-                    warnings.append(f"BW predecessor ID variables missing in {path.name}")
-                    continue
-                dm_var = handle.variables[pair_vars[0]]
-                sd_var = handle.variables[pair_vars[1]]
-                radius_var = handle.variables[radius_name] if radius_name else None
-                height_name = _find_variable(names, HEIGHT_NAMES)
-                coal_name = _find_variable(names, IF_COAL_NAMES)
-                x_name = _find_variable(names, X_NAMES)
-                y_name = _find_variable(names, Y_NAMES)
-                n_name = _find_variable(names, N_NAMES)
-                time_name = _find_variable(names, TIME_NAMES)
-                time_var = handle.variables[time_name] if time_name else None
-                length = min(_variable_length(dm_var), _variable_length(sd_var))
-                if radius_var is not None:
-                    length = min(length, _variable_length(radius_var))
-                time_matches_records = time_var is not None and _variable_length(time_var) == length
-                time_scalar = file_time_s
-                if time_var is not None and not time_matches_records and _variable_length(time_var) <= 10000:
-                    time_values_all = _flatten(time_var[:])
-                    if len(time_values_all) == 1:
-                        time_scalar = time_values_all[0]
-                for selection in _iter_first_dim_chunks(length, max_records, chunk_size):
-                    dm_values = _flatten_int(dm_var[selection])
-                    sd_values = _flatten_int(sd_var[selection])
-                    radius_values = _flatten(radius_var[selection]) if radius_var is not None else []
-                    height_values = _get_optional_values(handle, height_name, selection)
-                    coal_values = _get_optional_values(handle, coal_name, selection)
-                    x_values = _get_optional_values(handle, x_name, selection)
-                    y_values = _get_optional_values(handle, y_name, selection)
-                    n_values = _get_optional_values(handle, n_name, selection)
-                    time_values = _flatten(time_var[selection]) if time_var is not None and time_matches_records else []
-                    n_records = min(len(dm_values), len(sd_values))
-                    for index in range(n_records):
-                        dm_id = dm_values[index]
-                        sd_id = sd_values[index]
-                        if dm_id < 0 or sd_id < 0:
-                            continue
-                        records.append(
-                            {
-                                "output_id": (dm_id, sd_id),
-                                "dm_id": dm_id,
-                                "sd_id": sd_id,
-                                "time_s": _value_at(time_values, index) if time_matches_records else time_scalar,
-                                "radius_m": _value_at(radius_values, index),
-                                "height_m": _value_at(height_values, index),
-                                "if_coal": _value_at(coal_values, index),
-                                "x_m": _value_at(x_values, index),
-                                "y_m": _value_at(y_values, index),
-                                "multiplicity": _value_at(n_values, index),
-                                "source_file": path.name,
-                                "record_order": record_order,
-                            }
-                        )
-                        record_order += 1
-        except Exception as exc:
-            warnings.append(f"failed to read BW selected-output level {path.name}: {exc}")
+    try:
+        with Dataset(path, "r") as handle:
+            names = handle.variables.keys()
+            pair_vars = _find_pair_variables(names, BW_ID_NAMES)
+            radius_name = _find_variable(names, RADIUS_NAMES)
+            if pair_vars is None:
+                return [], [f"BW predecessor ID variables missing in {path.name}"]
+            dm_var = handle.variables[pair_vars[0]]
+            sd_var = handle.variables[pair_vars[1]]
+            radius_var = handle.variables[radius_name] if radius_name else None
+            height_name = _find_variable(names, HEIGHT_NAMES)
+            coal_name = _find_variable(names, IF_COAL_NAMES)
+            x_name = _find_variable(names, X_NAMES)
+            y_name = _find_variable(names, Y_NAMES)
+            n_name = _find_variable(names, N_NAMES)
+            time_name = _find_variable(names, TIME_NAMES)
+            time_var = handle.variables[time_name] if time_name else None
+            length = min(_variable_length(dm_var), _variable_length(sd_var))
+            if radius_var is not None:
+                length = min(length, _variable_length(radius_var))
+            time_matches_records = time_var is not None and _variable_length(time_var) == length
+            time_scalar = file_time_s
+            if time_var is not None and not time_matches_records and _variable_length(time_var) <= 10000:
+                time_values_all = _flatten(time_var[:])
+                if len(time_values_all) == 1:
+                    time_scalar = time_values_all[0]
+            for selection in _iter_first_dim_chunks(length, max_records, chunk_size):
+                dm_values = _flatten_int(dm_var[selection])
+                sd_values = _flatten_int(sd_var[selection])
+                radius_values = _flatten(radius_var[selection]) if radius_var is not None else []
+                height_values = _get_optional_values(handle, height_name, selection)
+                coal_values = _get_optional_values(handle, coal_name, selection)
+                x_values = _get_optional_values(handle, x_name, selection)
+                y_values = _get_optional_values(handle, y_name, selection)
+                n_values = _get_optional_values(handle, n_name, selection)
+                time_values = _flatten(time_var[selection]) if time_var is not None and time_matches_records else []
+                n_records = min(len(dm_values), len(sd_values))
+                for index in range(n_records):
+                    dm_id = dm_values[index]
+                    sd_id = sd_values[index]
+                    if dm_id < 0 or sd_id < 0:
+                        continue
+                    records.append(
+                        {
+                            "output_id": (dm_id, sd_id),
+                            "dm_id": dm_id,
+                            "sd_id": sd_id,
+                            "time_s": _value_at(time_values, index) if time_matches_records else time_scalar,
+                            "radius_m": _value_at(radius_values, index),
+                            "height_m": _value_at(height_values, index),
+                            "if_coal": _value_at(coal_values, index),
+                            "x_m": _value_at(x_values, index),
+                            "y_m": _value_at(y_values, index),
+                            "multiplicity": _value_at(n_values, index),
+                            "source_file": path.name,
+                            "record_order": record_order,
+                        }
+                    )
+                    record_order += 1
+    except Exception as exc:
+        warnings.append(f"failed to read BW selected-output level {path.name}: {exc}")
     return records, warnings
 
 
-def _read_coal_events(paths: list[Path], file_time_s: float | None, options: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """Read coalescence events whose BW predecessor IDs match the next output level."""
+def _read_selected_level(paths: list[Path], file_time_s: float | None, options: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Read one BW selected-output time level across ranks."""
+    workers = int(options.get("workers", 1) or 1)
+    worker_args = [(path, file_time_s, options) for path in paths]
+    if workers > 1 and len(worker_args) > 1:
+        with Pool(processes=workers) as pool:
+            results = pool.map(_read_selected_file, worker_args)
+    else:
+        results = [_read_selected_file(args) for args in worker_args]
+    records: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    record_order = 0
+    for file_records, file_warnings in results:
+        warnings.extend(file_warnings)
+        for record in file_records:
+            record["record_order"] = record_order
+            records.append(record)
+            record_order += 1
+    return records, warnings
+
+
+def _read_coal_file(args: tuple[Path, float | None, dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Read one coalescence-output rank file."""
+    path, file_time_s, options = args
     Dataset = _dataset_class()
     if Dataset is None:
         return [], ["NetCDF library unavailable; coalescence event reads skipped"]
@@ -442,57 +464,73 @@ def _read_coal_events(paths: list[Path], file_time_s: float | None, options: dic
     warnings: list[str] = []
     chunk_size = int(options.get("chunk_size", 100000) or 100000)
     max_records = options.get("max_records")
-    for path in paths:
-        try:
-            with Dataset(path, "r") as handle:
-                names = handle.variables.keys()
-                pair1 = _find_pair(names, COAL_PRE1_NAMES)
-                pair2 = _find_pair(names, COAL_PRE2_NAMES)
-                if pair1 is None or pair2 is None:
-                    continue
-                dm1_var = handle.variables[pair1[0]]
-                sd1_var = handle.variables[pair1[1]]
-                dm2_var = handle.variables[pair2[0]]
-                sd2_var = handle.variables[pair2[1]]
-                length = min(_variable_length(dm1_var), _variable_length(sd1_var), _variable_length(dm2_var), _variable_length(sd2_var))
-                time_name = _find_variable(names, COAL_EVENT_TIME_NAMES)
-                r1_name = _find_variable(names, COAL_RADIUS1_NAMES)
-                r2_name = _find_variable(names, COAL_RADIUS2_NAMES)
-                n1_name = _find_variable(names, COAL_N1_NAMES)
-                n2_name = _find_variable(names, COAL_N2_NAMES)
-                num_col_name = _find_variable(names, COAL_NUM_COL_NAMES)
-                for selection in _iter_first_dim_chunks(length, max_records, chunk_size):
-                    dm1_values = _flatten_int(dm1_var[selection])
-                    sd1_values = _flatten_int(sd1_var[selection])
-                    dm2_values = _flatten_int(dm2_var[selection])
-                    sd2_values = _flatten_int(sd2_var[selection])
-                    time_values = _get_optional_values(handle, time_name, selection)
-                    r1_values = _get_optional_values(handle, r1_name, selection)
-                    r2_values = _get_optional_values(handle, r2_name, selection)
-                    n1_values = _get_optional_values(handle, n1_name, selection)
-                    n2_values = _get_optional_values(handle, n2_name, selection)
-                    num_col_values = _get_optional_values(handle, num_col_name, selection)
-                    n_events = min(len(dm1_values), len(sd1_values), len(dm2_values), len(sd2_values))
-                    for index in range(n_events):
-                        id1 = (dm1_values[index], sd1_values[index])
-                        id2 = (dm2_values[index], sd2_values[index])
-                        if id1[0] < 0 or id1[1] < 0 or id2[0] < 0 or id2[1] < 0:
-                            continue
-                        events.append(
-                            {
-                                "event_time_s": _value_at(time_values, index) if time_values else file_time_s,
-                                "id1": id1,
-                                "id2": id2,
-                                "sd_r1_m": _value_at(r1_values, index),
-                                "sd_r2_m": _value_at(r2_values, index),
-                                "sd_n1": _value_at(n1_values, index),
-                                "sd_n2": _value_at(n2_values, index),
-                                "num_col": _value_at(num_col_values, index),
-                                "source_file": path.name,
-                            }
-                        )
-        except Exception as exc:
-            warnings.append(f"failed to read BW coalescence events from {path.name}: {exc}")
+    try:
+        with Dataset(path, "r") as handle:
+            names = handle.variables.keys()
+            pair1 = _find_pair(names, COAL_PRE1_NAMES)
+            pair2 = _find_pair(names, COAL_PRE2_NAMES)
+            if pair1 is None or pair2 is None:
+                return events, warnings
+            dm1_var = handle.variables[pair1[0]]
+            sd1_var = handle.variables[pair1[1]]
+            dm2_var = handle.variables[pair2[0]]
+            sd2_var = handle.variables[pair2[1]]
+            length = min(_variable_length(dm1_var), _variable_length(sd1_var), _variable_length(dm2_var), _variable_length(sd2_var))
+            time_name = _find_variable(names, COAL_EVENT_TIME_NAMES)
+            r1_name = _find_variable(names, COAL_RADIUS1_NAMES)
+            r2_name = _find_variable(names, COAL_RADIUS2_NAMES)
+            n1_name = _find_variable(names, COAL_N1_NAMES)
+            n2_name = _find_variable(names, COAL_N2_NAMES)
+            num_col_name = _find_variable(names, COAL_NUM_COL_NAMES)
+            for selection in _iter_first_dim_chunks(length, max_records, chunk_size):
+                dm1_values = _flatten_int(dm1_var[selection])
+                sd1_values = _flatten_int(sd1_var[selection])
+                dm2_values = _flatten_int(dm2_var[selection])
+                sd2_values = _flatten_int(sd2_var[selection])
+                time_values = _get_optional_values(handle, time_name, selection)
+                r1_values = _get_optional_values(handle, r1_name, selection)
+                r2_values = _get_optional_values(handle, r2_name, selection)
+                n1_values = _get_optional_values(handle, n1_name, selection)
+                n2_values = _get_optional_values(handle, n2_name, selection)
+                num_col_values = _get_optional_values(handle, num_col_name, selection)
+                n_events = min(len(dm1_values), len(sd1_values), len(dm2_values), len(sd2_values))
+                for index in range(n_events):
+                    id1 = (dm1_values[index], sd1_values[index])
+                    id2 = (dm2_values[index], sd2_values[index])
+                    if id1[0] < 0 or id1[1] < 0 or id2[0] < 0 or id2[1] < 0:
+                        continue
+                    events.append(
+                        {
+                            "event_time_s": _value_at(time_values, index) if time_values else file_time_s,
+                            "id1": id1,
+                            "id2": id2,
+                            "sd_r1_m": _value_at(r1_values, index),
+                            "sd_r2_m": _value_at(r2_values, index),
+                            "sd_n1": _value_at(n1_values, index),
+                            "sd_n2": _value_at(n2_values, index),
+                            "num_col": _value_at(num_col_values, index),
+                            "source_file": path.name,
+                        }
+                    )
+    except Exception as exc:
+        warnings.append(f"failed to read BW coalescence events from {path.name}: {exc}")
+    return events, warnings
+
+
+def _read_coal_events(paths: list[Path], file_time_s: float | None, options: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Read coalescence events whose BW predecessor IDs match the next output level."""
+    workers = int(options.get("workers", 1) or 1)
+    worker_args = [(path, file_time_s, options) for path in paths]
+    if workers > 1 and len(worker_args) > 1:
+        with Pool(processes=workers) as pool:
+            results = pool.map(_read_coal_file, worker_args)
+    else:
+        results = [_read_coal_file(args) for args in worker_args]
+    events: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for file_events, file_warnings in results:
+        events.extend(file_events)
+        warnings.extend(file_warnings)
     return events, warnings
 
 
