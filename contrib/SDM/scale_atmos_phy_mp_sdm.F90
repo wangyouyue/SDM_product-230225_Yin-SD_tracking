@@ -117,9 +117,7 @@
 !! @li      2020-07-23 (S.Shima) [add] sdm_dmpvar == 1?? and sdm_dmpvar == 2??
 !! @li      2020-07-27 (S.Shima) [mod] History output of SNC (SD number density). Data is updated only at the time it will be saved
 !! @li      2020-07-28 (S.Shima) [add] History output of the density of droplet moments
-!! @li      2023-11-22 (C.Yin)   [add] previous MPI process number (pre_dmid) and save index of super-droplet (pre_sdid)
-!! @li      2024-04-01 (C.Yin)   [add] a flag if_coal to identify if the SDs have undergone coalescence during the previous output interval
-!<
+!<  
 !-------------------------------------------------------------------------------
 #include "macro_thermodyn.h"
 module scale_atmos_phy_mp_sdm
@@ -159,6 +157,7 @@ module scale_atmos_phy_mp_sdm
      gadg_count_sort
   use rng_uniform_mt, only: &
      c_rng_uniform_mt,      &
+     rng_init,              &
      rng_save_state,        &
      rng_load_state,        &
      gen_rand_array => rng_generate_array
@@ -170,6 +169,16 @@ module scale_atmos_phy_mp_sdm
   implicit none
   private
   !-----------------------------------------------------------------------------
+  real(DP), save :: gmd_sd_output_write_time_last_s = 0.0_DP
+  real(DP), save :: gmd_sd_output_write_time_total_s = 0.0_DP
+  integer,  save :: gmd_sd_output_write_count = 0
+  real(DP), save :: gmd_coalescence_output_write_time_last_s = 0.0_DP
+  real(DP), save :: gmd_coalescence_output_write_time_total_s = 0.0_DP
+  integer,  save :: gmd_coalescence_output_write_count = 0
+  real(DP), save :: gmd_tpht_id_write_time_last_s = 0.0_DP
+  real(DP), save :: gmd_tpht_id_write_time_total_s = 0.0_DP
+  integer,  save :: gmd_tpht_id_write_count = 0
+  real(DP), save :: gmd_tpht_id_records_written_total = 0.0_DP
   !
   !++ Public procedure
   !
@@ -255,7 +264,10 @@ contains
        PRC_MPIstop
     use scale_atmos_hydrometeor, only: &
        ATMOS_HYDROMETEOR_regist
-    use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM
+    use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM, &
+         tracking_mode, &
+         tracking_sample_initialized, coalescence_output_enable, coal_output, &
+         random_perturbation_enable, random_perturbation_amp, sdm_noise_amp
 
     implicit none
 
@@ -288,6 +300,29 @@ contains
     endif
     if( IO_L ) write(IO_FID_LOG,nml=PARAM_ATMOS_PHY_MP_SDM)
 
+    tracking_sample_initialized = .false.
+    ! NOTE:
+    ! tracking_mode is the only user-facing mode selector:
+    !   0=no tracking, 1=forward, 2=backward.
+    select case( tracking_mode )
+    case( 0 )
+       forward_tracking_enable = .false.
+       backward_tracking_enable = .false.
+    case( 1 )
+       forward_tracking_enable = .true.
+       backward_tracking_enable = .false.
+    case( 2 )
+       forward_tracking_enable = .false.
+       backward_tracking_enable = .true.
+    case default
+       write(*,*) 'xxx tracking_mode should be one of 0/1/2. Check!'
+       call PRC_MPIstop
+    end select
+    if( random_perturbation_enable ) then
+       sdm_noise_amp = random_perturbation_amp
+    else
+       sdm_noise_amp = 0.0_RP
+    endif
     if( .not. sdm_cold ) then
 
        QA_MP = 3
@@ -478,8 +513,6 @@ contains
     srcs_sub = PRC_next(PRC_S)
     srcn_sub = PRC_next(PRC_N)
 
-    tag  = 0
-
     !--- read namelist
     rewind(IO_FID_CONF)
     read(IO_FID_CONF,nml=PARAM_ATMOS_PHY_MP,iostat=ierr)
@@ -538,6 +571,16 @@ contains
     if( domovement )       sdm_calvar(3) = .true.
     if( domeltfreeze )     sdm_calvar(4) = .true.
     if( dosublimation )    sdm_calvar(5) = .true.
+
+    if( .not. sdm_calvar(2) ) then
+       coalescence_output_enable = .false.
+    endif
+
+    if( coalescence_output_enable ) then
+       coal_output = 1
+    else
+       coal_output = 0
+    endif
 
 ! zlower+surface height is the lower boundary of SDs.
 !!$     if( sdm_zlower < CZ(KS) ) then
@@ -765,7 +808,7 @@ contains
        P00   => CONST_PRE00
 
     use m_sdm_io, only: &
-       sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_assign_tracking_subset
+       sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_interest_id_outnetcdf
     use m_sdm_coordtrans, only: &
        sdm_rk2z
     use m_sdm_fluidconv, only: &
@@ -827,14 +870,48 @@ contains
     type(sdicedef), pointer :: sdice_tmp
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
-    logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3
-    logical :: did_sdm_dump, sampling_mode
+    logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3, did_sdm_dump
+    logical :: did_coal_flag_dump
+    logical :: output_selected_as_all
     integer :: tracking_chain_count
+    integer :: tracking_chain_count_sum, tracking_chain_count_max
+    integer :: mpi_ierr
+    character(len=64) :: tracking_id_label
     real(DP) :: tracking_mem_mb, coal_mem_mb
-    character(len=16) :: selected_sdtype
+    real(DP) :: tracking_chain_count_mean
+    real(DP) :: tracking_id_memory_bytes_local, tracking_id_memory_bytes_sum
+    real(DP) :: if_coal_memory_bytes_local, if_coal_memory_bytes_sum
+    real(DP) :: rank_peak_memory_max_mib, rank_peak_memory_sum_mib
+    real(DP) :: rank_rss_max_mib, rank_rss_sum_mib
+    real(DP) :: gmd_time_start, gmd_time_end
+    real(DP) :: gmd_id_assignment_time_s, gmd_boundary_tracking_time_s
+    real(DP) :: gmd_sd_output_write_time_last_s_global, gmd_sd_output_write_time_total_s_global
+    real(DP) :: gmd_coalescence_output_write_time_last_s_global, gmd_coalescence_output_write_time_total_s_global
+    real(DP) :: gmd_tpht_id_write_time_last_s_global, gmd_tpht_id_write_time_total_s_global
+    real(DP) :: gmd_tpht_id_records_written_total_global
+    integer :: gmd_sd_output_write_count_global, gmd_coalescence_output_write_count_global
+    integer :: gmd_tpht_id_write_count_global, gmd_tpht_id_records_written
+    logical :: gmd_emit_diag
+    integer :: full_scan_chain_count, full_scan_chain_count_sum
     integer :: order_n
 
     !-------------------------------------------------------------------------------------------------------------------------------
+
+    gmd_tpht_id_records_written = 0
+    if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
+         ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
+       if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+       call sdm_interest_id_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c, &
+            gmd_tpht_id_records_written)
+       if( gmd_benchmark_diag_enable .and. gmd_tpht_id_records_written > 0 ) then
+          gmd_time_end = mpi_wtime()
+          gmd_tpht_id_write_time_last_s = gmd_time_end - gmd_time_start
+          gmd_tpht_id_write_time_total_s = gmd_tpht_id_write_time_total_s + gmd_tpht_id_write_time_last_s
+          gmd_tpht_id_write_count = gmd_tpht_id_write_count + 1
+          gmd_tpht_id_records_written_total = gmd_tpht_id_records_written_total + &
+               real(gmd_tpht_id_records_written,kind=DP)
+       end if
+    end if
 
 #ifdef _FIPP_
     ! Section specification for fipp profiler
@@ -872,11 +949,18 @@ contains
                       sdm_rdnc,sdm_sdnmlvol,sdm_aslset,   &
                       sdm_inisdnc,sdm_zlower,             &
                       sdm_zupper,sdm_calvar,              &
-                      zph_crs,                            &
+                     zph_crs, tracking_selection_mode,    &
+                     tracking_id_input_basename,         &
+                      tracking_fraction, max_tracked_sds,  &
+                      tracking_height_min, tracking_height_max, &
+                      tracking_radius_min, tracking_radius_max, &
+                      tracking_nz_bin, tracking_nr_bin,    &
+                      tracking_min_per_bin, tracking_fallback_to_random, &
+                      tracking_sample_initialized,         &
                       sdasl_s2c, sdx_s2c, sdy_s2c,        &
                       sdz_s2c, sdr_s2c,                   &
                       sdrk_s2c, sdvz_s2c,                 &
-                      sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c )
+                      sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c   )
          prr_crs(1:IA,1:JA,1:6)=0.0_RP
       end if
     endif
@@ -930,18 +1014,8 @@ contains
     call fapp_start("sdm_out",0,0)
 #endif
     did_sdm_dump = .false.
-    ! sampling_mode is true only when subset tracking is requested.
-    ! For tracking_fraction >= 1 and max_tracked_sds == 0, full tracking is used directly.
-    sampling_mode = backward_tracking_enable .and. &
-         ((tracking_fraction > 0.0_RP .and. tracking_fraction < 1.0_RP) .or. (max_tracked_sds > 0) .or. &
-         trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
-         trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
-         trim(adjustl(tracking_selection_mode)) == 'Stratified')
-    if( sampling_mode ) then
-       selected_sdtype = 'tracked'
-    else
-       selected_sdtype = 'activated'
-    end if
+    did_coal_flag_dump = .false.
+
     if( (mod(sdm_dmpvar,10)==1) .and. sdm_dmpitva>0.0_RP .and. &
          mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
              int(1.E+3_RP*(sdm_dmpitva+0.00010_RP))) == 0 ) then
@@ -963,7 +1037,7 @@ contains
        call sdm_outasci(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
+                        sdice_s2c, &
                         sdm_dmpnskip)
        did_sdm_dump = .true.
     end if
@@ -988,25 +1062,53 @@ contains
        end if
        !! Output
        if( (mod(sdm_dmpvar,100))/10==1) then
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
                         sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip,filetag='all')
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        else if( (mod(sdm_dmpvar,100))/10==2) then
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
                         sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
                         sdm_dmpnskip,filetag='all')
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        end if
       did_sdm_dump = .true.
+      if( coalescence_output_enable ) did_coal_flag_dump = .true.
     end if
+
+    output_selected_as_all = len_trim(tracking_id_input_basename) == 0 .and. &
+         ( trim(adjustl(tracking_selection_mode)) == 'none' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'NONE' .or. &
+           trim(adjustl(tracking_selection_mode)) == 'None' )
 
     if( ((mod(sdm_dmpvar,1000))/100>=1) .and. sdm_dmpitvl>0.0_RP .and. &
          mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
              int(1.E+3_RP*(sdm_dmpitvl+0.00010_RP))) == 0 ) then
-       if( IO_L ) write(IO_FID_LOG,*) ' *** Output Selected Super Droplet Data in NetCDF'
+       if( IO_L ) then
+          if( output_selected_as_all ) then
+             write(IO_FID_LOG,*) ' *** Output Super Droplet Data in NetCDF'
+          else
+             write(IO_FID_LOG,*) ' *** Output Selected Super Droplet Data in NetCDF'
+          end if
+       end if
 
        sdx_tmp  => sd_dtmp1
        sdy_tmp  => sd_dtmp2
@@ -1017,26 +1119,27 @@ contains
        sdr_tmp  => sd_dtmp7
        sdvz_tmp => sd_dtmp8 ! diagnostic variable
        sdliqice_tmp => sd_i2tmp1
+       ifcoal_tmp => sd_i2tmp2
        sdice_tmp=> sd_icetmp1
        sdn_tmp  => sd_i8tmp1
        sdasl_tmp=> sd_asltmp1
        sdid_tmp => sd_i4tmp1
        dmid_tmp => sd_i4tmp2
-       ifcoal_tmp => sd_i2tmp2
 
-      call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
-      if( sampling_mode .and. .not. tracking_sample_initialized ) then
-         call sdm_rk2z(sdnum_s2c,sdx_s2c,sdy_s2c,sdrk_s2c,sdz_s2c,sdri_s2c,sdrj_s2c)
-         call sdm_assign_tracking_subset(sdnum_s2c, sdz_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c)
-      end if
-       call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                &
-            &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                &
-            &                    t_scale,sd_itmp1,sdtype=selected_sdtype)
-      do n=1,sdnum_tmp
-         ifcoal_tmp(n) = ifcoal_s2c(sd_itmp1(n))
-      end do
+       call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
+       if( output_selected_as_all ) then
+          call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
+               &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+               &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
+               &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+               &                    t_scale,sd_itmp1,sdtype='all') ! options: 'all', 'large', 'activated','selected'
+       else
+          call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
+               &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+               &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
+               &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+               &                    t_scale,sd_itmp1,sdtype='selected') ! options: 'all', 'large', 'activated','selected'
+       end if
 
        !! Evaluate diagnostic variables
        !!! z
@@ -1055,19 +1158,52 @@ contains
 
        !! Output
        if( (mod(sdm_dmpvar,1000))/100==1) then
-          call sdm_outnetcdf(TIME_NOWSEC,                               &
-                        sdnum_tmp,sdnumasl_tmp,                    &
-                        sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                        sdm_dmpnskip,filetag='selected')
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+          if( output_selected_as_all ) then
+             call sdm_outnetcdf(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='all')
+          else
+             call sdm_outnetcdf(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='selected')
+          end if
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        else if( (mod(sdm_dmpvar,1000))/100==2) then
-          call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
-                        sdnum_tmp,sdnumasl_tmp,                    &
-                        sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                        sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                        sdm_dmpnskip,filetag='selected')
+          if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+          if( output_selected_as_all ) then
+             call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='all')
+          else
+             call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
+                           sdnum_tmp,sdnumasl_tmp,                    &
+                           sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
+                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                           sdm_dmpnskip,filetag='selected')
+          end if
+          if( gmd_benchmark_diag_enable ) then
+             gmd_time_end = mpi_wtime()
+             gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
+             gmd_sd_output_write_time_total_s = gmd_sd_output_write_time_total_s + &
+                  gmd_sd_output_write_time_last_s
+             gmd_sd_output_write_count = gmd_sd_output_write_count + 1
+          end if
        end if
       did_sdm_dump = .true.
+      if( coalescence_output_enable ) did_coal_flag_dump = .true.
 
        nullify(sdx_tmp)
        nullify(sdy_tmp)
@@ -1078,22 +1214,105 @@ contains
        nullify(sdr_tmp)
        nullify(sdvz_tmp)
        nullify(sdliqice_tmp)
+       nullify(ifcoal_tmp)
        nullify(sdice_tmp)
        nullify(sdn_tmp)
        nullify(sdasl_tmp)
        nullify(sdid_tmp)
        nullify(dmid_tmp)
-       nullify(ifcoal_tmp)
+
     end if
 
-    if( IO_L .and. backward_tracking_enable .and. did_sdm_dump ) then
-       tracking_chain_count = count( (sdid_s2c(1:sdnum_s2c) > INVALID_i4) .and. (dmid_s2c(1:sdnum_s2c) > INVALID_i4) )
-       tracking_mem_mb = real(sdnum_s2c,kind=DP) * 8.0_DP / 1048576.0_DP
-       coal_mem_mb = real(sdnum_s2c,kind=DP) * 2.0_DP / 1048576.0_DP
+    if( did_coal_flag_dump ) then
+       ifcoal_s2c(1:sdnum_s2c) = 0_i2
+    end if
+
+    tracking_chain_count = count( (sdid_s2c(1:sdnum_s2c) > INVALID_i4) .and. (dmid_s2c(1:sdnum_s2c) > INVALID_i4) )
+    tracking_id_memory_bytes_local = real(sdnum_s2c,kind=DP) * 8.0_DP
+    if_coal_memory_bytes_local = real(sdnum_s2c,kind=DP) * 2.0_DP
+
+    gmd_emit_diag = gmd_benchmark_diag_enable .and. sdm_dmpitvl > 0.0_RP .and. &
+         mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
+             int(1.E+3_RP*(sdm_dmpitvl+0.00010_RP))) == 0
+
+    if( gmd_emit_diag ) then
+       full_scan_chain_count = count( sdn_s2c(1:sdnum_s2c) > 0 )
+       call mpi_allreduce(tracking_chain_count, tracking_chain_count_sum, 1, mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(tracking_chain_count, tracking_chain_count_max, 1, mpi_integer, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(full_scan_chain_count, full_scan_chain_count_sum, 1, mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       tracking_chain_count_mean = real(tracking_chain_count_sum,kind=DP) / real(PRC_nprocs,kind=DP)
+       call mpi_allreduce(tracking_id_memory_bytes_local, tracking_id_memory_bytes_sum, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(if_coal_memory_bytes_local, if_coal_memory_bytes_sum, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call gmd_reduce_proc_memory(rank_peak_memory_max_mib, rank_peak_memory_sum_mib, rank_rss_max_mib, rank_rss_sum_mib)
+       gmd_id_assignment_time_s = -1.0_DP
+       if( tracking_count_id_assign > 0 ) then
+          gmd_id_assignment_time_s = tracking_time_id_assign / real(tracking_count_id_assign,kind=DP)
+       end if
+       gmd_boundary_tracking_time_s = -1.0_DP
+       if( tracking_count_boundary_x + tracking_count_boundary_y > 0 ) then
+          gmd_boundary_tracking_time_s = &
+               ( tracking_time_boundary_x + tracking_time_boundary_y ) / &
+               real(tracking_count_boundary_x + tracking_count_boundary_y,kind=DP)
+       end if
+       call mpi_allreduce(gmd_sd_output_write_time_last_s, gmd_sd_output_write_time_last_s_global, 1, &
+            mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_sd_output_write_time_total_s, gmd_sd_output_write_time_total_s_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_sd_output_write_count, gmd_sd_output_write_count_global, 1, &
+            mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_coalescence_output_write_time_last_s, gmd_coalescence_output_write_time_last_s_global, 1, &
+            mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_coalescence_output_write_time_total_s, gmd_coalescence_output_write_time_total_s_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_coalescence_output_write_count, gmd_coalescence_output_write_count_global, 1, &
+            mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_write_time_last_s, gmd_tpht_id_write_time_last_s_global, 1, &
+            mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_write_time_total_s, gmd_tpht_id_write_time_total_s_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_write_count, gmd_tpht_id_write_count_global, 1, &
+            mpi_integer, mpi_sum, mpi_comm_world, mpi_ierr)
+       call mpi_allreduce(gmd_tpht_id_records_written_total, gmd_tpht_id_records_written_total_global, 1, &
+            mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+       if( IO_L ) then
+          write(IO_FID_LOG,*) 'GMD_BENCH_DIAG time=', TIME_NOWSEC, &
+               ' tracking_mode=', tracking_mode, &
+               ' chain_count=', tracking_chain_count_sum, &
+               ' full_scan_chain_count=', full_scan_chain_count_sum, &
+               ' tracking_chain_count_mean=', tracking_chain_count_mean, &
+               ' tracking_chain_count_max=', tracking_chain_count_max, &
+               ' tracking_id_memory_bytes=', tracking_id_memory_bytes_sum, &
+               ' if_coal_memory_bytes=', if_coal_memory_bytes_sum, &
+               ' peak_memory_rank_max_mib=', rank_peak_memory_max_mib, &
+               ' peak_memory_rank_sum_mib=', rank_peak_memory_sum_mib, &
+               ' id_assignment_time_s=', gmd_id_assignment_time_s, &
+               ' boundary_tracking_time_s=', gmd_boundary_tracking_time_s
+          write(IO_FID_LOG,*) 'GMD_IO_DIAG time=', TIME_NOWSEC, &
+               ' sd_output_write_time_last_s=', gmd_sd_output_write_time_last_s_global, &
+               ' sd_output_write_time_total_s=', gmd_sd_output_write_time_total_s_global, &
+               ' sd_output_write_count=', gmd_sd_output_write_count_global, &
+               ' coalescence_output_write_time_last_s=', gmd_coalescence_output_write_time_last_s_global, &
+               ' coalescence_output_write_time_total_s=', gmd_coalescence_output_write_time_total_s_global, &
+               ' coalescence_output_write_count=', gmd_coalescence_output_write_count_global, &
+               ' tpht_id_write_time_last_s=', gmd_tpht_id_write_time_last_s_global, &
+               ' tpht_id_write_time_total_s=', gmd_tpht_id_write_time_total_s_global, &
+               ' tpht_id_write_count=', gmd_tpht_id_write_count_global, &
+               ' tpht_id_records_written_total=', gmd_tpht_id_records_written_total_global
+       end if
+    end if
+
+    if( IO_L .and. ( forward_tracking_enable .or. backward_tracking_enable ) .and. did_sdm_dump ) then
+       tracking_mem_mb = tracking_id_memory_bytes_local / 1048576.0_DP
+       coal_mem_mb = if_coal_memory_bytes_local / 1048576.0_DP
        write(IO_FID_LOG,*) '*** tracking_chain_count=', tracking_chain_count, ' / ', sdnum_s2c
-       write(IO_FID_LOG,*) '*** tracking_sample_mode=', sampling_mode, &
-            ' tracking_fraction=', tracking_fraction, ' max_tracked_sds=', max_tracked_sds
-       write(IO_FID_LOG,*) '*** tracking_memory_estimate_MB(pre_sdid+pre_dmid)=', tracking_mem_mb
+       if( forward_tracking_enable ) then
+          tracking_id_label = 'sd_id+dm_id'
+       else
+          tracking_id_label = 'pre_sdid+pre_dmid'
+       end if
+       write(IO_FID_LOG,*) '*** tracking_memory_estimate_MB(' // trim(tracking_id_label) // ')=', tracking_mem_mb
        write(IO_FID_LOG,*) '*** coal_flag_memory_estimate_MB(if_coal)=', coal_mem_mb
        if( tracking_count_id_assign > 0 ) then
           write(IO_FID_LOG,*) '*** tracking_time_id_assign_avg[s]=', &
@@ -1113,7 +1332,6 @@ contains
     ! Section specification for fapp profiler
     call fapp_stop("sdm_out",0,0)
 #endif
-
     !== run SDM at future ==!
      call sdm_calc(MOMX,MOMY,MOMZ,DENS,RHOT,QTRC,                 & 
                    sdm_calvar,sdm_mvexchg,sdm_dtcmph, sdm_aslset,  &
@@ -1121,8 +1339,8 @@ contains
                    lsdmup,ni_s2c,nj_s2c,nk_s2c,                   &
                    sdnum_s2c,sdnumasl_s2c,                        &
                    sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,    &
-                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,&
-                   sdice_s2c,sdrkl_s2c,sdrku_s2c,                        &
+                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdice_s2c,sdid_s2c,dmid_s2c,&
+                   ifcoal_s2c,sdrkl_s2c,sdrku_s2c,                           &
                    rng_s2c,rand_s2c,sortid_s2c,sortkey_s2c,       &
                    sortfreq_s2c,sorttag_s2c,                      &
                    bufsiz1,                                       &
@@ -1131,7 +1349,7 @@ contains
                    sd_itmp1,sd_itmp2,sd_itmp3,sd_dtmp1,sd_dtmp2,sd_dtmp3,sd_dtmp4,     &
                    crs_dtmp1,crs_dtmp2,crs_dtmp3,crs_dtmp4,       &
                    crs_dtmp5,crs_dtmp6,                           &
-                   rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4,sdm_noise_amp) 
+                   rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4,sdm_noise_amp,coal_output)
 
      !== convert updated contravariant velocity of ==!
      !== super-droplets to {u,v,w} at future       ==!
@@ -1196,9 +1414,9 @@ contains
 !!$                         ptpf_crs,qvf_crs,zph_crs,rhod_crs,          &
 !!$                         sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdliqice_s2c,sdx_s2c,     &
 !!$                         sdy_s2c,sdz_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdu_s2c,           &
-!!$                         sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdid_s2c,dmid_s2c,       &
+!!$                         sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,         &
 !!$                         sdfmnum_s2c,sdn_fm,sdx_fm,sdy_fm,sdz_fm,    &
-!!$                         sdri_fm,sdrj_fm,sdrk_fm,sdvz_fm,sdr_fm,sdasl_fm,sdid_fm,dmid_fm,       &
+!!$                         sdri_fm,sdrj_fm,sdrk_fm,sdvz_fm,sdr_fm,sdasl_fm,            &
 !!$                         ni_s2c,nj_s2c,nk_s2c,                       &
 !!$                         sortid_s2c,sortkey_s2c,sortfreq_s2c,        &
 !!$                         sorttag_s2c,rng_s2c,                        &
@@ -1221,7 +1439,7 @@ contains
 !!$       call sdm_adjsdnum(sdm_nadjvar,ni_s2c,nj_s2c,nk_s2c,          &
 !!$                         sdnum_s2c,sdnumasl_s2c,sd_nc,              &
 !!$                         sdn_s2c,sdx_s2c,sdy_s2c,sdr_s2c,           &
-!!$                         sdasl_s2c,sdid_s2c,dmid_s2c,sdvz_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,               &
+!!$                         sdasl_s2c,sdvz_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,               &
 !!$                         sortid_s2c,sortkey_s2c,sortfreq_s2c,       &
 !!$                         sorttag_s2c,rng_s2c,rand_s2c,                &
 !!$!                         sorttag_s2c,rand_s2c,                      &
@@ -1331,22 +1549,19 @@ contains
        sdr_tmp  => sd_dtmp7
        sdvz_tmp => sd_dtmp8 ! diagnostic variable
        sdliqice_tmp => sd_i2tmp1
+       ifcoal_tmp => sd_i2tmp2
        sdice_tmp=> sd_icetmp1
        sdn_tmp  => sd_i8tmp1
        sdasl_tmp=> sd_asltmp1
        sdid_tmp => sd_i4tmp1
        dmid_tmp => sd_i4tmp2
-       ifcoal_tmp => sd_i2tmp2
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,                &
+            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
             &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,                &
-            &                    t_scale,sd_itmp1,sdtype=selected_sdtype)
-      do n=1,sdnum_tmp
-         ifcoal_tmp(n) = ifcoal_s2c(sd_itmp1(n))
-      end do
+            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        if( do_puthist_0 )then
           order_n = 0
@@ -1389,12 +1604,13 @@ contains
        nullify(sdr_tmp)
        nullify(sdvz_tmp)
        nullify(sdliqice_tmp)
+       nullify(ifcoal_tmp)
        nullify(sdice_tmp)
        nullify(sdn_tmp)
        nullify(sdasl_tmp)
        nullify(sdid_tmp)
        nullify(dmid_tmp)
-       nullify(ifcoal_tmp)
+
     endif
 
 #ifdef _FIPP_
@@ -1408,7 +1624,7 @@ contains
     return
   end subroutine ATMOS_PHY_MP_sdm
   !-----------------------------------------------------------------------------
-   subroutine sdm_iniset(DENS, RHOT, QTRC,                   &
+  subroutine sdm_iniset(DENS, RHOT, QTRC,                   &
                          RANDOM_IN_BASENAME, fid_random_i,   &
                          xmax_sdm, ymax_sdm, dtcmph,         &
                          sdm_rdnc,sdm_sdnmlvol,sdm_aslset,   &
@@ -1418,11 +1634,18 @@ contains
 !                         nqw,jcb,                            &
 !                         qwtr_crs,zph_crs,                   &
 !                         jcb,                                &
-                         zph_crs,                            &
+                         zph_crs, tracking_selection_mode,    &
+                         tracking_id_input_basename,         &
+                         tracking_fraction, max_tracked_sds,  &
+                         tracking_height_min, tracking_height_max, &
+                         tracking_radius_min, tracking_radius_max, &
+                         tracking_nz_bin, tracking_nr_bin,    &
+                         tracking_min_per_bin, tracking_fallback_to_random, &
+                         tracking_sample_initialized,          &
                          sdasl_s2c, sdx_s2c, sdy_s2c,        &
                          sdz_s2c, sdr_s2c,                   &
                          sdrk_s2c, sdvz_s2c,                 &
-                         sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c  )
+                         sdrkl_s2c, sdrku_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c )
   !***********************************************************************
   ! Input variables
       use scale_const, only: &
@@ -1433,6 +1656,8 @@ contains
       use scale_process, only: &
         PRC_MPIstop, &
         mype => PRC_myrank
+      use mpi, only: &
+        mpi_wtime
       use scale_tracer, only: &
         QAD => QA
       use scale_grid, only: &
@@ -1448,6 +1673,9 @@ contains
            sdm_condevp
       use m_sdm_meltfreeze, only: &
            sdm_meltfreeze
+      use m_sdm_idutil, only: &
+           sdm_select_particles_from_id_file, &
+           sdm_select_stratified_random_particles
 
       real(RP), intent(in) :: DENS(KA,IA,JA) ! Density     [kg/m3]
       real(RP), intent(in) :: RHOT(KA,IA,JA) ! DENS * POTT [K*kg/m3]
@@ -1464,6 +1692,19 @@ contains
       real(RP),intent(in) :: sdm_zlower   ! Lower limitaion of initial SDs position
       real(RP),intent(in) :: sdm_zupper   ! Upper limitaion of initial SDs position
       real(RP),intent(in) :: zph_crs(KA,IA,JA)  ! z physical coordinates
+      character(len=*), intent(in) :: tracking_selection_mode
+      character(len=*), intent(in) :: tracking_id_input_basename
+      real(RP), intent(in) :: tracking_fraction
+      integer, intent(in) :: max_tracked_sds
+      real(RP), intent(in) :: tracking_height_min
+      real(RP), intent(in) :: tracking_height_max
+      real(RP), intent(in) :: tracking_radius_min
+      real(RP), intent(in) :: tracking_radius_max
+      integer, intent(in) :: tracking_nz_bin
+      integer, intent(in) :: tracking_nr_bin
+      integer, intent(in) :: tracking_min_per_bin
+      logical, intent(in) :: tracking_fallback_to_random
+      logical, intent(inout) :: tracking_sample_initialized
       real(RP),intent(inout) :: sdasl_s2c(1:sdnum_s2c,1:sdnumasl_s2c)
       real(RP),intent(inout) :: sdx_s2c(1:sdnum_s2c)
       real(RP),intent(inout) :: sdy_s2c(1:sdnum_s2c)
@@ -1485,6 +1726,7 @@ contains
       integer :: i, j, k, n, iq, np             ! index
       real(RP) :: crs_dtmp1(KA,IA,JA), crs_dtmp2(KA,IA,JA), crs_dtmp3(KA,IA,JA)
       integer :: sd_str, sd_end, sd_valid
+      real(DP) :: time_id_start, time_id_end
 
       real(RP) :: pres_scale(KA,IA,JA)  ! Pressure
       real(RP) :: t_scale(KA,IA,JA)    ! Temperature
@@ -1499,6 +1741,7 @@ contains
       real(RP) :: sdm_dtadv  ! time step of {motion of super-droplets} process
       real(RP) :: sdm_dtmlt  ! time step of {melt/freeze of super-droplets} process
       real(RP) :: sdm_dtsbl  ! time step of {sublimation/deposition of super-droplets} process
+      integer :: status_rdm
 
      !
       real(RP) :: area, INAS_max, prob_INIA, INAS_tf, probdens_tf
@@ -1642,12 +1885,13 @@ contains
       if( sdm_cold ) then
          call gen_rand_array( rng_s2c, sdice_s2c%tf )
       end if
+
       ! Initialize index and domain ID of super-droplets
       sdid_s2c(1:sdnum_s2c) = INVALID_i4
       dmid_s2c(1:sdnum_s2c) = INVALID_i4
 
       ! Initialize coalescence flag
-      ifcoal_s2c(1:sdnum_s2c) = 0
+      ifcoal_s2c(1:sdnum_s2c) = INVALID_i2
 
       ! Initialized all super-droplets as water droplet.
       !### status(liquid/ice) of super-droplets ###!
@@ -1984,6 +2228,43 @@ contains
                       sd_itmp1,sd_itmp2,sd_itmp3,crs_dtmp1,crs_dtmp2,crs_dtmp3)
       end if
 
+      time_id_start = mpi_wtime()
+      if( .not. tracking_sample_initialized ) call rng_init( rng_tracking_s2c, mype + tracking_sampling_seed )
+      if( backward_tracking_enable .and. .not. tracking_sample_initialized .and. &
+           len_trim(tracking_id_input_basename) > 0 ) then
+         call sdm_select_particles_from_id_file(sdnum_s2c, tracking_id_input_basename, tracking_sample_initialized, &
+              sdid_s2c, dmid_s2c, ifcoal_s2c, status_rdm)
+         if( status_rdm /= 0 ) then
+            if( status_rdm == 3 ) then
+               write(*,*) 'ATMOS_PHY_MP_sdm_init', 'BW tracking ID file is missing TPHT_META decomposition metadata', &
+                    trim(tracking_id_input_basename), status_rdm
+            else if( status_rdm == 4 ) then
+               write(*,*) 'ATMOS_PHY_MP_sdm_init', 'BW tracking ID file MPI decomposition does not match current run', &
+                    trim(tracking_id_input_basename), status_rdm
+            else
+               write(*,*) 'ATMOS_PHY_MP_sdm_init', 'Failed to initialize BW tracking IDs from input file', &
+                    trim(tracking_id_input_basename), status_rdm
+            end if
+            call PRC_MPIstop
+         end if
+      else if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
+           ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
+         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+              tracking_selection_mode, 1.0_RP, &
+              0, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+              tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+              dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+      else
+         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+              tracking_selection_mode, tracking_fraction, &
+              max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+              tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+              dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+      end if
+      time_id_end = mpi_wtime()
+      tracking_time_id_assign = tracking_time_id_assign + ( time_id_end - time_id_start )
+      tracking_count_id_assign = tracking_count_id_assign + 1
+
       ! Output logfile about SDM
       if( mype==0 ) then
 
@@ -2011,7 +2292,7 @@ contains
                       prec_crs,zph_crs,   &
                       lsdmup,ni_sdm,nj_sdm,nk_sdm,                &
                       sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_ri,sd_rj,sd_rk,      &
-                      sd_u,sd_v,sd_vz,sd_r,sd_asl,pre_sdid,pre_dmid,if_coal,sdi,sd_rkl,sd_rku,  &
+                      sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,sd_rkl,sd_rku,  &
                       sd_rng,sd_rand,sort_id,sort_key,sort_freq,  &
                       sort_tag,                                   &
                       bufsiz1,                                    & 
@@ -2020,7 +2301,7 @@ contains
                       sd_itmp1,sd_itmp2,sd_itmp3,sd_dtmp1,sd_dtmp2,sd_dtmp3,sd_dtmp4,   &
                       crs_val1p,crs_val1c,crs_val2p,crs_val2c,    &
                       crs_val3p,crs_val3c,                        &
-                      rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4,sdm_noise_amp)
+                      rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4,sdm_noise_amp,coal_output)
    use scale_process, only: &
        PRC_MPIstop
    use scale_time, only: &
@@ -2081,10 +2362,11 @@ contains
    integer, intent(in) :: bufsiz2_i2 ! buffer size for MPI (int2)
    integer, intent(in) :: bufsiz2_i4 ! buffer size for MPI (int4)
    real(RP), intent(in) :: sdm_noise_amp ! amplitude of random noise [m^1.5 * s^-0.5]
+   integer(i2), intent(in) :: coal_output   ! Control flag to output coalescence events. 0: off, 1: on
    ! Input and output variables
    integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
-   integer, intent(inout) :: pre_sdid(1:sd_num)   ! save index of super-droplets
-   integer, intent(inout) :: pre_dmid(1:sd_num)   ! domain id of super-droplets
+   integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
+   integer, intent(inout) :: dm_id(1:sd_num)   ! domain id of super-droplets
    integer(i2), intent(inout) :: if_coal(1:sd_num)
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
@@ -2198,28 +2480,18 @@ contains
    real(RP) :: sdm_dtmlt  ! time step of {melt/freeze of super-droplets} process
    real(RP) :: sdm_dtsbl  ! time step of {sublimation/deposition of super-droplets} process
    real(RP) :: tmp_mink
-   integer, allocatable :: pre_sdid1(:)   ! previous SD ID of super-droplets with large multiplicity
-   integer, allocatable :: pre_sdid2(:)   ! previous SD ID of super-droplets  with small multiplicity
-   integer, allocatable :: pre_dmid1(:)   ! previous domain ID of super-droplets with large multiplicity
-   integer, allocatable :: pre_dmid2(:)   ! previous domain ID of super-droplets with small multiplicity
+   integer, allocatable :: sd_id1(:)   ! SD ID of super-droplets with large multiplicity
+   integer, allocatable :: sd_id2(:)   ! SD ID of super-droplets  with small multiplicity
+   integer, allocatable :: dm_id1(:)   ! domain ID of super-droplets with large multiplicity
+   integer, allocatable :: dm_id2(:)   ! ID of super-droplets with small multiplicity
    integer, allocatable :: num_col(:)     ! number of coalesence of pairs of SDs
    real(RP), allocatable :: sdr1_out(:)
    real(RP), allocatable :: sdr2_out(:)
    integer(DP), allocatable :: sdn1_out(:)
    integer(DP), allocatable :: sdn2_out(:)
-  integer, allocatable :: pre_sdid1_sel(:)
-  integer, allocatable :: pre_sdid2_sel(:)
-  integer, allocatable :: pre_dmid1_sel(:)
-  integer, allocatable :: pre_dmid2_sel(:)
-  integer, allocatable :: num_col_sel(:)
-  real(RP), allocatable :: sdr1_out_sel(:)
-  real(RP), allocatable :: sdr2_out_sel(:)
-  integer(DP), allocatable :: sdn1_out_sel(:)
-  integer(DP), allocatable :: sdn2_out_sel(:)
    integer :: num_pair    ! number of super-droplet pairs
-  integer :: num_pair_sel
-  logical :: sampling_mode
    real(RP) :: dz_inv
+   real(DP) :: gmd_time_start, gmd_time_end
   !---------------------------------------------------------------------
 
       ! Initialize and rename variables
@@ -2237,12 +2509,6 @@ contains
       istep_sbl = nclstp(5)                !! motion of super-droplets
 
       lsdmup = .false.
-      ! Keep this condition consistent with the output path to avoid unnecessary subset operations.
-      sampling_mode = backward_tracking_enable .and. &
-           ((tracking_fraction > 0.0_RP .and. tracking_fraction < 1.0_RP) .or. (max_tracked_sds > 0) .or. &
-           trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
-           trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
-           trim(adjustl(tracking_selection_mode)) == 'Stratified')
 
       ! Calculate super-droplets process.
       !   1 : motion of super-droplets (advection, terminal velocity)
@@ -2384,8 +2650,8 @@ contains
             !! do MPI communication to send/receiv SDs
             call sdm_boundary(wbc,ebc,sbc,nbc,                           &
                              sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,     &
-                             sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,pre_sdid,pre_dmid,   &
-                             if_coal,bufsiz1,                                     &
+                             sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,         &
+                             if_coal,bufsiz1,                                    &
                              bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                              sd_itmp1,                              &
                              rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
@@ -2590,7 +2856,7 @@ contains
                             zph_crs,                                    &
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
-                            sdi,                                        &
+                            sdi,                                        & 
                             sort_id,sort_key,sort_freq,sort_tag,        &
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
@@ -2616,65 +2882,35 @@ contains
                             zph_crs,                                    &
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
-                            pre_sdid, pre_dmid, pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2, num_col, num_pair,&
-                            sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,sort_id,sort_key,sort_freq,sort_tag,&
+                            sd_id, dm_id, sd_id1, sd_id2, dm_id1, dm_id2, num_col, num_pair,&
+                            sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,coal_output,sort_id,sort_key,sort_freq,sort_tag,&
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
                             sd_itmp1(1:sd_num),sd_itmp2(1:sd_num),  &
                             sd_dtmp1)
 
-               if (allocated(num_col)) then
-                  if( coalescence_output_enable ) then
-                     if( backward_tracking_enable .and. sampling_mode ) then
-                        num_pair_sel = 0
-                        do n=1,num_pair
-                           if( (pre_sdid1(n) /= INVALID_i4) .or. (pre_sdid2(n) /= INVALID_i4) ) then
-                              num_pair_sel = num_pair_sel + 1
-                           end if
-                        end do
-                        if( num_pair_sel > 0 ) then
-                           allocate(pre_sdid1_sel(num_pair_sel), pre_sdid2_sel(num_pair_sel))
-                           allocate(pre_dmid1_sel(num_pair_sel), pre_dmid2_sel(num_pair_sel))
-                           allocate(num_col_sel(num_pair_sel))
-                           allocate(sdr1_out_sel(num_pair_sel), sdr2_out_sel(num_pair_sel))
-                           allocate(sdn1_out_sel(num_pair_sel), sdn2_out_sel(num_pair_sel))
-                           num_pair_sel = 0
-                           do n=1,num_pair
-                              if( (pre_sdid1(n) /= INVALID_i4) .or. (pre_sdid2(n) /= INVALID_i4) ) then
-                                 num_pair_sel = num_pair_sel + 1
-                                 pre_sdid1_sel(num_pair_sel) = pre_sdid1(n)
-                                 pre_sdid2_sel(num_pair_sel) = pre_sdid2(n)
-                                 pre_dmid1_sel(num_pair_sel) = pre_dmid1(n)
-                                 pre_dmid2_sel(num_pair_sel) = pre_dmid2(n)
-                                 num_col_sel(num_pair_sel) = num_col(n)
-                                 sdr1_out_sel(num_pair_sel) = sdr1_out(n)
-                                 sdr2_out_sel(num_pair_sel) = sdr2_out(n)
-                                 sdn1_out_sel(num_pair_sel) = sdn1_out(n)
-                                 sdn2_out_sel(num_pair_sel) = sdn2_out(n)
-                              end if
-                           end do
-                           call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair_sel, num_col_sel, sdr1_out_sel, sdr2_out_sel, sdn1_out_sel, sdn2_out_sel, &
-                                &                   pre_sdid1_sel, pre_sdid2_sel, pre_dmid1_sel, pre_dmid2_sel)
-                           deallocate(pre_sdid1_sel, pre_sdid2_sel, pre_dmid1_sel, pre_dmid2_sel)
-                           deallocate(num_col_sel, sdr1_out_sel, sdr2_out_sel, sdn1_out_sel, sdn2_out_sel)
-                        end if
-                     else if( backward_tracking_enable ) then
-                        call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair, num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out, &
-                             &                   pre_sdid1, pre_sdid2, pre_dmid1, pre_dmid2)
-                     else
-                        call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair, num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
-                     end if
-                   end if
-                  if( allocated(pre_dmid1) ) deallocate(pre_dmid1)
-                  if( allocated(pre_dmid2) ) deallocate(pre_dmid2)
-                  if( allocated(pre_sdid1) ) deallocate(pre_sdid1)
-                  if( allocated(pre_sdid2) ) deallocate(pre_sdid2)
-                   deallocate(num_col)
-                   deallocate(sdr1_out)
-                   deallocate(sdr2_out)
-                   deallocate(sdn1_out)
-                   deallocate(sdn2_out)
-               end if
+              if (allocated(num_col) .and. coal_output == 1) then
+                  if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+                  call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,sd_id1, sd_id2, dm_id1, dm_id2,&
+                                num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
+                  if( gmd_benchmark_diag_enable ) then
+                     gmd_time_end = mpi_wtime()
+                     gmd_coalescence_output_write_time_last_s = gmd_time_end - gmd_time_start
+                     gmd_coalescence_output_write_time_total_s = &
+                          gmd_coalescence_output_write_time_total_s + &
+                          gmd_coalescence_output_write_time_last_s
+                     gmd_coalescence_output_write_count = gmd_coalescence_output_write_count + 1
+                  end if
+                  if (allocated(dm_id1)) deallocate(dm_id1)
+                  if (allocated(dm_id2)) deallocate(dm_id2)
+                  if (allocated(sd_id1)) deallocate(sd_id1)
+                  if (allocated(sd_id2)) deallocate(sd_id2)
+                  deallocate(num_col)
+                  deallocate(sdr1_out)
+                  deallocate(sdr2_out)
+                  deallocate(sdn1_out)
+                  deallocate(sdn2_out)
+              end if
             end if
 
          end if
@@ -2898,9 +3134,9 @@ contains
                          pbr_crs,ptbr_crs,pp_crs,         &
                          ptp_crs,qv_crs,zph_crs,rhod_crs,         &
                          sd_num,sd_numasl,sd_n,sd_x,sd_y,sd_z,    &
-                         sd_ri,sd_rj,sd_rk,sd_u,sd_v,sd_vz,sd_r,sd_asl,pre_sdid,   &
-                         pre_dmid,sd_fmnum,sd_fmn,sd_fmliqice,sd_fmx,sd_fmy,sd_fmz,    &
-                         sd_fmri,sd_fmrj,sd_fmrk,sd_fmvz,sd_fmr,sd_fmasl,sd_fmid,         &
+                         sd_ri,sd_rj,sd_rk,sd_u,sd_v,sd_vz,sd_r,sd_asl,       &
+                         sd_fmnum,sd_fmn,sd_fmliqice,sd_fmx,sd_fmy,sd_fmz,    &
+                         sd_fmri,sd_fmrj,sd_fmrk,sd_fmvz,sd_fmr,sd_fmasl,         &
                          ni_sdm,nj_sdm,nk_sdm,sort_id,sort_key,   &
                          sort_freq,sort_tag,sd_rng,               &
 !                         sort_freq,sort_tag,                      &
@@ -2919,8 +3155,6 @@ contains
          sdm_sort
     use m_sdm_condensation_water, only: &
         sdm_condevp
-    use scale_process, only:  &
-        mype => PRC_myrank
       ! Input variables
     real(RP), intent(in) :: DENS(KA,IA,JA)        !! Density [kg/m3]
     real(RP), intent(in) :: RHOT(KA,IA,JA)        !! DENS * POTT [K*kg/m3]
@@ -2948,8 +3182,6 @@ contains
       integer, intent(in) :: sd_fmnum ! number of super-droplets at aerosol formation
       ! Input and output variables
       integer(DP), intent(inout) :: sd_n(1:sd_num)   ! multiplicity of super-droplets
-      integer, intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
-      integer, intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_x(1:sd_num)      ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)      ! y-coordinate of super-droplets
       real(RP), intent(inout) :: sd_z(1:sd_num)      ! z-coordinate of super-droplets
@@ -2962,7 +3194,6 @@ contains
       real(RP), intent(inout) :: sd_r(1:sd_num)      ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
       integer(DP), intent(inout) :: sd_fmn(1:sd_fmnum) ! multiplicity of super-droplets at aerosol formation
-      integer(i2), intent(inout) :: sd_fmid(1:sd_fmnum) ! ID of super-droplets at aerosol formation
       integer(i2), intent(inout) :: sd_fmliqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -3061,7 +3292,7 @@ contains
       call sdm_aslsulf(sdm_aslfmrate,sdm_aslfmdt,                &
                        sd_fmnum,sd_numasl,sd_fmn,sd_fmasl,sd_fmnc)
 
-      ! Set position,radius and ID of super-droplets
+      ! Set position of super-droplets
       do n=1,sd_fmnum
 
          sd_fmx(n) = xmax_sdm * sd_fmx(n)
@@ -3070,7 +3301,7 @@ contains
                    * real(sdm_zupper-(minzph+sdm_zlower),kind=RP)
 
          sd_fmr(n) = 1.0E-15_RP
-         sd_fmid(n) = -1 * n ! negative index for new formation SDs
+
       end do
 
       !### index[k/real] of super-droplets ###!
@@ -3135,8 +3366,7 @@ contains
          sd_vz(id_invd) = sd_fmvz(n)
 
          sd_r(id_invd)  = sd_fmr(n)
-         pre_sdid(id_invd) = sd_fmid(n)
-         pre_dmid(id_invd) = -1 * mype ! negative MPI process number for new formation SDs
+
       end do
 
       do k=1,sd_numasl
@@ -3157,7 +3387,7 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_adjsdnum(sdm_nadjvar,ni_sdm,nj_sdm,nk_sdm,    &
                           sd_num,sd_numasl,sd_nc,                 &
-                          sd_n,sd_x,sd_y,sd_r,sd_asl,pre_sdid,pre_dmid,sd_vz,sd_ri,sd_rj,sd_rk, &
+                          sd_n,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk, &
                           sort_id,sort_key,sort_freq,sort_tag,    &
                           sd_rng,sd_rand,                         &
 !                          sd_rand,                                &
@@ -3182,8 +3412,6 @@ contains
       real(RP), intent(inout) :: sd_x(1:sd_num)  ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)  ! y-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
-      integer, intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
-      integer, intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
       real(RP), intent(inout) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
@@ -3226,7 +3454,7 @@ contains
 
          call sdm_sdadd(ni_sdm,nj_sdm,nk_sdm,                           &
                         sdnum_lwr,sd_num,sd_numasl,                     &
-                        sd_n,sd_x,sd_y,sd_r,sd_asl,pre_sdid,pre_dmid,sd_vz,sd_ri,sd_rj,sd_rk,         &
+                        sd_n,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,         &
                         sort_id,sort_key,sort_freq,sort_tag,            &
                         sd_rng,sd_rand,                                 &
 !                        sd_rand,                                        &
@@ -3413,8 +3641,8 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_sdadd(ni_sdm,nj_sdm,nk_sdm,                      &
                        sdnum_lwr,sd_num,sd_numasl,                &
-                       sd_n,sd_x,sd_y,sd_r,sd_asl,pre_sdid,pre_dmid,sd_vz,sd_ri,sd_rj,    &
-                       sd_rk,sort_id,sort_key,sort_freq,sort_tag,       &
+                       sd_n,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,    &
+                       sort_id,sort_key,sort_freq,sort_tag,       &
                        sd_rng,sd_rand,                            &
 !                       sd_rand,                                   &
                        sort_tag0,fsort_id,isd_perm)
@@ -3441,8 +3669,6 @@ contains
       real(RP), intent(inout) :: sd_x(1:sd_num)    ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)    ! y-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-      integer, intent(inout) :: pre_sdid(1:sd_num)  ! save index of super-droplets
-      integer, intent(inout) :: pre_dmid(1:sd_num)  ! domain index of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)    ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
       real(RP), intent(inout) :: sd_vz(1:sd_num)   ! terminal velocity of super-droplets
@@ -3593,8 +3819,6 @@ contains
             sd_r(id_invd)  = sd_r(id_vd)
             sd_vz(id_invd) = sd_vz(id_vd)
             sd_rk(id_invd) = sd_rk(id_vd)
-            pre_sdid(id_invd) = pre_sdid(id_vd)
-            pre_dmid(id_invd) = pre_dmid(id_vd)
 
             do n=1,20
               sd_asl(id_invd,idx_nasl(n)) = sd_asl(id_vd,idx_nasl(n))
@@ -4069,5 +4293,60 @@ contains
 
     return
   end subroutine ATMOS_PHY_MP_sdm_restart_write
+
+  !-----------------------------------------------------------------------------
+  subroutine gmd_read_proc_memory_mib(vm_hwm_mib, vm_rss_mib)
+    real(DP), intent(out) :: vm_hwm_mib
+    real(DP), intent(out) :: vm_rss_mib
+    character(len=256) :: line
+    integer :: unit_id, ios, value_kb
+
+    vm_hwm_mib = -1.0_DP
+    vm_rss_mib = -1.0_DP
+    unit_id = IO_get_available_fid()
+    open(unit=unit_id, file='/proc/self/status', status='old', action='read', iostat=ios)
+    if( ios /= 0 ) return
+
+    do
+       read(unit_id,'(A)',iostat=ios) line
+       if( ios /= 0 ) exit
+       if( index(line,'VmHWM:') == 1 ) then
+          read(line(7:),*,iostat=ios) value_kb
+          if( ios == 0 ) vm_hwm_mib = real(value_kb,kind=DP) / 1024.0_DP
+       else if( index(line,'VmRSS:') == 1 ) then
+          read(line(7:),*,iostat=ios) value_kb
+          if( ios == 0 ) vm_rss_mib = real(value_kb,kind=DP) / 1024.0_DP
+       end if
+    end do
+
+    close(unit_id)
+    return
+  end subroutine gmd_read_proc_memory_mib
+
+  !-----------------------------------------------------------------------------
+  subroutine gmd_reduce_proc_memory(rank_peak_max_mib, rank_peak_sum_mib, rank_rss_max_mib, rank_rss_sum_mib)
+    real(DP), intent(out) :: rank_peak_max_mib
+    real(DP), intent(out) :: rank_peak_sum_mib
+    real(DP), intent(out) :: rank_rss_max_mib
+    real(DP), intent(out) :: rank_rss_sum_mib
+    real(DP) :: local_peak_mib, local_rss_mib
+    real(DP) :: local_peak_sum_mib, local_rss_sum_mib
+    integer :: mpi_ierr
+
+    call gmd_read_proc_memory_mib(local_peak_mib, local_rss_mib)
+    local_peak_sum_mib = local_peak_mib
+    local_rss_sum_mib = local_rss_mib
+    if( local_peak_sum_mib < 0.0_DP ) local_peak_sum_mib = 0.0_DP
+    if( local_rss_sum_mib < 0.0_DP ) local_rss_sum_mib = 0.0_DP
+
+    call mpi_allreduce(local_peak_mib, rank_peak_max_mib, 1, mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+    call mpi_allreduce(local_peak_sum_mib, rank_peak_sum_mib, 1, mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+    call mpi_allreduce(local_rss_mib, rank_rss_max_mib, 1, mpi_double_precision, mpi_max, mpi_comm_world, mpi_ierr)
+    call mpi_allreduce(local_rss_sum_mib, rank_rss_sum_mib, 1, mpi_double_precision, mpi_sum, mpi_comm_world, mpi_ierr)
+
+    if( rank_peak_max_mib < 0.0_DP ) rank_peak_sum_mib = -1.0_DP
+    if( rank_rss_max_mib < 0.0_DP ) rank_rss_sum_mib = -1.0_DP
+    return
+  end subroutine gmd_reduce_proc_memory
 end module scale_atmos_phy_mp_sdm
 !-------------------------------------------------------------------------------

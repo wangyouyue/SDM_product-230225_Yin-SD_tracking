@@ -17,16 +17,78 @@
 !! @li      2020-07-23 (S.Shima) [add] sdm_copy_selected_sd for sdm_dmpvar == 1?? and sdm_dmpvar == 2??
 !! @li      2020-07-24 (S.Shima) [add] 'all', 'large', and 'selected' options to sdm_copy_selected_sd 
 !! @li      2020-07-30 (S.Shima) [fix] sdm_copy_selected_sd 
-!! @li      2020-10-30 (S.Shima) [fix] sdm_copy_selected_sd
+!! @li      2020-10-30 (S.Shima) [fix] sdm_copy_selected_sd 
 !!
 !<
 !-------------------------------------------------------------------------------
+module sdm_sorting_module
+  use scale_precision
+  implicit none
+contains
+  recursive subroutine quicksort(array, left, right, sd_rand, layer_indices)
+    integer, intent(inout) :: array(:)
+    integer, intent(in) :: left, right
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+
+    integer :: pivot_index
+
+    if (left < right) then
+      pivot_index = partition(array, left, right, sd_rand, layer_indices)
+      call quicksort(array, left, pivot_index - 1, sd_rand, layer_indices)
+      call quicksort(array, pivot_index + 1, right, sd_rand, layer_indices)
+    end if
+  end subroutine quicksort
+!---------------------------------------------------------------------------------------------------------------------------------
+  integer function partition(array, left, right, sd_rand, layer_indices)
+    implicit none
+    integer, intent(inout) :: array(:)
+    integer, intent(in) :: left, right
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+
+    integer :: i, j, temp
+    real(RP) :: pivot
+
+    pivot = sd_rand(layer_indices(array(right)))
+    i = left - 1
+
+    do j = left, right - 1
+      if (sd_rand(layer_indices(array(j))) <= pivot) then
+        i = i + 1
+        temp = array(i)
+        array(i) = array(j)
+        array(j) = temp
+      end if
+    end do
+
+    temp = array(i + 1)
+    array(i + 1) = array(right)
+    array(right) = temp
+
+    partition = i + 1
+  end function partition
+!---------------------------------------------------------------------------------------------------------------------------------
+  subroutine sort_index_array_by_sd_rand(index_array, sd_rand, layer_indices, count)
+    implicit none
+    integer, intent(inout) :: index_array(:)
+    real(RP), intent(in) :: sd_rand(:)
+    integer, intent(in) :: layer_indices(:)
+    integer, intent(in) :: count
+
+    call quicksort(index_array, 1, count, sd_rand, layer_indices)
+  end subroutine sort_index_array_by_sd_rand
+end module sdm_sorting_module
+!---------------------------------------------------------------------------------------------------------------------------------
+
 module m_sdm_idutil
   use scale_precision
+  use rng_uniform_mt, only: c_rng_uniform_mt, rng_generate
 
   implicit none
   private
-  public :: sdm_sort,sdm_getperm,sdm_copy_selected_sd
+  public :: sdm_sort,sdm_getperm,sdm_copy_selected_sd,sdm_select_stratified_random_particles, &
+       sdm_select_particles_from_id_file
 
 contains
   subroutine sdm_getperm(freq_max,ni_sdm,nj_sdm,nk_sdm,sd_num,    &
@@ -185,32 +247,34 @@ contains
     return
   end subroutine sdm_sort
   !---------------------------------------------------------------------------------------------------------------------------------
-subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,    sd_ri,    sd_rj,    sd_rk,     &
-     &                          sd_liqice,    sd_asl,    sd_r,    sdi,     pre_sdid,         pre_dmid,             &
-     &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
-     &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,dm_id_tmp,                              &
-     &                          TEMP0,ilist,sdtype)
-    ! sdm_copy_selected_sd is not supported for SD-tracking
+  subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,    sd_ri,    sd_rj,    sd_rk,     &
+       &                          sd_liqice,    sd_asl,    sd_r,    sdi,     sd_id,   dm_id,    if_coal,             &
+       &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
+       &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,dm_id_tmp,if_coal_tmp,         &
+       &                          TEMP0,ilist,sdtype)
     use scale_process, only: &
          & PRC_MPIstop
     use scale_grid_index, only: &
          & IA,JA,KA
     use m_sdm_common, only: &
-         & i2, sdicedef, sdm_cold, num_threads, VALID2INVALID, STAT_LIQ, STAT_ICE, INVALID_i4, &
-         & sdm_aslset, mass_amsul, ion_amsul, mass_nacl, ion_nacl, CurveF, ASL_FF 
+         & i2, sdicedef, sdm_cold, num_threads, VALID2INVALID, STAT_LIQ, STAT_ICE, &
+         & sdm_aslset, mass_amsul, ion_amsul, mass_nacl, ion_nacl, CurveF, ASL_FF, &
+         & INVALID_i4
     use m_sdm_coordtrans, only: &
          & sdm_x2ri, sdm_y2rj
 
     integer,  intent(in)  :: sd_num      ! number of super-droplets
     integer,  intent(in)  :: sd_numasl   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(in) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    integer, intent(inout) :: pre_sdid(1:sd_num) ! save index of super-droplets
-    integer, intent(inout) :: pre_dmid(1:sd_num) ! domain index of super-droplets
     real(RP), intent(in)  :: sd_x(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(in)  :: sd_y(1:sd_num) ! y-coordinate of super-droplets
     real(RP), intent(inout) :: sd_ri(1:sd_num)   ! index[i/real] of super-droplets
     real(RP), intent(inout) :: sd_rj(1:sd_num)   ! index[j/real] of super-droplets
     real(RP), intent(in)  :: sd_rk(1:sd_num) ! face index-k(real) of super-droplets
+    integer(i2), intent(in) :: if_coal(1:sd_num)
+                       ! flag of coalescence
+                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -218,12 +282,12 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
     real(RP), intent(in) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     real(RP), intent(in) :: sd_r(1:sd_num) ! equivalent radius of super-droplets
     type(sdicedef), intent(in) :: sdi   ! ice phase super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)
+    integer, intent(in) :: dm_id(1:sd_num)
 
     integer,  intent(out) :: sd_num_tmp  ! number of super-droplets
     integer,  intent(out)  :: sd_numasl_tmp   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
     integer(DP), intent(out) :: sd_n_tmp(1:sd_num) ! multiplicity of super-droplets
-    integer, intent(out) :: sd_id_tmp(1:sd_num) ! save index of super-droplets
-    integer, intent(out) :: dm_id_tmp(1:sd_num) ! domain index of super-droplets
     real(RP), intent(out)  :: sd_x_tmp(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(out)  :: sd_y_tmp(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(out) :: sd_ri_tmp(1:sd_num)   ! index[i/real] of super-droplets
@@ -233,6 +297,9 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
     real(RP), intent(out) :: sd_asl_tmp(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     real(RP), intent(out) :: sd_r_tmp(1:sd_num) ! equivalent radius of super-droplets
     type(sdicedef), intent(inout) :: sdi_tmp   ! ice phase super-droplets
+    integer, intent(out) :: sd_id_tmp(1:sd_num)
+    integer, intent(out) :: dm_id_tmp(1:sd_num)
+    integer(i2), intent(out) :: if_coal_tmp(1:sd_num)
 
     real(RP), intent(in)  :: TEMP0(KA,IA,JA)       ! temperature [K]
 
@@ -398,13 +465,13 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
           end if
        end do
 
-    else if (sdtype == 'tracked') then
+    else if (sdtype == 'selected') then
        do n=1,sd_num
-          if( sd_rk(n)<VALID2INVALID ) cycle
-          if( pre_sdid(n) > INVALID_i4 .and. pre_dmid(n) > INVALID_i4 ) then
-             cnt = cnt + 1
-             ilist(cnt) = n
-          end if
+          if( dm_id(n)<0 .or. sd_rk(n)<VALID2INVALID ) cycle
+
+          cnt = cnt + 1
+          ilist(cnt) = n
+
        end do
 
     else
@@ -429,8 +496,9 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
           sd_rk_tmp(m)     = sd_rk(n)
           sd_liqice_tmp(m) = sd_liqice(n)
           sd_r_tmp(m)      = sd_r(n)
-          sd_id_tmp(m)     = pre_sdid(n)
-          dm_id_tmp(m)     = pre_dmid(n)
+          sd_id_tmp(m)      = sd_id(n)
+          dm_id_tmp(m)      = dm_id(n)
+          if_coal_tmp(m)      = if_coal(n)
 
        end do
        end do
@@ -464,4 +532,478 @@ subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,
     end if
 
   end subroutine sdm_copy_selected_sd
+!---------------------------------------------------------------------------------------------------------------------------------
+  subroutine sdm_select_particles_from_id_file(sd_num, tracking_id_input_basename, tracking_sample_initialized, sd_id, dm_id, if_coal, status_rdm)
+    use scale_stdio, only: &
+         H_LONG, IO_L, IO_FID_LOG, IO_get_available_fid
+    use scale_process, only: &
+         mype => PRC_myrank, &
+         PRC_nprocs
+    use scale_rm_process, only: &
+         PRC_NUM_X, PRC_NUM_Y
+    use m_sdm_common, only: &
+         i2, INVALID_i4
+
+    implicit none
+
+    integer, intent(in) :: sd_num
+    character(len=*), intent(in) :: tracking_id_input_basename
+    logical, intent(inout) :: tracking_sample_initialized
+    integer, intent(inout) :: sd_id(1:sd_num)
+    integer, intent(inout) :: dm_id(1:sd_num)
+    integer(kind=i2), intent(inout) :: if_coal(1:sd_num)
+    integer, intent(out) :: status_rdm
+
+    character(len=H_LONG) :: input_filename
+    character(len=512) :: linebuf
+    integer :: fid, ierr, n, m, pair_cnt, ios
+    integer :: input_len
+    integer :: valid_before, matched_cnt
+    integer :: file_prc_num_x, file_prc_num_y, file_nprocs
+    integer, allocatable :: target_sd_id(:), target_dm_id(:)
+    logical, allocatable :: local_track_mask(:)
+    logical :: do_track, file_exists, meta_found
+
+    status_rdm = 0
+    meta_found = .false.
+    file_prc_num_x = -1
+    file_prc_num_y = -1
+    file_nprocs = -1
+    input_filename = trim(adjustl(tracking_id_input_basename))
+
+    if( len_trim(input_filename) == 0 ) then
+      status_rdm = 1
+      return
+    end if
+
+    input_len = len_trim(input_filename)
+    if( input_len >= 3 ) then
+      if( input_filename(input_len-2:input_len) == '.nc' ) then
+        input_filename = trim(input_filename(1:input_len-3)) // '.ids'
+      end if
+    end if
+
+    input_len = len_trim(input_filename)
+    if( input_len < 4 .or. input_filename(input_len-3:input_len) /= '.ids' ) then
+      inquire(file=trim(input_filename), exist=file_exists)
+      if( .not. file_exists ) then
+        write(input_filename,'(A,".pe",I6.6,".ids")') trim(adjustl(tracking_id_input_basename)), mype
+      end if
+    end if
+
+    fid = IO_get_available_fid()
+    open(unit=fid, file=trim(input_filename), form='formatted', status='old', action='read', iostat=ierr)
+    if( ierr /= 0 ) then
+      if( IO_L ) write(IO_FID_LOG,*) '*** WARNING (sdm_select_particles_from_id_file): failed to open tracking ID file:', trim(input_filename)
+      status_rdm = 2
+      return
+    end if
+
+    write(IO_FID_LOG,*) "*** BW_ID_DEBUG open file=", trim(input_filename), " rank=", mype
+
+    pair_cnt = 0
+    do
+      read(fid,'(A)',iostat=ierr) linebuf
+      if( ierr /= 0 ) exit
+      if( len_trim(linebuf) == 0 ) cycle
+      if( linebuf(1:1) == '#' ) then
+        if( index(adjustl(linebuf), '# TPHT_META') == 1 ) then
+          read(linebuf(12:),*,iostat=ios) file_prc_num_x, file_prc_num_y, file_nprocs
+          if( ios == 0 ) meta_found = .true.
+        end if
+        cycle
+      end if
+      read(linebuf,*,iostat=ios) m, n
+      if( ios /= 0 ) cycle
+      pair_cnt = pair_cnt + 1
+    end do
+
+    if( .not. meta_found ) then
+      close(fid)
+      if( IO_L ) then
+        write(IO_FID_LOG,*) '*** ERROR (sdm_select_particles_from_id_file): missing TPHT_META header in BW ID file.'
+        write(IO_FID_LOG,*) '    file=', trim(input_filename)
+      end if
+      status_rdm = 3
+      return
+    end if
+
+    if( file_prc_num_x /= PRC_NUM_X .or. file_prc_num_y /= PRC_NUM_Y .or. file_nprocs /= PRC_nprocs ) then
+      close(fid)
+      if( IO_L ) then
+        write(IO_FID_LOG,*) '*** ERROR (sdm_select_particles_from_id_file): BW ID file MPI layout does not match current run.'
+        write(IO_FID_LOG,*) '    file=', trim(input_filename)
+        write(IO_FID_LOG,*) '    file_layout(PRC_NUM_X,PRC_NUM_Y,PRC_nprocs)=', file_prc_num_x, file_prc_num_y, file_nprocs
+        write(IO_FID_LOG,*) '    run_layout (PRC_NUM_X,PRC_NUM_Y,PRC_nprocs)=', PRC_NUM_X, PRC_NUM_Y, PRC_nprocs
+      end if
+      status_rdm = 4
+      return
+    end if
+
+    write(IO_FID_LOG,*) "*** BW_ID_DEBUG meta/pairs rank,file_prc_num_x,file_prc_num_y,file_nprocs,pair_cnt=", &
+         mype, file_prc_num_x, file_prc_num_y, file_nprocs, pair_cnt
+
+    rewind(fid)
+
+    valid_before = 0
+    matched_cnt = 0
+
+    if( pair_cnt <= 0 ) then
+      close(fid)
+      do n = 1, sd_num
+        sd_id(n) = INVALID_i4
+        dm_id(n) = INVALID_i4
+        if_coal(n) = 0_i2
+      end do
+      write(IO_FID_LOG,*) "*** BW_ID_DEBUG local valid_before,matched_cnt,sd_num,rank=", valid_before, matched_cnt, sd_num, mype
+      tracking_sample_initialized = .true.
+      return
+    end if
+
+    allocate(target_dm_id(pair_cnt), target_sd_id(pair_cnt))
+    pair_cnt = 0
+    do
+      read(fid,'(A)',iostat=ierr) linebuf
+      if( ierr /= 0 ) exit
+      if( len_trim(linebuf) == 0 ) cycle
+      if( linebuf(1:1) == '#' ) cycle
+      read(linebuf,*,iostat=ios) m, n
+      if( ios /= 0 ) cycle
+      pair_cnt = pair_cnt + 1
+      target_dm_id(pair_cnt) = m
+      target_sd_id(pair_cnt) = n
+    end do
+    close(fid)
+
+    valid_before = sd_num
+    matched_cnt = 0
+
+    allocate(local_track_mask(sd_num))
+    local_track_mask(:) = .false.
+
+    do m = 1, pair_cnt
+      if( target_dm_id(m) == mype ) then
+        if( target_sd_id(m) >= 1 .and. target_sd_id(m) <= sd_num ) then
+          if( .not. local_track_mask(target_sd_id(m)) ) then
+            local_track_mask(target_sd_id(m)) = .true.
+            matched_cnt = matched_cnt + 1
+          end if
+        end if
+      end if
+    end do
+
+    do n = 1, sd_num
+      do_track = local_track_mask(n)
+      if( do_track ) then
+        sd_id(n) = n
+        dm_id(n) = mype
+      else
+        sd_id(n) = INVALID_i4
+        dm_id(n) = INVALID_i4
+      end if
+      if_coal(n) = 0_i2
+    end do
+
+    write(IO_FID_LOG,*) "*** BW_ID_DEBUG local valid_before,matched_cnt,sd_num,rank=", valid_before, matched_cnt, sd_num, mype
+
+    tracking_sample_initialized = .true.
+    deallocate(local_track_mask)
+    deallocate(target_dm_id, target_sd_id)
+
+    return
+  end subroutine sdm_select_particles_from_id_file
+!---------------------------------------------------------------------------------------------------------------------------------
+  subroutine sdm_select_stratified_random_particles(sd_num, sd_rk, sd_r,         &
+                                                    sd_rng,                    &
+                                                    tracking_selection_mode,      &
+                                                    tracking_fraction,             &
+                                                    max_tracked_sds,              &
+                                                    tracking_height_min,          &
+                                                    tracking_height_max,          &
+                                                    tracking_radius_min,          &
+                                                    tracking_radius_max,          &
+                                                    tracking_nz_bin,              &
+                                                    tracking_nr_bin,              &
+                                                    tracking_min_per_bin,         &
+                                                    tracking_fallback_to_random,  &
+                                                    tracking_sample_initialized,  &
+                                                    dm_id, sd_id, if_coal, status_rdm)
+    use scale_precision
+    use scale_grid, only: DZ
+    use m_sdm_common, only: VALID2INVALID, INVALID_i4, i2
+    use scale_process, only: mype => PRC_myrank
+
+    implicit none
+
+    integer, intent(in) :: sd_num
+    real(RP), intent(in) :: sd_rk(1:sd_num)
+    real(RP), intent(in) :: sd_r(1:sd_num)
+    type(c_rng_uniform_mt), intent(inout) :: sd_rng
+    character(len=*), intent(in) :: tracking_selection_mode
+    real(RP), intent(in) :: tracking_fraction
+    integer, intent(in) :: max_tracked_sds
+    real(RP), intent(in) :: tracking_height_min
+    real(RP), intent(in) :: tracking_height_max
+    real(RP), intent(in) :: tracking_radius_min
+    real(RP), intent(in) :: tracking_radius_max
+    integer, intent(in) :: tracking_nz_bin
+    integer, intent(in) :: tracking_nr_bin
+    integer, intent(in) :: tracking_min_per_bin
+    logical, intent(in) :: tracking_fallback_to_random
+    logical, intent(inout) :: tracking_sample_initialized
+    integer, intent(inout) :: sd_id(1:sd_num)
+    integer, intent(inout) :: dm_id(1:sd_num)
+    integer(i2), intent(inout) :: if_coal(1:sd_num)
+    integer, intent(out) :: status_rdm
+
+    integer :: n, iz, ir, ibin
+    integer :: tracked_cnt, candidate_cnt, target_cnt
+    integer :: nbin, sum_quota, extra_needed, reduce_needed
+    integer :: needed_in_bin, non_empty_bins, min_per_bin_eff
+    real(RP) :: rand_tracking
+    real(RP) :: z_span, r_min_eff, r_max_eff, log_r_span, z_height
+    logical :: do_track, use_none, use_stratified, stratified_selected, use_radius_upper_bound
+    integer, allocatable :: bin_cnt(:), bin_quota(:), bin_selected(:), bin_remaining(:), bin_min(:)
+    real(RP), allocatable :: bin_frac(:)
+
+    status_rdm = 0
+
+    use_none = trim(adjustl(tracking_selection_mode)) == 'none' .or. &
+               trim(adjustl(tracking_selection_mode)) == 'NONE' .or. &
+               trim(adjustl(tracking_selection_mode)) == 'None'
+
+    if( tracking_fraction <= 0.0_RP .and. .not. use_none ) then
+      do n = 1, sd_num
+        sd_id(n) = INVALID_i4
+        dm_id(n) = INVALID_i4
+        if_coal(n) = 0_i2
+      end do
+      tracking_sample_initialized = .false.
+      return
+    end if
+
+    tracked_cnt = 0
+    if( .not. tracking_sample_initialized ) then
+      ! tracking_selection_mode selects which initialization path is used.
+      ! tracking_fraction is applied afterwards only when additional thinning is requested.
+      use_stratified = trim(adjustl(tracking_selection_mode)) == 'stratified' .or. &
+                       trim(adjustl(tracking_selection_mode)) == 'STRATIFIED' .or. &
+                       trim(adjustl(tracking_selection_mode)) == 'Stratified'
+      use_radius_upper_bound = tracking_radius_max > tracking_radius_min
+      stratified_selected = .false.
+
+      if( use_none ) then
+        do n = 1, sd_num
+          if( sd_rk(n) > VALID2INVALID ) then
+            tracked_cnt = tracked_cnt + 1
+            sd_id(n) = n
+            dm_id(n) = mype
+          else
+            sd_id(n) = INVALID_i4
+            dm_id(n) = INVALID_i4
+          end if
+          if_coal(n) = 0_i2
+        end do
+        tracking_sample_initialized = .true.
+        return
+      end if
+
+      if( use_stratified .and. tracking_nz_bin > 0 .and. tracking_nr_bin > 0 .and. &
+          tracking_height_max > tracking_height_min ) then
+        nbin = tracking_nz_bin * tracking_nr_bin
+        allocate(bin_cnt(nbin), bin_quota(nbin), bin_selected(nbin), bin_remaining(nbin), bin_min(nbin), bin_frac(nbin))
+
+        candidate_cnt = 0
+        r_min_eff = max(tracking_radius_min, 1.0E-12_RP)
+        r_max_eff = r_min_eff
+        do n = 1, sd_num
+          if( sd_rk(n) <= VALID2INVALID ) cycle
+          z_height = sd_rk(n) * DZ
+          if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
+              sd_r(n) >= tracking_radius_min .and. &
+              ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+            candidate_cnt = candidate_cnt + 1
+            if( sd_r(n) > r_max_eff ) r_max_eff = sd_r(n)
+          end if
+        end do
+
+        target_cnt = int( real(candidate_cnt,kind=RP) * tracking_fraction + 0.5_RP )
+        if( candidate_cnt > 0 .and. tracking_fraction > 0.0_RP .and. target_cnt == 0 ) target_cnt = 1
+        if( target_cnt > candidate_cnt ) target_cnt = candidate_cnt
+        if( max_tracked_sds > 0 ) target_cnt = min(target_cnt, max_tracked_sds)
+
+        if( candidate_cnt > 0 .and. target_cnt > 0 ) then
+          z_span = tracking_height_max - tracking_height_min
+          if( r_max_eff > r_min_eff ) then
+            log_r_span = log(r_max_eff / r_min_eff)
+          else
+            log_r_span = 0.0_RP
+          end if
+
+          bin_cnt(:) = 0
+          bin_quota(:) = 0
+          bin_selected(:) = 0
+          bin_remaining(:) = 0
+          bin_min(:) = 0
+          bin_frac(:) = 0.0_RP
+
+          do n = 1, sd_num
+            if( sd_rk(n) <= VALID2INVALID ) cycle
+            z_height = sd_rk(n) * DZ
+            if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
+                sd_r(n) >= tracking_radius_min .and. &
+                ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+              iz = int( (z_height-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
+              iz = min( tracking_nz_bin, max(1,iz) )
+              if( tracking_nr_bin == 1 ) then
+                ir = 1
+              else
+                if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
+                  ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                else
+                  ir = 1
+                end if
+                ir = min( tracking_nr_bin, max(1,ir) )
+              end if
+              ibin = (iz-1)*tracking_nr_bin + ir
+              bin_cnt(ibin) = bin_cnt(ibin) + 1
+            end if
+          end do
+
+          non_empty_bins = count(bin_cnt > 0)
+          if( non_empty_bins > 0 ) then
+            min_per_bin_eff = max(0, tracking_min_per_bin)
+            min_per_bin_eff = min(min_per_bin_eff, target_cnt / non_empty_bins)
+          else
+            min_per_bin_eff = 0
+          end if
+
+          do ibin = 1, nbin
+            if( bin_cnt(ibin) > 0 ) then
+              bin_quota(ibin) = int( real(target_cnt,kind=RP) * real(bin_cnt(ibin),kind=RP) / real(candidate_cnt,kind=RP) )
+              bin_quota(ibin) = min(bin_quota(ibin), bin_cnt(ibin))
+              if( min_per_bin_eff > 0 ) then
+                bin_min(ibin) = min(min_per_bin_eff, bin_cnt(ibin))
+                if( bin_quota(ibin) < bin_min(ibin) ) bin_quota(ibin) = bin_min(ibin)
+              end if
+            end if
+          end do
+
+          sum_quota = sum(bin_quota)
+          if( sum_quota < target_cnt ) then
+            extra_needed = target_cnt - sum_quota
+            do while( extra_needed > 0 )
+              do ibin = 1, nbin
+                if( extra_needed <= 0 ) exit
+                if( bin_quota(ibin) < bin_cnt(ibin) ) then
+                  bin_quota(ibin) = bin_quota(ibin) + 1
+                  extra_needed = extra_needed - 1
+                end if
+              end do
+              if( all(bin_quota >= bin_cnt) ) exit
+            end do
+          else if( sum_quota > target_cnt ) then
+            reduce_needed = sum_quota - target_cnt
+            do while( reduce_needed > 0 )
+              do ibin = nbin, 1, -1
+                if( reduce_needed <= 0 ) exit
+                if( bin_quota(ibin) > bin_min(ibin) ) then
+                  bin_quota(ibin) = bin_quota(ibin) - 1
+                  reduce_needed = reduce_needed - 1
+                end if
+              end do
+              if( all(bin_quota <= bin_min) ) exit
+            end do
+          end if
+
+          bin_remaining(:) = bin_cnt(:)
+          do n = 1, sd_num
+            do_track = .false.
+            if( sd_rk(n) > VALID2INVALID ) then
+              z_height = sd_rk(n) * DZ
+              if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
+                  sd_r(n) >= tracking_radius_min .and. &
+                  ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+                iz = int( (z_height-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
+                iz = min( tracking_nz_bin, max(1,iz) )
+                if( tracking_nr_bin == 1 ) then
+                  ir = 1
+                else
+                  if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
+                    ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                  else
+                    ir = 1
+                  end if
+                  ir = min( tracking_nr_bin, max(1,ir) )
+                end if
+                ibin = (iz-1)*tracking_nr_bin + ir
+                needed_in_bin = bin_quota(ibin) - bin_selected(ibin)
+                if( needed_in_bin > 0 .and. bin_remaining(ibin) > 0 ) then
+                  rand_tracking = real(rng_generate(sd_rng), kind=RP)
+                  if( rand_tracking <= real(needed_in_bin,kind=RP) / real(bin_remaining(ibin),kind=RP) ) then
+                    do_track = .true.
+                    bin_selected(ibin) = bin_selected(ibin) + 1
+                  end if
+                end if
+                if( bin_remaining(ibin) > 0 ) bin_remaining(ibin) = bin_remaining(ibin) - 1
+              end if
+            end if
+            if( do_track ) then
+              tracked_cnt = tracked_cnt + 1
+              sd_id(n) = n
+              dm_id(n) = mype
+            else
+              sd_id(n) = INVALID_i4
+              dm_id(n) = INVALID_i4
+            end if
+            if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+          stratified_selected = .true.
+        end if
+
+        deallocate(bin_cnt, bin_quota, bin_selected, bin_remaining, bin_min, bin_frac)
+      end if
+
+      if( .not. stratified_selected ) then
+        if( use_stratified .and. .not. tracking_fallback_to_random ) then
+          do n = 1, sd_num
+            sd_id(n) = INVALID_i4
+            dm_id(n) = INVALID_i4
+            if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+        else
+          do n = 1, sd_num
+            do_track = ( sd_rk(n) > VALID2INVALID )
+            if( do_track .and. tracking_fraction < 1.0_RP ) then
+              rand_tracking = real(rng_generate(sd_rng), kind=RP)
+              if( rand_tracking > tracking_fraction ) do_track = .false.
+            end if
+            if( do_track .and. max_tracked_sds > 0 .and. tracked_cnt >= max_tracked_sds ) do_track = .false.
+            if( do_track ) then
+              tracked_cnt = tracked_cnt + 1
+              sd_id(n) = n
+              dm_id(n) = mype
+            else
+              sd_id(n) = INVALID_i4
+              dm_id(n) = INVALID_i4
+            end if
+            if_coal(n) = 0_i2
+          end do
+          tracking_sample_initialized = .true.
+        end if
+      end if
+    else
+      do n = 1, sd_num
+        if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
+          tracked_cnt = tracked_cnt + 1
+        end if
+        if_coal(n) = 0_i2
+      end do
+    end if
+
+    return
+  end subroutine sdm_select_stratified_random_particles
+
 end module m_sdm_idutil

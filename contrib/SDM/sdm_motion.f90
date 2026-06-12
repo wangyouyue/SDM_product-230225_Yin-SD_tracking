@@ -121,10 +121,10 @@ contains
     ! Input and output variables
     real(RP), intent(inout) :: sd_vzw(1:sd_num)  ! terminal velocity [in] / z velocity [out] of super-droplets
     ! Output variables
-    real(RP), intent(out) :: sd_ri(1:sd_num) ! face index-i(real) of super-droplets
-    real(RP), intent(out) :: sd_rj(1:sd_num) ! face index-j(real) of super-droplets
-    real(RP), intent(out) :: sd_u(1:sd_num) ! x-direction velocity of super-droplets
-    real(RP), intent(out) :: sd_v(1:sd_num) ! y-direction velocity of super-droplets
+    real(RP), intent(inout) :: sd_ri(1:sd_num) ! face index-i(real) of super-droplets
+    real(RP), intent(inout) :: sd_rj(1:sd_num) ! face index-j(real) of super-droplets
+    real(RP), intent(inout) :: sd_u(1:sd_num) ! x-direction velocity of super-droplets
+    real(RP), intent(inout) :: sd_v(1:sd_num) ! y-direction velocity of super-droplets
     ! Work variables
     real(RP) :: sd_vz ! terminal velocity of super-droplets
     real(RP) :: sd_w  ! z velocity of super-droplets
@@ -176,7 +176,7 @@ contains
        iYm = floor(rj+0.5_RP)
        iYp = iYm + 1
        sYm = (rj+0.5_RP) - real(iYm,kind=RP)
-       sYp = 1.d0 - sYm
+       sYp = 1.0_RP - sYm
 
        iZm = floor(rk+0.5_RP)
        iZp = iZm + 1
@@ -282,10 +282,10 @@ contains
     ! Input and output variables
     real(RP), intent(inout) :: sd_vzw(1:sd_num)  ! terminal velocity [in] / z velocity [out] of super-droplets
     ! Output variables
-    real(RP), intent(out) :: sd_ri(1:sd_num) ! face index-i(real) of super-droplets
-    real(RP), intent(out) :: sd_rj(1:sd_num) ! face index-j(real) of super-droplets
-    real(RP), intent(out) :: sd_u(1:sd_num) ! x-direction velocity of super-droplets
-    real(RP), intent(out) :: sd_v(1:sd_num) ! y-direction velocity of super-droplets
+    real(RP), intent(inout) :: sd_ri(1:sd_num) ! face index-i(real) of super-droplets
+    real(RP), intent(inout) :: sd_rj(1:sd_num) ! face index-j(real) of super-droplets
+    real(RP), intent(inout) :: sd_u(1:sd_num) ! x-direction velocity of super-droplets
+    real(RP), intent(inout) :: sd_v(1:sd_num) ! y-direction velocity of super-droplets
     ! Work variables
     real(RP) :: sd_vz ! terminal velocity of super-droplets
     real(RP) :: sd_w  ! z velocity of super-droplets
@@ -338,7 +338,7 @@ contains
        iYp = iYm + 1
        sYm = (rj+0.5_RP) - real(iYm,kind=RP)
        sYm = floor(sYm+0.5_RP)
-       sYp = 1.d0 - sYm
+       sYp = 1.0_RP - sYm
 
        iZm = floor(rk+0.5_RP)
        iZp = iZm + 1
@@ -460,13 +460,13 @@ contains
                        ! 01 = all liquid, 10 = all ice
     real(RP), intent(in) :: sd_x(1:sd_num)  ! x-coordinate of super-droplets
     real(RP), intent(in) :: sd_y(1:sd_num)  ! y-coordinate of super-droplets
-    real(RP), intent(out) :: sd_ri(1:sd_num)! index[i/real] of super-droplets
-    real(RP), intent(out) :: sd_rj(1:sd_num)! index[j/real] of super-droplets
+    real(RP), intent(inout) :: sd_ri(1:sd_num)! index[i/real] of super-droplets
+    real(RP), intent(inout) :: sd_rj(1:sd_num)! index[j/real] of super-droplets
     real(RP), intent(in) :: sd_rk(1:sd_num) ! index[k/real] of super-droplets
     real(RP), intent(in) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
     character(*), intent(in) :: ptype   ! process type : 'motion process' or 'stochastic coalescence process'
     ! Output variables
-    real(RP), intent(out) :: sd_vz(1:sd_num)! terminal velocity of super-droplets in real space
+    real(RP), intent(inout) :: sd_vz(1:sd_num)! terminal velocity of super-droplets in real space
     integer, intent(out) :: ilist_s(1:sd_num)  ! buffer for list vectorization
     integer, intent(out) :: ilist_m(1:sd_num)  ! buffer for list vectorization
     integer, intent(out) :: ilist_l(1:sd_num)  ! buffer for list vectorization
@@ -1278,13 +1278,13 @@ contains
                        ! 01 = all liquid, 10 = all ice
     real(RP), intent(in) :: sd_x(1:sd_num)  ! x-coordinate of super-droplets
     real(RP), intent(in) :: sd_y(1:sd_num)  ! y-coordinate of super-droplets
-    real(RP), intent(out) :: sd_ri(1:sd_num)! index[i/real] of super-droplets
-    real(RP), intent(out) :: sd_rj(1:sd_num)! index[j/real] of super-droplets
+    real(RP), intent(inout) :: sd_ri(1:sd_num)! index[i/real] of super-droplets
+    real(RP), intent(inout) :: sd_rj(1:sd_num)! index[j/real] of super-droplets
     real(RP), intent(in) :: sd_rk(1:sd_num) ! index[k/real] of super-droplets
     type(sdicedef), intent(in) :: sdi       ! ice phase super-droplets
     character(*), intent(in) :: ptype   ! process type : 'motion process' or 'stochastic coalescence process'
     ! Output variables
-    real(RP), intent(out) :: sd_vz(1:sd_num)! terminal velocity of super-droplets in real space
+    real(RP), intent(inout) :: sd_vz(1:sd_num)! terminal velocity of super-droplets in real space
     integer, intent(out) :: ilist(1:sd_num)  ! buffer for list vectorization
 
     ! Local parameters

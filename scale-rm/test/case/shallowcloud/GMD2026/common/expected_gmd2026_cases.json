@@ -1,0 +1,167 @@
+{
+  "description": "Expected static configuration for the GMD2026 shallow-cloud benchmark and TPHT suite.",
+  "initial_restart_basename": "./init_dycom_rf02_00000101-000000.000",
+  "global_3d": {
+    "ATMOS_DYN_TYPE": "HEVI",
+    "ATMOS_DYN_TINTEG_SHORT_TYPE": "RK4",
+    "TIME_DT": 0.1,
+    "TIME_DT_ATMOS_DYN": 0.05,
+    "TIME_DT_ATMOS_PHY_MP": 0.1,
+    "TIME_DT_ratio": 2.0,
+    "ATMOS_DYN_wdamp_height": 1400.0,
+    "ATMOS_DYN_wdamp_tau": 0.5,
+    "random_perturbation_enable": false,
+    "random_perturbation_amp": 0.0,
+    "domain_m": [2000.0, 2000.0, 1500.0],
+    "resolution_m": [50.0, 50.0, 5.0],
+    "grid_count": [40, 40, 300]
+  },
+  "groups": {
+    "00_base_restart_3d": {
+      "dimension": "3d",
+      "restart_policy": "cold_start_write_60min_restart",
+      "cases": {
+        "base_restart_3d": {
+          "TIME_DURATION": 3600.0,
+          "tracking_mode": 0,
+          "coalescence_output_enable": false,
+          "sdm_dmpvar": 0,
+          "HISTORY_DEFAULT_TINTERVAL": 60.0,
+          "HISTORY_OUTPUT_STEP0": true,
+          "ATMOS_RESTART_IN_BASENAME": "./init_dycom_rf02_00000101-000000.000",
+          "ATMOS_RESTART_OUTPUT": true,
+          "ATMOS_RESTART_OUT_BASENAME": "./restart_output/base_restart"
+        }
+      }
+    },
+    "01_bench_3d_samp_30min": {
+      "dimension": "3d",
+      "restart_policy": "cold_start_30min",
+      "TIME_DURATION": 1800.0,
+      "HISTORY_DEFAULT_TINTERVAL": 0.0,
+      "cases": {
+        "nt_nolog": {
+          "tracking_mode": 0,
+          "coalescence_output_enable": false,
+          "sdm_dmpvar": 0
+        },
+        "nt_coallog": {
+          "tracking_mode": 0,
+          "coalescence_output_enable": true,
+          "sdm_dmpvar": 0
+        },
+        "fw005_coallog": {
+          "tracking_mode": 1,
+          "tracking_selection_mode": "stratified",
+          "tracking_fraction": 0.05,
+          "max_tracked_sds": 0,
+          "tracking_height_min": 400.0,
+          "tracking_height_max": 800.0,
+          "tracking_radius_min": 1.0e-6,
+          "tracking_radius_max": 0.0,
+          "tracking_nz_bin": 8,
+          "tracking_nr_bin": 10,
+          "tracking_min_per_bin": 1,
+          "tracking_fallback_to_random": true,
+          "coalescence_output_enable": true,
+          "sdm_dmpvar": 100,
+          "sdm_dmpitvl": 60.0,
+          "HISTORY_DEFAULT_TINTERVAL": 0.0
+        },
+        "bw005_coallog": {
+          "tracking_mode": 2,
+          "tracking_selection_mode": "stratified",
+          "tracking_fraction": 0.05,
+          "max_tracked_sds": 0,
+          "tracking_height_min": 400.0,
+          "tracking_height_max": 800.0,
+          "tracking_radius_min": 1.0e-6,
+          "tracking_radius_max": 0.0,
+          "tracking_nz_bin": 8,
+          "tracking_nr_bin": 10,
+          "tracking_min_per_bin": 1,
+          "tracking_fallback_to_random": true,
+          "coalescence_output_enable": true,
+          "sdm_dmpvar": 100,
+          "sdm_dmpitvl": 60.0,
+          "HISTORY_DEFAULT_TINTERVAL": 0.0
+        }
+      }
+    },
+    "02_tpht_3d_interest_70min": {
+      "dimension": "3d",
+      "restart_policy": "cold_start_same_initial_state_plus_ids",
+      "TIME_DURATION": 4200.0,
+      "cases": {
+        "fw_discovery": {
+          "tracking_mode": 1,
+          "tracking_selection_mode": "none",
+          "tracking_fraction": 1.0,
+          "max_tracked_sds": 0,
+          "tracking_id_output_basename": "./fw_tracking/tracking_interest_ids",
+          "tracking_interest_radius_enable": true,
+          "tracking_interest_radius_threshold": 1.5e-5,
+          "tracking_interest_coalescence_enable": true,
+          "coalescence_output_enable": true,
+          "sdm_dmpvar": 0,
+          "sdm_dmpitvl": 10.0,
+          "HISTORY_DEFAULT_TINTERVAL": 0.0
+        },
+        "bw_reconstruction": {
+          "tracking_mode": 2,
+          "tracking_id_input_basename": "../fw_discovery/fw_tracking/tracking_interest_ids_dedup",
+          "SD_OUT_BASENAME": "./bw_output/superdroplet_restart",
+          "coalescence_output_enable": true,
+          "sdm_dmpvar": 100,
+          "sdm_dmpitvl": 10.0,
+          "HISTORY_DEFAULT_TINTERVAL": 10.0,
+          "HISTORY_OUTPUT_STEP0": true,
+          "random_perturbation_enable": false,
+          "random_perturbation_amp": 0.0
+        }
+      }
+    },
+    "03_fw_rep_2d_600s": {
+      "dimension": "2d",
+      "restart_policy": "cold_start_shared_init",
+      "TIME_DURATION": 600.0,
+      "tracking_mode": 1,
+      "sdm_dmpvar": 100,
+      "sdm_dmpitvl": 60.0,
+      "HISTORY_DEFAULT_TINTERVAL": 0.0,
+      "sampled_fractions": [0.05, 0.10, 0.20],
+      "sampled_modes": ["stratified", "random"],
+      "seed_count_per_mode_fraction": 10,
+      "seed_namelist": "PARAM_ATMOS_PHY_MP_SDM",
+      "seed_key": "tracking_sampling_seed"
+    },
+    "04_sdnc_scaling_lite_30min": {
+      "dimension": "3d",
+      "restart_policy": "cold_start_30min_scaling",
+      "TIME_DURATION": 1800.0,
+      "HISTORY_DEFAULT_TINTERVAL": 0.0,
+      "sdnc_values": [10.0, 20.0, 40.0, 80.0],
+      "tracking_fraction": 0.05,
+      "tracking_selection_mode": "stratified",
+      "coalescence_output_enable": false
+    },
+    "05_outint_io_lite_10min": {
+      "dimension": "3d",
+      "restart_policy": "cold_start_10min",
+      "TIME_DURATION": 600.0,
+      "HISTORY_DEFAULT_TINTERVAL": 0.0,
+      "tracking_fraction": 0.05,
+      "tracking_selection_mode": "stratified",
+      "output_intervals": [30.0, 60.0, 120.0],
+      "coalescence_output_enable": false,
+      "cases": {
+        "nt_nolog_10min": {
+          "tracking_mode": 0,
+          "tracking_selection_mode": "none",
+          "sdm_dmpvar": 0,
+          "sdm_dmpitvl": 60.0
+        }
+      }
+    }
+  }
+}

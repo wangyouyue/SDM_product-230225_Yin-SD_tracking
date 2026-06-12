@@ -23,8 +23,23 @@
 *.pe[0-9][0-9][0-9][0-9][0-9][0-9]
 *.lst
 *.RData
+*.pyc
+*.pyo
+__pycache__/
+.DS_Store
 scale-les_init
 scale-les_pp
+
+job_metrics.json
+SD_selected_NetCDF_*
+SD_all_NetCDF_*
+SD_coal_output_NetCDF_*
+history*.nc
+
+scale-rm/test/case/shallowcloud/GMD2026/analysis_outputs_for_GMD/
+scale-rm/test/case/shallowcloud/GMD2026/config_audit.*
+scale-rm/test/case/shallowcloud/GMD2026/restart_audit.*
+scale-rm/test/case/shallowcloud/GMD2026/benchmark_diagnostics_availability.*
 
 scale-gm/test/data/grid/boundary/gl05rl01*
 scale-gm/test/data/grid/boundary/gl06*

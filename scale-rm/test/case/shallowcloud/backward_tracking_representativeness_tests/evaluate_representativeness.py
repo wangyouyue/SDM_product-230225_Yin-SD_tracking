@@ -146,6 +146,13 @@ def _read_var(ds: Dataset, name: str) -> np.ndarray | None:
     return None
 
 
+def _read_any_var(ds: Dataset, names: list[str]) -> np.ndarray | None:
+    for name in names:
+        if name in ds.variables:
+            return np.array(ds.variables[name][:])
+    return None
+
+
 def build_distribution(meta: CaseMeta, z_values: np.ndarray, r_values: np.ndarray, weights: np.ndarray) -> DistributionPack:
     """Build weighted height-radius distribution from SD samples."""
     z_min = meta.tracking_height_min
@@ -185,9 +192,21 @@ def compute_chain_metrics(grouped_files: dict[str, dict[int, Path]], max_chain_s
         domain_map: dict[int, dict[str, np.ndarray]] = {}
         for domain, file_path in grouped_files[t_key].items():
             with Dataset(file_path, "r") as ds:
-                pre_sdid = _read_var(ds, "pre_sdid")
-                pre_dmid = _read_var(ds, "pre_dmid")
-                if_coal = _read_var(ds, "if_coal")
+                pre_sdid = _read_any_var(ds, ["pre_sdid", "sd_id"])
+                pre_dmid = _read_any_var(ds, ["pre_dmid", "dm_id"])
+                if_coal = _read_any_var(ds, ["if_coal"])
+                if pre_sdid is None:
+                    pre_sdid_names = [name for name in ds.variables.keys() if name.startswith("pre_sdid_")]
+                    if pre_sdid_names:
+                        pre_sdid = np.array(ds.variables[sorted(pre_sdid_names)[-1]][:])
+                if pre_dmid is None:
+                    pre_dmid_names = [name for name in ds.variables.keys() if name.startswith("pre_dmid_")]
+                    if pre_dmid_names:
+                        pre_dmid = np.array(ds.variables[sorted(pre_dmid_names)[-1]][:])
+                if if_coal is None:
+                    if_coal_names = [name for name in ds.variables.keys() if name.startswith("if_coal_")]
+                    if if_coal_names:
+                        if_coal = np.array(ds.variables[sorted(if_coal_names)[-1]][:])
                 sd_z = _read_var(ds, "sd_z")
                 sd_n = _read_var(ds, "sd_n")
                 if pre_sdid is None or pre_dmid is None or if_coal is None or sd_z is None:

@@ -62,25 +62,43 @@ def generate_time_steps(start_time, end_time, step_ms=TIME_STEP_INTERVAL):
     time_delta = timedelta(milliseconds=step_ms)
 
     time_steps = []
-    while current_time >= end_time:
-        time_steps.append(current_time.strftime(time_format)[:-3])  # Remove microseconds
-        current_time -= time_delta
+    if current_time <= end_time:
+        while current_time <= end_time:
+            time_steps.append(current_time.strftime(time_format)[:-3])
+            current_time += time_delta
+    else:
+        while current_time >= end_time:
+            time_steps.append(current_time.strftime(time_format)[:-3])
+            current_time -= time_delta
 
     return time_steps
 
 def generate_coal_filename(time, domain_id, input_directory):
-    """
-    Constructs the filename for coalescence-event NetCDF files.
-    """
     domain_id_str = f"{domain_id:06d}"
-    return os.path.join(input_directory, f"SD_coal_output_NetCDF_00000101-{time}.pe{domain_id_str}")
+    fixed_name = os.path.join(input_directory, f"SD_coal_output_NetCDF_00000101-{time}.pe{domain_id_str}")
+    if os.path.isfile(fixed_name):
+        return fixed_name
+    matched = sorted(glob.glob(os.path.join(input_directory, f"SD_coal_output_NetCDF_*-{time}.pe{domain_id_str}")))
+    if matched:
+        return matched[-1]
+    return fixed_name
 
 def generate_filename(time, domain_id, input_directory):
-    """
-    Constructs the filename for general SD_all_NetCDF files.
-    """
     domain_id_str = f"{domain_id:06d}"
-    return os.path.join(input_directory, f"SD_all_NetCDF_00000101-{time}.pe{domain_id_str}")
+    selected_file = os.path.join(input_directory, f"SD_selected_NetCDF_00000101-{time}.pe{domain_id_str}")
+    if not os.path.isfile(selected_file):
+        selected_candidates = sorted(glob.glob(os.path.join(input_directory, f"SD_selected_NetCDF_*-{time}.pe{domain_id_str}")))
+        if selected_candidates:
+            selected_file = selected_candidates[-1]
+    if os.path.isfile(selected_file):
+        return selected_file
+    all_file = os.path.join(input_directory, f"SD_all_NetCDF_00000101-{time}.pe{domain_id_str}")
+    if os.path.isfile(all_file):
+        return all_file
+    all_candidates = sorted(glob.glob(os.path.join(input_directory, f"SD_all_NetCDF_*-{time}.pe{domain_id_str}")))
+    if all_candidates:
+        return all_candidates[-1]
+    return all_file
 
 # ---------------------------------------------------------------------------
 # Below are the core algorithm functions. We apply caching to reduce I/O overhead.
@@ -95,6 +113,18 @@ def open_netcdf_cached(filename, cache):
     if filename not in cache:
         cache[filename] = Dataset(filename, 'r')
     return cache[filename]
+
+def read_tracking_var(nc, names, prefixes=None):
+    for name in names:
+        if name in nc.variables:
+            return nc.variables[name][:]
+    if prefixes is not None:
+        all_names = list(nc.variables.keys())
+        for prefix in prefixes:
+            matched = sorted([name for name in all_names if name.startswith(prefix)])
+            if matched:
+                return nc.variables[matched[-1]][:]
+    return None
 
 def get_particle_data(filename, sd_id, cache=None):
     """
@@ -113,9 +143,9 @@ def get_particle_data(filename, sd_id, cache=None):
                     'sd_x': nc.variables['sd_x'][:],
                     'sd_y': nc.variables['sd_y'][:],
                     'sd_z': nc.variables['sd_z'][:],
-                    'pre_sdid': nc.variables['pre_sdid'][:],
-                    'pre_dmid': nc.variables['pre_dmid'][:],
-                    'if_coal': nc.variables['if_coal'][:],
+                    'pre_sdid': read_tracking_var(nc, ['pre_sdid', 'sd_id'], ['pre_sdid_', 'sd_id_']),
+                    'pre_dmid': read_tracking_var(nc, ['pre_dmid', 'dm_id'], ['pre_dmid_', 'dm_id_']),
+                    'if_coal': read_tracking_var(nc, ['if_coal'], ['if_coal_']),
                 }
                 nc.close()
             all_data = cache[filename]
@@ -127,9 +157,9 @@ def get_particle_data(filename, sd_id, cache=None):
                 'sd_x': nc.variables['sd_x'][:],
                 'sd_y': nc.variables['sd_y'][:],
                 'sd_z': nc.variables['sd_z'][:],
-                'pre_sdid': nc.variables['pre_sdid'][:],
-                'pre_dmid': nc.variables['pre_dmid'][:],
-                'if_coal': nc.variables['if_coal'][:],
+                'pre_sdid': read_tracking_var(nc, ['pre_sdid', 'sd_id'], ['pre_sdid_', 'sd_id_']),
+                'pre_dmid': read_tracking_var(nc, ['pre_dmid', 'dm_id'], ['pre_dmid_', 'dm_id_']),
+                'if_coal': read_tracking_var(nc, ['if_coal'], ['if_coal_']),
             }
             nc.close()
 
@@ -164,10 +194,10 @@ def check_coalescence(coal_file, pre_dmid, pre_sdid, current_file, cache=None, m
         # ----------------------------------------------------------------------
 
         # Retrieve arrays
-        pre_sdid1 = nc.variables['pre_sdid1'][:]
-        pre_dmid1 = nc.variables['pre_dmid1'][:]
-        pre_sdid2 = nc.variables['pre_sdid2'][:]
-        pre_dmid2 = nc.variables['pre_dmid2'][:]
+        pre_sdid1 = read_tracking_var(nc, ['pre_sdid1', 'sd_id1'], ['pre_sdid1_', 'sd_id1_'])
+        pre_dmid1 = read_tracking_var(nc, ['pre_dmid1', 'dm_id1'], ['pre_dmid1_', 'dm_id1_'])
+        pre_sdid2 = read_tracking_var(nc, ['pre_sdid2', 'sd_id2'], ['pre_sdid2_', 'sd_id2_'])
+        pre_dmid2 = read_tracking_var(nc, ['pre_dmid2', 'dm_id2'], ['pre_dmid2_', 'dm_id2_'])
         num_col = nc.variables['num_col'][:]
 
         # Identify records matching (pre_dmid, pre_sdid)
@@ -233,8 +263,11 @@ def initialize_particles(input_directory, time_steps):
       - Uses parallel processing to scan files.
     """
     initial_time = time_steps[0]
-    file_pattern = os.path.join(input_directory, f"SD_all_NetCDF_00000101-{initial_time}.pe*")
-    files = glob.glob(file_pattern)
+    selected_pattern = os.path.join(input_directory, f"SD_selected_NetCDF_00000101-{initial_time}.pe*")
+    files = glob.glob(selected_pattern)
+    if len(files) == 0:
+        file_pattern = os.path.join(input_directory, f"SD_all_NetCDF_00000101-{initial_time}.pe*")
+        files = glob.glob(file_pattern)
     
     with Pool() as pool:
         results = pool.map(process_file_for_particles, files)
@@ -278,9 +311,12 @@ def initialize_particles(input_directory, time_steps):
                 part_array['sd_x'][0, i] = nc.variables['sd_x'][idx]
                 part_array['sd_y'][0, i] = nc.variables['sd_y'][idx]
                 part_array['sd_z'][0, i] = nc.variables['sd_z'][idx]
-                part_array['pre_sdid'][0, i] = nc.variables['pre_sdid'][idx]
-                part_array['pre_dmid'][0, i] = nc.variables['pre_dmid'][idx]
-                part_array['if_coal'][0, i]  = nc.variables['if_coal'][idx]
+                pre_sdid_arr = read_tracking_var(nc, ['pre_sdid', 'sd_id'], ['pre_sdid_', 'sd_id_'])
+                pre_dmid_arr = read_tracking_var(nc, ['pre_dmid', 'dm_id'], ['pre_dmid_', 'dm_id_'])
+                if_coal_arr = read_tracking_var(nc, ['if_coal'], ['if_coal_'])
+                part_array['pre_sdid'][0, i] = pre_sdid_arr[idx]
+                part_array['pre_dmid'][0, i] = pre_dmid_arr[idx]
+                part_array['if_coal'][0, i]  = if_coal_arr[idx]
         except Exception as e:
             print(f"[Error] Reading initial data for {fname}, idx={idx}: {e}")
     
@@ -355,9 +391,9 @@ def process_single_particle_block(particle_block, input_directory, time_steps, n
                     'sd_x': nc.variables['sd_x'][:],
                     'sd_y': nc.variables['sd_y'][:],
                     'sd_z': nc.variables['sd_z'][:],
-                    'pre_sdid': nc.variables['pre_sdid'][:],
-                    'pre_dmid': nc.variables['pre_dmid'][:],
-                    'if_coal': nc.variables['if_coal'][:],
+                    'pre_sdid': read_tracking_var(nc, ['pre_sdid', 'sd_id'], ['pre_sdid_', 'sd_id_']),
+                    'pre_dmid': read_tracking_var(nc, ['pre_dmid', 'dm_id'], ['pre_dmid_', 'dm_id_']),
+                    'if_coal': read_tracking_var(nc, ['if_coal'], ['if_coal_']),
                 }
                 nc.close()
             arr = netcdf_cache[filename]
@@ -549,10 +585,10 @@ def process_single_particle_block(particle_block, input_directory, time_steps, n
             if (current_t_str, dmid_coal) not in coal_cache:
                 try:
                     with Dataset(cfile, 'r') as nc_c:
-                        p1 = nc_c.variables['pre_sdid1'][:]
-                        d1 = nc_c.variables['pre_dmid1'][:]
-                        p2 = nc_c.variables['pre_sdid2'][:]
-                        d2 = nc_c.variables['pre_dmid2'][:]
+                        p1 = read_tracking_var(nc_c, ['pre_sdid1', 'sd_id1'], ['pre_sdid1_', 'sd_id1_'])
+                        d1 = read_tracking_var(nc_c, ['pre_dmid1', 'dm_id1'], ['pre_dmid1_', 'dm_id1_'])
+                        p2 = read_tracking_var(nc_c, ['pre_sdid2', 'sd_id2'], ['pre_sdid2_', 'sd_id2_'])
+                        d2 = read_tracking_var(nc_c, ['pre_dmid2', 'dm_id2'], ['pre_dmid2_', 'dm_id2_'])
                         nc_ = nc_c.variables['num_col'][:]
 
                     c_dict = {}
@@ -597,9 +633,9 @@ def process_single_particle_block(particle_block, input_directory, time_steps, n
                                     'sd_x': ofnc.variables['sd_x'][:],
                                     'sd_y': ofnc.variables['sd_y'][:],
                                     'sd_z': ofnc.variables['sd_z'][:],
-                                    'pre_sdid': ofnc.variables['pre_sdid'][:],
-                                    'pre_dmid': ofnc.variables['pre_dmid'][:],
-                                    'if_coal': ofnc.variables['if_coal'][:]
+                                    'pre_sdid': read_tracking_var(ofnc, ['pre_sdid', 'sd_id'], ['pre_sdid_', 'sd_id_']),
+                                    'pre_dmid': read_tracking_var(ofnc, ['pre_dmid', 'dm_id'], ['pre_dmid_', 'dm_id_']),
+                                    'if_coal': read_tracking_var(ofnc, ['if_coal'], ['if_coal_'])
                                 }
                                 ofnc.close()
                             except Exception as e:
@@ -739,9 +775,9 @@ def merge_temp_files(output_file, output_dir, time_steps, num_blocks, block_size
                 sd_x_arr = nc.variables['sd_x'][:] if 'sd_x' in nc.variables else None
                 sd_y_arr = nc.variables['sd_y'][:] if 'sd_y' in nc.variables else None
                 sd_z_arr = nc.variables['sd_z'][:] if 'sd_z' in nc.variables else None
-                pre_sdid_arr = nc.variables['pre_sdid'][:] if 'pre_sdid' in nc.variables else None
-                pre_dmid_arr = nc.variables['pre_dmid'][:] if 'pre_dmid' in nc.variables else None
-                if_coal_arr = nc.variables['if_coal'][:] if 'if_coal' in nc.variables else None
+                pre_sdid_arr = read_tracking_var(nc, ['pre_sdid', 'sd_id'], ['pre_sdid_', 'sd_id_'])
+                pre_dmid_arr = read_tracking_var(nc, ['pre_dmid', 'dm_id'], ['pre_dmid_', 'dm_id_'])
+                if_coal_arr = read_tracking_var(nc, ['if_coal'], ['if_coal_'])
                 other_pre_dmid_arr = nc.variables['other_pre_dmid'][:] if 'other_pre_dmid' in nc.variables else None
                 other_pre_sdid_arr = nc.variables['other_pre_sdid'][:] if 'other_pre_sdid' in nc.variables else None
                 num_col_arr = nc.variables['num_col'][:] if 'num_col' in nc.variables else None

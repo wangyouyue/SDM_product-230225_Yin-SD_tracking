@@ -1,29 +1,39 @@
 #include "gtool_file.h"
 
+#ifndef GTOOL_FC_CHARLEN_T
+#define GTOOL_FC_CHARLEN_T size_t
+#endif
+
+typedef GTOOL_FC_CHARLEN_T fortran_charlen_t;
+
 static void fstr2cstr( char   *cstr, // (out)
                        char   *fstr, // (in)
-                       int32_t len)
+                       size_t len)
 {
-  int i;
+  size_t i;
+  size_t trim_len;
+
+  if ( len == 0 ) {
+    cstr[0] = '\0';
+    return;
+  }
 
   if ( cstr != fstr )
     for ( i=0; i<len; i++ )
       cstr[i] = fstr[i];
 
-  for ( i=len-1; i>=0; i-- ) {
-    if ( cstr[i] != ' ' ) {
-      i += 1;
-      break;
-    }
-  }
-  cstr[i] = '\0';
+  trim_len = len;
+  while ( trim_len > 0 && cstr[trim_len-1] == ' ' )
+    trim_len--;
+
+  cstr[trim_len] = '\0';
 }
 
 static void cstr2fstr( char   *fstr, // (out)
                        char   *cstr, // (in)
-                       int32_t len)
+                       size_t len)
 {
-  int i;
+  size_t i;
 
   if ( fstr != cstr )
     for ( i=0; i<len; i++ )
@@ -41,10 +51,10 @@ void file_open_( int32_t *fid,       // (out)
                  int32_t *mode,      // (in)
                  int32_t *comm,      // (in)
                  int32_t *error,     // (out)
-                 int32_t  fname_len) // (in)
+                 fortran_charlen_t fname_len) // (in)
 {
   char _fname[File_HLONG+1];
-  int32_t len;
+  size_t len;
 
   len = fname_len > File_HLONG ? File_HLONG : fname_len;
   fstr2cstr(_fname, fname, len);
@@ -57,14 +67,14 @@ void file_set_option_( int32_t *fid,      // (in)
                        char    *key,      // (in)
                        char    *val,      // (in)
                        int32_t *error,    // (out)
-                       int32_t filetype_len,
-                       int32_t key_len,
-                       int32_t val_len)
+                       fortran_charlen_t filetype_len,
+                       fortran_charlen_t key_len,
+                       fortran_charlen_t val_len)
 {
   char _filetype[File_HSHORT+1];
   char _key[File_HMID+1];
   char _val[File_HMID+1];
-  int32_t len;
+  size_t len;
 
   len = filetype_len > File_HSHORT ? File_HSHORT : filetype_len;
   fstr2cstr(_filetype, filetype, len);
@@ -84,10 +94,10 @@ void file_get_datainfo_( datainfo_t *dinfo,       // (out)
                          int32_t    *step,        // (in)
                          int32_t    *suppress,    // (in)
                          int32_t    *error,       // (out)
-                         int32_t     varname_len) // (in)
+                         fortran_charlen_t varname_len) // (in)
 {
   char _varname[File_HSHORT+1];
-  int32_t len;
+  size_t len;
   int i;
 
   len = varname_len > File_HSHORT ? File_HSHORT : varname_len;
@@ -151,12 +161,12 @@ void file_get_global_attribute_text_( int32_t *fid,        // (in)
                                       char    *key,        // (in)
                                       char    *value,      // (out)
                                       int32_t *error,      // (out)
-                                      int32_t  key_len,    // (in)
-                                      int32_t  value_len ) // (in)
+                                      fortran_charlen_t key_len,    // (in)
+                                      fortran_charlen_t value_len ) // (in)
 {
   char _key[File_HLONG+1];
   char _value[File_HLONG+1];
-  int32_t len;
+  size_t len;
 
   len = key_len > File_HLONG ? File_HLONG : key_len;
   fstr2cstr(_key, key, len);
@@ -172,7 +182,7 @@ void file_get_global_attribute_int_( int32_t *fid,      // (in)
                                      int32_t *len,      // (in)
                                      int32_t *value,    // (out)
                                      int32_t *error,    // (out)
-                                     int32_t  key_len ) // (in)
+                                     fortran_charlen_t key_len ) // (in)
 {
   char _key[File_HLONG+1];
   int32_t l;
@@ -188,7 +198,7 @@ void file_get_global_attribute_float_( int32_t *fid,      // (in)
                                        int32_t *len,      // (in)
                                        float   *value,    // (out)
                                        int32_t *error,    // (out)
-                                       int32_t  key_len ) // (in)
+                                       fortran_charlen_t key_len ) // (in)
 {
   char _key[File_HLONG+1];
   int32_t l;
@@ -204,7 +214,7 @@ void file_get_global_attribute_double_( int32_t *fid,      // (in)
                                         int32_t *len,      // (in)
                                         double  *value,    // (out)
                                         int32_t *error,    // (out)
-                                        int32_t  key_len ) // (in)
+                                        fortran_charlen_t key_len ) // (in)
 {
   char _key[File_HLONG+1];
   int32_t l;
@@ -219,12 +229,12 @@ void file_set_global_attribute_text_( int32_t *fid,        // (in)
                                       char    *key,        // (in)
                                       char    *value,      // (in)
                                       int32_t *error,      // (out)
-                                      int32_t  key_len,    // (in)
-                                      int32_t  value_len ) // (in)
+                                      fortran_charlen_t key_len,    // (in)
+                                      fortran_charlen_t value_len ) // (in)
 {
   char _key[File_HLONG+1];
   char _value[File_HLONG+1];
-  int32_t len;
+  size_t len;
 
   len = key_len > File_HLONG ? File_HLONG : key_len;
   fstr2cstr(_key, key, len);
@@ -240,7 +250,7 @@ void file_set_global_attribute_int_( int32_t *fid,      // (in)
                                      int32_t *value,    // (in)
                                      int32_t *len,      // (in)
                                      int32_t *error,    // (out)
-                                     int32_t  key_len ) // (in)
+                                     fortran_charlen_t key_len ) // (in)
 {
   char _key[File_HLONG+1];
 
@@ -255,7 +265,7 @@ void file_set_global_attribute_float_( int32_t *fid,      // (in)
                                        float   *value,    // (in)
                                        int32_t *len,      // (in)
                                        int32_t *error,    // (out)
-                                       int32_t  key_len ) // (in)
+                                       fortran_charlen_t key_len ) // (in)
 {
   char _key[File_HLONG+1];
   int32_t l;
@@ -271,7 +281,7 @@ void file_set_global_attribute_double_( int32_t *fid,      // (in)
                                         double  *value,    // (in)
                                         int32_t *len,      // (in)
                                         int32_t *error,    // (out)
-                                        int32_t  key_len ) // (in)
+                                        fortran_charlen_t key_len ) // (in)
 {
   char _key[File_HLONG+1];
   int32_t l;
@@ -285,7 +295,7 @@ void file_set_global_attribute_double_( int32_t *fid,      // (in)
 void file_set_tunits_( int32_t *fid,        // (in)
                        char    *time_units, // (in)
                        int32_t *error,      // (in)
-                       int32_t  len)        // (in)
+                       fortran_charlen_t len)        // (in)
 {
   char _time_units[File_HMID+1];
 
@@ -300,14 +310,14 @@ void file_set_tattr_( int32_t *fid,       // (in)
                       char    *key,       // (in)
                       char    *val,       // (in)
                       int32_t *error,     // (out)
-                      int32_t  vname_len, // (in)
-                      int32_t  key_len,   // (in)
-                      int32_t  val_len)   // (in)
+                      fortran_charlen_t vname_len, // (in)
+                      fortran_charlen_t key_len,   // (in)
+                      fortran_charlen_t val_len)   // (in)
 {
   char _vname[File_HSHORT+1];
   char _key[File_HSHORT+1];
   char _val[File_HLONG+1];
-  int32_t len;
+  size_t len;
 
   len = vname_len > File_HLONG ? File_HLONG : vname_len;
   fstr2cstr(_vname, vname, len);
@@ -331,16 +341,16 @@ void file_put_axis_( int32_t *fid,          // (in)
                      int32_t *size,         // (in)
                      int32_t *precision,    // (in)
                      int32_t *error,        // (out)
-                     int32_t  name_len,     // (in)
-                     int32_t  desc_len,     // (in)
-                     int32_t  units_len,    // (in)
-                     int32_t  dim_name_len) // (in)
+                     fortran_charlen_t name_len,     // (in)
+                     fortran_charlen_t desc_len,     // (in)
+                     fortran_charlen_t units_len,    // (in)
+                     fortran_charlen_t dim_name_len) // (in)
 {
   char _name[File_HSHORT+1];
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char _dim_name[File_HSHORT+1];
-  int len;
+  size_t len;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
   fstr2cstr(_name, name, len);
@@ -365,16 +375,16 @@ void file_def_axis_( int32_t *fid,          // (in)
                      int32_t *dtype,        // (in)
                      int32_t *dim_size,     // (in)
                      int32_t *error,        // (out)
-                     int32_t  name_len,     // (in)
-                     int32_t  desc_len,     // (in)
-                     int32_t  units_len,    // (in)
-                     int32_t  dim_name_len) // (in)
+                     fortran_charlen_t name_len,     // (in)
+                     fortran_charlen_t desc_len,     // (in)
+                     fortran_charlen_t units_len,    // (in)
+                     fortran_charlen_t dim_name_len) // (in)
 {
   char _name[File_HSHORT+1];
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char _dim_name[File_HSHORT+1];
-  int len;
+  size_t len;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
   fstr2cstr(_name, name, len);
@@ -398,10 +408,10 @@ void file_write_axis_( int32_t *fid,          // (in)
                        int32_t *start,        // (in)
                        int32_t *count,        // (in)
                        int32_t *error,        // (out)
-                       int32_t  name_len)     // (in)
+                       fortran_charlen_t name_len)     // (in)
 {
   char _name[File_HSHORT+1];
-  int len;
+  size_t len;
   MPI_Offset start_[1], count_[1];
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
@@ -424,16 +434,16 @@ void file_put_associated_coordinates_( int32_t *fid,          // (in)
                                        void    *val,          // (in)
                                        int32_t *precision,    // (in)
                                        int32_t *error,        // (out)
-                                       int32_t  name_len,     // (in)
-                                       int32_t  desc_len,     // (in)
-                                       int32_t  units_len,    // (in)
-                                       int32_t  dim_name_len) // (in)
+                                       fortran_charlen_t name_len,     // (in)
+                                       fortran_charlen_t desc_len,     // (in)
+                                       fortran_charlen_t units_len,    // (in)
+                                       fortran_charlen_t dim_name_len) // (in)
 {
   char _name[File_HSHORT+1];
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char **_dim_names;
-  int len;
+  size_t len;
   int i;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
@@ -462,16 +472,16 @@ void file_def_associated_coordinates_( int32_t *fid,          // (in)
                                        int32_t *ndims,        // (in)
                                        int32_t *dtype,        // (in)
                                        int32_t *error,        // (out)
-                                       int32_t  name_len,     // (in)
-                                       int32_t  desc_len,     // (in)
-                                       int32_t  units_len,    // (in)
-                                       int32_t  dim_name_len) // (in)
+                                       fortran_charlen_t name_len,     // (in)
+                                       fortran_charlen_t desc_len,     // (in)
+                                       fortran_charlen_t units_len,    // (in)
+                                       fortran_charlen_t dim_name_len) // (in)
 {
   char _name[File_HSHORT+1];
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char **_dim_names;
-  int len;
+  size_t len;
   int i;
 
   len = name_len > File_HSHORT ? File_HSHORT : name_len;
@@ -500,10 +510,11 @@ void file_write_associated_coordinates_( int32_t *fid,          // (in)
                                          int32_t *start,        // (in)
                                          int32_t *count,        // (in)
                                          int32_t *error,        // (out)
-                                         int32_t  name_len)     // (in)
+                                         fortran_charlen_t name_len)     // (in)
 {
   char _name[File_HSHORT+1];
-  int i, len;
+  int i;
+  size_t len;
   MPI_Offset start_[4], count_[4];
   /* all associated coordinates are up to 4D */
 
@@ -528,16 +539,16 @@ void file_add_variable_( int32_t  *vid,         // (out)
                          real64_t *tint,        // (in)
                          int32_t  *tavg,        // (in)
                          int32_t  *error,       // (out)
-                         int32_t   varname_len, // (in)
-                         int32_t   desc_len,    // (in)
-                         int32_t   units_len,   // (in)
-                         int32_t   dims_len)    // (in)
+                         fortran_charlen_t varname_len, // (in)
+                         fortran_charlen_t desc_len,    // (in)
+                         fortran_charlen_t units_len,   // (in)
+                         fortran_charlen_t dims_len)    // (in)
 {
   char _varname[File_HSHORT+1];
   char _desc[File_HMID+1];
   char _units[File_HMID+1];
   char **_dims;
-  int len;
+  size_t len;
   int i;
 
   len = varname_len > File_HSHORT ? File_HSHORT : varname_len;

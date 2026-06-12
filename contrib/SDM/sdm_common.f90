@@ -41,7 +41,6 @@
 !! @li      2019-07-01 (S.Shima) [mod] definition of namelist PARAM_ATMOS_PHY_MP_SDM
 !! @li      2019-10-07 (S.Shima) [add] aslset=5 for DYCOMSII(RF02) (Ackerman et al. 2009)
 !! @li      2020-07-23 (S.Shima) [add] variables for sdm_dmpvar == 1?? and sdm_dmpvar == 2??
-!! @li      2023-11-22 (C.Yin)   [mod] save and domain index of super-droplets
 !!
 !< 
 !-------------------------------------------------------------------------------
@@ -80,6 +79,7 @@ module m_sdm_common
   character(len=H_LONG), save :: RANDOM_IN_BASENAME = ''
   character(len=H_LONG), save :: RANDOM_OUT_BASENAME = ''
   type(c_rng_uniform_mt), save :: rng_s2c
+  type(c_rng_uniform_mt), save :: rng_tracking_s2c
   integer, save :: fid_sd_i, fid_sd_o
   integer, save :: fid_random_i, fid_random_o
   logical, save :: sd_rest_flg_in = .false. ! restart flg of Super Droplet
@@ -164,7 +164,7 @@ module m_sdm_common
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable :: sbuf_i4(:,:,:)
                        ! sending buffer for MPI (int4)
-                       ! dim02 = 2/3 number of monomers, save and domain index
+                       ! dim02 = 2/3 number of monomers (ice), save and domain index
                        ! dim03 = 1:west, 2:east / 1:south, 2:north
   integer, allocatable, save :: sdm_itmp1(:)
   integer, allocatable, save :: sdm_itmp2(:)
@@ -215,8 +215,8 @@ module m_sdm_common
 
   !! These working arrays are needed due to the scale restart output timimg. Could be removed in the future scale version.  
   integer(DP), allocatable, save :: sdn_s2c_restart(:)      ! multipilicity
-  integer, allocatable, save :: sdid_s2c_restart(:)     ! save index
-  integer, allocatable, save :: dmid_s2c_restart(:)     ! domain index
+  integer, allocatable, save     :: sdid_s2c_restart(:)     ! save index
+  integer, allocatable, save     :: dmid_s2c_restart(:)     ! domain index
   integer(i2), allocatable, save :: ifcoal_s2c_restart(:)   ! coal flag
   real(RP), allocatable, save    :: sdrk_s2c_restart(:)     ! index-k(real) of s.d.
   real(RP), allocatable, save    :: sdx_s2c_restart(:)      ! x-cordinate of s.d.
@@ -473,34 +473,48 @@ module m_sdm_common
                                        ! 2nd digit (10^1) corresponds to binary output
                                        ! 3rd digit (10^2) corresponds to binary output of large droplets 
                                        ! 0: off, 1: on, 2: output with sort data (only for binary output)
-                                       ! 100 enables SD_selected_NetCDF output path
                                        ! currently only 001 is supported   
   real(RP), save :: sdm_dmpitva  = 0.e0 ! Time interval of text output [s]
   integer, save :: sdm_dmpnskip = 1     ! Base skip to store super droplets in text format
   real(RP), save :: sdm_dmpitvb  = 0.e0  ! Time interval of binary output of all droplets [s]
   real(RP), save :: sdm_dmpitvl  = 0.e0  ! Time interval of binary output of large droplets [s]
   real(RP), save :: sdm_dmpsdsiz = 0.e0  ! Threshold radius to store large super droplets in binary format [m]
-  logical, save :: backward_tracking_enable = .true. ! Master switch for backward tracking
-  logical, save :: coalescence_output_enable = .true. ! Master switch for coalescence event output files and variables (default ON)
-  character(len=32), save :: tracking_selection_mode = 'random'
-  real(RP), save :: tracking_fraction = 1.0_RP ! Fraction of SDs to keep tracked (0-1]
-  integer, save :: max_tracked_sds = 0 ! Hard cap of tracked SDs, 0 means unlimited
-  real(RP), save :: tracking_height_min = 0.0_RP ! Lower height bound for stratified candidate selection [m]
-  real(RP), save :: tracking_height_max = 1.0E9_RP ! Upper height bound for stratified candidate selection [m]
-  real(RP), save :: tracking_radius_min = 0.0_RP ! Lower radius bound for stratified candidate selection [m]
-  real(RP), save :: tracking_radius_max = 0.0_RP ! Upper radius bound [m]; <= tracking_radius_min means auto-use runtime max radius
+  integer, save :: tracking_mode = 0
+                                             ! 0: no tracking
+                                             ! 1: forward tracking
+                                             ! 2: backward tracking
+  logical, save :: forward_tracking_enable = .false.  ! Internal runtime flag derived from tracking_mode
+  logical, save :: backward_tracking_enable = .false. ! Internal runtime flag derived from tracking_mode
+  character(len=32), save :: tracking_selection_mode = 'random' ! random/stratified/none selection
+  real(RP), save :: tracking_fraction = 1.0_RP       ! 1.0 disables downsampling; ignored when tracking_selection_mode='none'
+  integer, save :: max_tracked_sds = 0
+  integer, save :: tracking_sampling_seed = 0
+  real(RP), save :: tracking_height_min = 400.0_RP
+  real(RP), save :: tracking_height_max = 800.0_RP
+  real(RP), save :: tracking_radius_min = 1.E-6_RP
+  real(RP), save :: tracking_radius_max = 0.0_RP
   integer, save :: tracking_nz_bin = 8
   integer, save :: tracking_nr_bin = 10
   integer, save :: tracking_min_per_bin = 1
   logical, save :: tracking_fallback_to_random = .true.
-  logical, save :: tracked_grid_coal_only = .false. ! Output only SD histories with coalescence flag when true, default off to keep full backward chain
-  logical, save :: tracking_sample_initialized = .false. ! Track subset is sampled only once to keep a consistent backward-tracked population
-  real(DP), save :: tracking_time_id_assign = 0.0_DP ! Accumulated wall-time for ID (re)assignment
-  real(DP), save :: tracking_time_boundary_x = 0.0_DP ! Accumulated wall-time for x-direction boundary transfer
-  real(DP), save :: tracking_time_boundary_y = 0.0_DP ! Accumulated wall-time for y-direction boundary transfer
-  integer, save :: tracking_count_id_assign = 0 ! Number of ID (re)assignment timing samples
-  integer, save :: tracking_count_boundary_x = 0 ! Number of x-direction boundary timing samples
-  integer, save :: tracking_count_boundary_y = 0 ! Number of y-direction boundary timing samples
+  character(len=H_LONG), save :: tracking_id_input_basename = ''
+  character(len=H_LONG), save :: tracking_id_output_basename = ''
+  logical, save :: tracking_interest_radius_enable = .false.
+  real(RP), save :: tracking_interest_radius_threshold = 0.0_RP ! SDs with radius >= this value are treated as interest targets
+  logical, save :: tracking_interest_coalescence_enable = .false.
+  logical, save :: tracking_sample_initialized = .false.
+  real(DP), save :: tracking_time_id_assign = 0.0_DP
+  real(DP), save :: tracking_time_boundary_x = 0.0_DP
+  real(DP), save :: tracking_time_boundary_y = 0.0_DP
+  integer, save :: tracking_count_id_assign = 0
+  integer, save :: tracking_count_boundary_x = 0
+  integer, save :: tracking_count_boundary_y = 0
+  logical, save :: coalescence_output_enable = .true. ! Master switch for SD_coal_output_NetCDF_* (default ON)
+  logical, save :: gmd_benchmark_diag_enable = .false. ! Optional GMD benchmark diagnostics; default OFF
+  logical, save :: random_perturbation_enable = .false. ! Master switch for random perturbation in SD motion (default OFF)
+  real(RP), save :: random_perturbation_amp = 0.0_RP ! Random perturbation amplitude [m^1.5 * s^-0.5]
+  real(RP), save :: sdm_noise_amp = 0.0_RP ! amplitude of random noise [m^1.5 * s^-0.5]
+  integer(i2), save :: coal_output = 1        ! Control flag to output coalescence events. 0: off, 1: on
 
   data sdm_dtcmph / 0.1_RP,0.1_RP,0.1_RP,0.1_RP,0.1_RP /
   data sdm_calvar / .false.,.false.,.false.,.false.,.false. /
@@ -522,7 +536,6 @@ module m_sdm_common
                                                ! 5:precipitation rate, 6:precipitation accumulation
   real(RP), allocatable, save  :: zph_crs(:,:,:), dxiv_sdm(:), dyiv_sdm(:)!, dziv_sdm(:)
   real(RP), allocatable, save  :: dx_sdm(:), dy_sdm(:)!, dz_sdm(:)   ! Dx, Dy, Dz for SDM (normally they are equal to those of SCALE)
-  real(RP), save :: sdm_noise_amp = 1.E-4_RP ! amplitude of random noise [m^1.5 * s^-0.5]
 !  integer, parameter :: nqw = QQA
   integer, save :: sdfmnum_s2c
   real(RP), save:: sdininum_s2c
@@ -533,7 +546,6 @@ module m_sdm_common
   integer, save :: bufsiz2_i2 ! buffer size for MPI (int2)
   integer, save :: bufsiz2_i4 ! buffer size for MPI (int4)
   integer, save :: ni_s2c, nj_s2c, nk_s2c
-  integer, save :: tag
   integer, parameter :: nomp = 1
   integer, save :: wbc=1, ebc=1, sbc=1, nbc=1  ! only periodic boundary is applied
   integer, save :: nsub   ! Number of sub domain in group domain
@@ -635,21 +647,29 @@ module m_sdm_common
        sdm_dmpitvb,         &
        sdm_dmpitvl,         &
        sdm_dmpsdsiz,        &
-       sdm_noise_amp,       &
-       backward_tracking_enable, &
-       coalescence_output_enable, &
+       tracking_mode,       &
        tracking_selection_mode, &
        tracking_fraction,   &
        max_tracked_sds,     &
+       tracking_sampling_seed, &
        tracking_height_min, &
        tracking_height_max, &
        tracking_radius_min, &
        tracking_radius_max, &
-       tracking_nz_bin, &
-       tracking_nr_bin, &
+       tracking_nz_bin,     &
+       tracking_nr_bin,     &
        tracking_min_per_bin, &
        tracking_fallback_to_random, &
-       tracked_grid_coal_only, &
-       tracking_sample_initialized
+       tracking_id_input_basename, &
+       tracking_id_output_basename, &
+       tracking_interest_radius_enable, &
+       tracking_interest_radius_threshold, &
+       tracking_interest_coalescence_enable, &
+       coalescence_output_enable, &
+       gmd_benchmark_diag_enable, &
+       random_perturbation_enable, &
+       random_perturbation_amp, &
+       sdm_noise_amp,       &
+       coal_output
 
 end module m_sdm_common
