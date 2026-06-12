@@ -5,7 +5,7 @@ title: "SCALE-SDM super-droplet tracking suite with forward/backward tracking an
 authors:
   - family-names: "Yin"
     given-names: "Chongzhi"
-version: "1.2.0"
+version: "GMD2026_FW_BW_TPHT_v1.2.1"
 date-released: "2026-06-12"
 repository-code: "https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking"
 url: "https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking"
