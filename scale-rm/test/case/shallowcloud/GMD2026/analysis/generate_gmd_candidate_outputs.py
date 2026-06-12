@@ -55,6 +55,7 @@ CLAIMS = {
     "main_candidate_controlled_benchmark_overhead": "The controlled cold-start 3D benchmark quantifies the runtime, memory, and I/O overheads of practical sampled FW/BW tracking relative to no-tracking and coalescence-log-only baselines.",
     "main_candidate_TPHT_handoff_storage": "TPHT handoff diagnostics compare all-time selected records, deduplicated target identities, BW-reconstructed target histories, and estimated full-population backward storage.",
     "main_candidate_TPHT_target_diagnostics": "The TPHT diagnostics show that most classified targets were selected by the radius criterion and remained near the 15 micrometer threshold, with first threshold-crossing occurrences concentrated around 750-1000 m.",
+    "main_candidate_TPHT_target_diagnostics_abc": "The TPHT diagnostics show that most classified targets were selected by the radius criterion and remained near the 15 micrometer threshold, with first threshold-crossing occurrences concentrated around 750-1000 m.",
     "main_candidate_scalability_io_sensitivity": "Tracking cost and output burden increase with the number of super-droplets and selected-SD output frequency, motivating sampled and output-frequency-aware tracking configurations.",
     "supp_candidate_restart_sanity": "The cold-start setup and optional restart sanity outputs completed with expected timing and file generation.",
     "supp_candidate_full_benchmark_diagnostics": "Detailed diagnostics support the controlled benchmark summary shown in the main-candidate figure.",
@@ -114,6 +115,15 @@ def read_rows(input_dir: Path, table_name: str) -> list[dict[str, str]]:
         return []
     with path.open(newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def iter_rows(input_dir: Path, table_name: str):
+    """Stream one source CSV table row by row."""
+    path = input_dir / "tables" / f"{table_name}.csv"
+    if not path.exists():
+        return
+    with path.open(newline="") as handle:
+        yield from csv.DictReader(handle)
 
 
 def first_row(rows: list[dict[str, str]]) -> dict[str, str]:
@@ -295,17 +305,53 @@ def target_category_counts(input_dir: Path) -> dict[str, float]:
         value = num(row, "target_count")
         if category and value is not None:
             counts[category] = value
+    if counts:
+        return counts
 
-    target_rows = read_rows(input_dir, "02_tpht_science_target_summary")
-    if target_rows:
-        fallback_counts: dict[str, float] = {}
-        for row in target_rows:
-            category = row.get("first_selected_category") or row.get("category") or "unknown"
-            fallback_counts[category] = fallback_counts.get(category, 0.0) + 1.0
-        for category, value in fallback_counts.items():
-            if counts.get(category) is None:
-                counts[category] = value
+    for row in iter_rows(input_dir, "02_tpht_science_target_summary") or ():
+        category = row.get("first_selected_category") or row.get("category") or "unknown"
+        counts[category] = counts.get(category, 0.0) + 1.0
     return counts
+
+
+def main_tpht_category_counts(input_dir: Path) -> tuple[dict[str, float], float]:
+    """Return main-figure TPHT categories with output-level unknown grouped as radius-triggered.
+
+    The raw target summary can contain a small ``unknown`` category when the
+    saved BW selected-output records do not recover the exact first-interest
+    record.  For the manuscript main figure, these are grouped with the radius
+    threshold category because the FW and BW trajectories are deterministic and
+    the downloaded diagnostics show no saved-output or event-log if_coal signal
+    for those rows.
+    """
+    counts = dict(target_category_counts(input_dir))
+    unknown = counts.get("unknown") or 0.0
+    counts["radius_only"] = (counts.get("radius_only") or 0.0) + unknown
+    counts["unknown"] = 0.0
+    return counts, unknown
+
+
+def main_first_large_height_bins(input_dir: Path) -> tuple[list[str], list[float]]:
+    """Return first-threshold height bins for the main TPHT diagnostic figure."""
+    bins = [(0.0, 400.0), (400.0, 600.0), (600.0, 800.0), (800.0, 1000.0)]
+    labels = ["0-400", "400-600", "600-800", "800-1000"]
+    counts = [0.0 for _ in bins]
+    saw_target_summary = False
+    for row in iter_rows(input_dir, "02_tpht_science_target_summary") or ():
+        saw_target_summary = True
+        height = safe_float(row.get("first_large_height_m"))
+        if height is None:
+            continue
+        for index, (lower, upper) in enumerate(bins):
+            if lower <= height < upper:
+                counts[index] += 1.0
+                break
+    if saw_target_summary:
+        return labels, counts
+
+    # Fallback for old analysis bundles that do not contain per-target heights.
+    rows = [row for row in read_rows(input_dir, "02_tpht_science_formation_height_bins") if row.get("height_bin_m") not in ("", NA, "unknown")]
+    return [row.get("height_bin_m", "") for row in rows], [num(row, "target_count") or 0.0 for row in rows]
 
 
 def read_first_available_table(input_dir: Path, table_names: list[str]) -> tuple[str | None, list[dict[str, str]]]:
@@ -435,7 +481,7 @@ def make_candidate_tables(input_dir: Path, outdir: Path) -> None:
     write_table_bundle([tpht_row], table_path(outdir, MAIN_TABLE_DIR, "main_candidate_TPHT_summary"))
 
     science = first_row(read_rows(input_dir, "02_tpht_science_summary"))
-    category_counts = target_category_counts(input_dir)
+    category_counts, reassigned_unknown = main_tpht_category_counts(input_dir)
     target_count = num(science, "target_count", 86428.0)
     radius_only = category_counts.get("radius_only", 73818.0)
     coal_only = category_counts.get("coal_only", 2819.0)
@@ -450,6 +496,7 @@ def make_candidate_tables(input_dir: Path, outdir: Path) -> None:
         "coal_only": coal_only,
         "both": both,
         "unknown": unknown,
+        "unclassified_reassigned_to_radius_threshold": reassigned_unknown,
         "median_first_large_height_m": num(science, "median_first_large_height_m", 861.0),
         "median_first_large_radius_um": num(science, "median_first_large_radius_um", 15.16),
         "median_max_radius_um": num(science, "median_max_radius_um", 15.19),
@@ -625,12 +672,13 @@ def plot_tpht_handoff_storage(input_dir: Path, outdir: Path) -> dict[str, Any]:
     ax = axes[0, 0]
     ax.set_axis_off()
     xs = [0.12, 0.38, 0.64, 0.88]
-    labels = ["FW discovery\nsame T0", "raw IDs", "dedup IDs", "BW target run\nsame T0"]
+    labels = ["FW discovery\nsame T_0", "raw IDs", "dedup IDs", "BW target run\nsame T_0"]
     colors = [OKABE_ITO["blue"], OKABE_ITO["orange"], OKABE_ITO["bluish_green"], OKABE_ITO["vermillion"]]
     for x_pos, label, color in zip(xs, labels, colors):
         ax.text(x_pos, 0.55, label, ha="center", va="center", fontsize=7, bbox={"boxstyle": "round,pad=0.16", "fc": "white", "ec": color, "lw": 1.0})
     for x0, x1 in zip(xs[:-1], xs[1:]):
         ax.annotate("", xy=(x1 - 0.08, 0.55), xytext=(x0 + 0.08, 0.55), arrowprops={"arrowstyle": "->", "lw": 1.0, "color": "0.25"})
+    ax.text(0.5, 0.35, "FW: forward discovery pass; BW: backward reconstruction pass", ha="center", va="center", fontsize=6.7)
     ax.text(0.5, 0.18, "target-set handoff for interest-restricted backward reconstruction", ha="center", va="center", fontsize=7)
     add_panel_label(ax, "a")
 
@@ -660,6 +708,8 @@ def plot_tpht_handoff_storage(input_dir: Path, outdir: Path) -> dict[str, Any]:
     bw_selected = bytes_to_gib(num(row, "bw_sd_selected_output_bytes")) or 0.0
     measured_total = bytes_to_gib(num(row, "tpht_total_reconstruction_bytes")) or (raw_ids + dedup_ids + bw_selected)
     estimated_full = bytes_to_gib(num(row, "estimated_full_bw_output_bytes")) or 0.0
+    retained_after_raw_delete = max(measured_total - raw_ids, 0.0)
+    reduction_after_raw_delete = estimated_full / retained_after_raw_delete if retained_after_raw_delete > 0.0 else None
     storage_labels = ["raw .ids", "dedup .ids", "BW selected", "TPHT total", "Estimated\nfull BW"]
     storage_values = [raw_ids, dedup_ids, bw_selected, measured_total, estimated_full]
     bars = ax.bar(range(len(storage_labels)), storage_values, color=[OKABE_ITO["orange"], OKABE_ITO["bluish_green"], OKABE_ITO["blue"], OKABE_ITO["sky_blue"], "0.70"], edgecolor="black", linewidth=0.5)
@@ -679,11 +729,13 @@ def plot_tpht_handoff_storage(input_dir: Path, outdir: Path) -> dict[str, Any]:
         ["MPI match", str(value(row, "mpi_decomposition_match", "True"))],
         ["target reduction", f"{num(row, 'target_reduction_ratio', 0.004821):.4g} approx."],
         ["storage reduction", f"{num(row, 'estimated_storage_reduction_factor', 135.26):.1f}x est."],
+        ["after raw .ids deletion", f"{reduction_after_raw_delete:.1f}x est." if reduction_after_raw_delete is not None else NA],
     ]
     table = ax.table(cellText=consistency, colLabels=["diagnostic", "value"], cellLoc="left", colLoc="left", loc="center")
     table.auto_set_font_size(False)
-    table.set_fontsize(7)
-    table.scale(1.0, 1.2)
+    table.set_fontsize(6.6)
+    table.scale(1.0, 1.08)
+    table[(len(consistency), 1)].set_text_props(color=OKABE_ITO["vermillion"], weight="bold")
     add_panel_label(ax, "d")
     save_figure(fig, outdir / MAIN_FIG_DIR, "main_candidate_TPHT_handoff_storage")
     plt.close(fig)
@@ -700,20 +752,18 @@ def plot_tpht_handoff_storage(input_dir: Path, outdir: Path) -> dict[str, Any]:
         "legend_status": "no legend",
         "estimated_marked": "yes: hatched estimated full-BW output",
         "unknown_category_included": "not applicable",
-        "notes": "TPHT; Two-Pass Hybrid Tracking; all-time selected records; deduplicated target pairs; BW reconstructed target histories; missing_in_bw; extra_in_bw; estimated full-BW output; estimated storage reduction. The approximate all-valid-SD bar is inferred from deduplicated targets / target_reduction_ratio.",
+        "notes": "TPHT; Two-Pass Hybrid Tracking; all-time selected records; deduplicated target pairs; BW reconstructed target histories; missing_in_bw; extra_in_bw; estimated full-BW output; estimated storage reduction. The approximate all-valid-SD bar is inferred from deduplicated targets / target_reduction_ratio. The after-raw-.ids-deletion reduction assumes raw handoff IDs are removed after deduplication.",
     }
 
 
 def plot_tpht_target_diagnostics(input_dir: Path, outdir: Path) -> dict[str, Any]:
     """Draw TPHT target diagnostic characterization."""
     science = first_row(read_rows(input_dir, "02_tpht_science_summary"))
-    height_rows = read_rows(input_dir, "02_tpht_science_formation_height_bins")
-    category_counts = target_category_counts(input_dir)
+    category_counts, reassigned_unknown = main_tpht_category_counts(input_dir)
     target_count = num(science, "target_count", 86428.0)
     radius_only = category_counts.get("radius_only", 73818.0)
     coal_only = category_counts.get("coal_only", 2819.0)
     both = category_counts.get("both", 392.0)
-    unknown = category_counts.get("unknown")
 
     plt = configure_matplotlib()
     fig, axes = plt.subplots(2, 2, figsize=(MAIN_WIDTH, MAIN_WIDTH * 0.74), constrained_layout=True)
@@ -722,10 +772,6 @@ def plot_tpht_target_diagnostics(input_dir: Path, outdir: Path) -> dict[str, Any
     cats = ["radius only", "if_coal only", "both"]
     vals = [radius_only or 0.0, coal_only or 0.0, both or 0.0]
     colors = [OKABE_ITO["blue"], OKABE_ITO["vermillion"], OKABE_ITO["bluish_green"]]
-    if unknown is not None and unknown > 0.0:
-        cats.append("unclassified")
-        vals.append(unknown)
-        colors.append("0.65")
     bars = ax.bar(range(len(cats)), vals, color=colors, edgecolor="black", linewidth=0.5)
     ax.set_yscale("log")
     ax.set_xlabel("Target category")
@@ -735,11 +781,10 @@ def plot_tpht_target_diagnostics(input_dir: Path, outdir: Path) -> dict[str, Any
     add_panel_label(ax, "a")
 
     ax = axes[0, 1]
-    height_plot_rows = [row for row in height_rows if row.get("height_bin_m") not in ("", NA, "unknown")]
-    hlabels = [row.get("height_bin_m", "") for row in height_plot_rows]
-    hvals = [num(row, "target_count") or 0.0 for row in height_plot_rows]
-    bars = ax.bar(range(len(hlabels)), hvals, color=OKABE_ITO["orange"], edgecolor="black", linewidth=0.5)
-    ax.set_xlabel("Height of first threshold crossing (m)")
+    hlabels, hvals = main_first_large_height_bins(input_dir)
+    hcolors = [OKABE_ITO["sky_blue"], OKABE_ITO["orange"], OKABE_ITO["bluish_green"], OKABE_ITO["vermillion"]]
+    bars = ax.bar(range(len(hlabels)), hvals, color=hcolors[: len(hlabels)], edgecolor="black", linewidth=0.5)
+    ax.set_xlabel(f"Height of first r >= 15 {MICRON} crossing (m)")
     ax.set_ylabel("Target count")
     set_clean_categorical_axis(ax, hlabels, 25)
     annotate_bars_adaptive(ax, bars, "{:.0f}")
@@ -754,7 +799,7 @@ def plot_tpht_target_diagnostics(input_dir: Path, outdir: Path) -> dict[str, Any
     ax.set_ylabel(f"Radius ({MICRON})")
     set_clean_categorical_axis(ax, radius_labels, 0)
     annotate_inside(ax, bars, "{:.2f}")
-    ax.text(0.98, 0.08, f"threshold = 15 {MICRON}", transform=ax.transAxes, ha="right", va="bottom", fontsize=7)
+    ax.text(0.03, 0.92, f"15 {MICRON} threshold", transform=ax.transAxes, ha="left", va="top", fontsize=7, bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1.0})
     add_panel_label(ax, "c")
 
     ax = axes[1, 1]
@@ -780,14 +825,78 @@ def plot_tpht_target_diagnostics(input_dir: Path, outdir: Path) -> dict[str, Any
         "claim": CLAIMS["main_candidate_TPHT_target_diagnostics"],
         "source_tables": "02_tpht_target_categories.csv; 02_tpht_science_summary.csv; 02_tpht_science_formation_height_bins.csv",
         "panel_labels": "a,b,c,d",
-        "axis_labels": "Target category; Number of targets; Height of first threshold crossing (m); Radius (micrometer)",
+        "axis_labels": "Target category; Number of targets; Height of first r >= 15 micrometer crossing (m); Radius (micrometer)",
         "width_mm": 170,
         "x_tick_count_max": 4,
         "x_tick_label_max_chars": 16,
         "legend_status": "no legend",
         "estimated_marked": "not applicable",
-        "unknown_category_included": "yes" if unknown is not None and unknown > 0.0 else "source_na",
-        "notes": "TPHT diagnostic characterization; first-selected categories use first record satisfying an interest condition; unknown/unclassified is not plotted when the source category is NA; threshold-crossing targets; near-threshold droplets; if_coal binary flag; if_coal occurrence proxy; not an exact event-count diagnostic; no causal pathway implied.",
+        "unknown_category_included": "grouped_with_radius_threshold",
+        "notes": f"TPHT diagnostic characterization; first-selected categories use first record satisfying an interest condition; {reassigned_unknown:.0f} output-level unclassified targets are grouped with the radius-threshold category for the main manuscript figure; threshold-crossing targets; near-threshold droplets; if_coal binary flag; if_coal occurrence proxy; not an exact event-count diagnostic; no causal pathway implied.",
+    }
+
+
+def plot_tpht_target_diagnostics_abc(input_dir: Path, outdir: Path) -> dict[str, Any]:
+    """Draw the compact three-panel TPHT target diagnostic characterization."""
+    science = first_row(read_rows(input_dir, "02_tpht_science_summary"))
+    category_counts, reassigned_unknown = main_tpht_category_counts(input_dir)
+    radius_only = category_counts.get("radius_only", 73818.0)
+    coal_only = category_counts.get("coal_only", 2819.0)
+    both = category_counts.get("both", 392.0)
+
+    plt = configure_matplotlib()
+    fig, axes = plt.subplots(1, 3, figsize=(MAIN_WIDTH, MAIN_WIDTH * 0.34), constrained_layout=True)
+
+    ax = axes[0]
+    cats = ["radius only", "if_coal only", "both"]
+    vals = [radius_only or 0.0, coal_only or 0.0, both or 0.0]
+    colors = [OKABE_ITO["blue"], OKABE_ITO["vermillion"], OKABE_ITO["bluish_green"]]
+    bars = ax.bar(range(len(cats)), vals, color=colors, edgecolor="black", linewidth=0.5)
+    ax.set_yscale("log")
+    ax.set_xlabel("Target category")
+    ax.set_ylabel("Targets (log10 scale)")
+    set_clean_categorical_axis(ax, cats, 30)
+    annotate_inside(ax, bars, "{:.0f}", log_scale=True)
+    add_panel_label(ax, "a")
+
+    ax = axes[1]
+    hlabels, hvals = main_first_large_height_bins(input_dir)
+    hcolors = [OKABE_ITO["sky_blue"], OKABE_ITO["orange"], OKABE_ITO["bluish_green"], OKABE_ITO["vermillion"]]
+    bars = ax.bar(range(len(hlabels)), hvals, color=hcolors[: len(hlabels)], edgecolor="black", linewidth=0.5)
+    ax.set_xlabel(f"Height of first r >= 15 {MICRON} crossing (m)")
+    ax.set_ylabel("Target count")
+    set_clean_categorical_axis(ax, hlabels, 30)
+    annotate_bars_adaptive(ax, bars, "{:.0f}")
+    add_panel_label(ax, "b")
+
+    ax = axes[2]
+    radius_labels = [f"first r>=15 {MICRON}\nmedian", "max radius\nmedian"]
+    radius_values = [num(science, "median_first_large_radius_um", 15.16), num(science, "median_max_radius_um", 15.19)]
+    bars = ax.bar(range(len(radius_labels)), [v or 0.0 for v in radius_values], color=[OKABE_ITO["blue"], OKABE_ITO["sky_blue"]], edgecolor="black", linewidth=0.5)
+    ax.axhline(15.0, color="0.25", linestyle="--", linewidth=0.8)
+    ax.set_xlabel("Radius diagnostic")
+    ax.set_ylabel(f"Radius ({MICRON})")
+    set_clean_categorical_axis(ax, radius_labels, 0)
+    annotate_inside(ax, bars, "{:.2f}")
+    ax.text(0.03, 0.92, f"15 {MICRON} threshold", transform=ax.transAxes, ha="left", va="top", fontsize=7, bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1.0})
+    add_panel_label(ax, "c")
+
+    save_figure(fig, outdir / MAIN_FIG_DIR, "main_candidate_TPHT_target_diagnostics_abc")
+    plt.close(fig)
+    return {
+        "figure_stem": "main_candidate_TPHT_target_diagnostics_abc",
+        "category": "main_candidate",
+        "claim": CLAIMS["main_candidate_TPHT_target_diagnostics_abc"],
+        "source_tables": "02_tpht_target_categories.csv; 02_tpht_science_summary.csv; 02_tpht_science_formation_height_bins.csv",
+        "panel_labels": "a,b,c",
+        "axis_labels": "Target category; Number of targets; Height of first r >= 15 micrometer crossing (m); Radius (micrometer)",
+        "width_mm": 170,
+        "x_tick_count_max": 4,
+        "x_tick_label_max_chars": 16,
+        "legend_status": "no legend",
+        "estimated_marked": "not applicable",
+        "unknown_category_included": "grouped_with_radius_threshold",
+        "notes": f"Preferred compact TPHT diagnostic characterization; {reassigned_unknown:.0f} output-level unclassified targets are grouped with the radius-threshold category for the main manuscript figure; threshold-crossing targets; near-threshold droplets; if_coal binary flag; no causal pathway implied.",
     }
 
 
@@ -816,13 +925,15 @@ def plot_scalability_io(input_dir: Path, outdir: Path) -> dict[str, Any]:
     filtered_io = [row for row in io_rows if row.get("tracking_label") in ("FW005", "BW005")]
     for ax, key, ylabel, panel in (
         (axes[1, 0], "sd_selected_output_bytes", "Selected SD output size (MiB)", "c"),
-        (axes[1, 1], "number_of_output_files", "Output files (count)", "d"),
+        (axes[1, 1], "sd_output_write_time_per_rank_file_s", "Mean SD write time (s/write)", "d"),
     ):
         for mode in ("FW005", "BW005"):
             rows = sorted([row for row in filtered_io if row.get("tracking_label") == mode], key=lambda row: num(row, "output_interval_s") or 0.0)
             xs = [num(row, "output_interval_s") for row in rows]
             if key.endswith("_bytes"):
                 ys = [bytes_to_mib(num(row, key)) for row in rows]
+            elif key == "sd_output_write_time_per_rank_file_s":
+                ys = [sd_write_time_per_rank_file(row) for row in rows]
             else:
                 ys = [num(row, key) for row in rows]
             ax.plot(xs, ys, marker="o", label=CASE_LABELS.get(mode, mode), color=mode_colors[mode], linewidth=1.0)
@@ -839,14 +950,14 @@ def plot_scalability_io(input_dir: Path, outdir: Path) -> dict[str, Any]:
         "claim": CLAIMS["main_candidate_scalability_io_sensitivity"],
         "source_tables": "04_sdnc_scaling_summary.csv; 05_outint_io_summary.csv",
         "panel_labels": "a,b,c,d",
-        "axis_labels": "Initial SD number per grid cell; Wall-clock time (s); Peak memory (MiB); SD output interval (s); Selected SD output size (MiB); Output files (count)",
+        "axis_labels": "Initial SD number per grid cell; Wall-clock time (s); Peak memory (MiB); SD output interval (s); Selected SD output size (MiB); Mean SD write time (s/write)",
         "width_mm": 170,
         "x_tick_count_max": 4,
         "x_tick_label_max_chars": 5,
         "legend_status": "inside clear area",
         "estimated_marked": "not applicable",
         "unknown_category_included": "not applicable",
-        "notes": "SDNC scaling; output interval I/O sensitivity; selected SD output; sampled forward tracking; sampled backward tracking.",
+        "notes": "SDNC scaling; output interval I/O sensitivity; selected SD output; sampled forward tracking; sampled backward tracking. Mean SD write time uses sd_output_write_time_mean_s or rank-summed total/count when mean is unavailable.",
     }
 
 
@@ -1263,7 +1374,7 @@ OPTIONAL_TPHT_SPECS: list[dict[str, Any]] = [
     {
         "stem": "supp_candidate_TPHT_predecessor_tree_examples",
         "source_tables": ["02_tpht_predecessor_tree_examples"],
-        "required_columns": ["example_id", "node_id", "predecessor_id", "time_s", "radius_um", "if_coal"],
+        "required_columns": ["example_id", "node_id", "predecessor_id", "time_s", "radius_um", "partner_radius_um", "if_coal"],
         "plotter": "predecessor_tree",
     },
     {
@@ -1537,6 +1648,7 @@ def plot_optional_predecessor_tree(rows: list[dict[str, str]], outdir: Path, ste
         scatter = None
         for panel_index, (ax, example) in enumerate(zip(axes.ravel(), batch_examples)):
             subset = sorted([row for row in rows if row.get("example_id") == example], key=lambda row: (num(row, "time_s") or -math.inf, str(row.get("node_id"))))
+            node_by_id = {str(row.get("node_id")): row for row in subset if row.get("node_id") not in ("", None, "NA")}
             trunk_rows = [row for row in subset if row.get("node_role") == "tracked_target_output"]
             trunk_x = [(num(row, "time_s") or math.nan) / 60.0 for row in trunk_rows]
             trunk_y = [num(row, "height_m") or math.nan for row in trunk_rows]
@@ -1559,28 +1671,39 @@ def plot_optional_predecessor_tree(rows: list[dict[str, str]], outdir: Path, ste
                     norm=norm,
                     s=28,
                     marker="o",
-                    edgecolor="black",
-                    linewidth=0.3,
+                    edgecolors="none",
+                    linewidths=0.0,
                     zorder=3,
                     label="important output node",
                 )
-            ifcoal_rows = [row for row in trunk_rows if _ifcoal_flag(row)]
-            if ifcoal_rows:
+            branch_rows = [row for row in subset if row.get("node_role") == "coalescence_partner_proxy"]
+            for row in branch_rows:
+                predecessor = node_by_id.get(str(row.get("predecessor_id")))
+                time_s = num(row, "time_s")
+                height_m = num(row, "height_m")
+                partner_radius_um = num(row, "partner_radius_um")
+                if time_s is None or height_m is None or partner_radius_um is None:
+                    continue
+                color = cmap(norm(partner_radius_um))
+                if predecessor is not None:
+                    pred_time_s = num(predecessor, "time_s")
+                    pred_height_m = num(predecessor, "height_m")
+                    if pred_time_s is not None and pred_height_m is not None:
+                        ax.plot([time_s / 60.0, pred_time_s / 60.0], [height_m, pred_height_m], color=color, linewidth=0.8, alpha=0.75, zorder=0)
                 ax.scatter(
-                    [(num(row, "time_s") or math.nan) / 60.0 for row in ifcoal_rows],
-                    [num(row, "height_m") or math.nan for row in ifcoal_rows],
-                    c=[num(row, "radius_um") or math.nan for row in ifcoal_rows],
-                    cmap=cmap,
-                    norm=norm,
+                    [time_s / 60.0],
+                    [height_m],
                     marker="^",
-                    s=24,
-                    edgecolor="black",
-                    linewidths=0.3,
-                    alpha=0.62,
+                    s=30,
+                    color=color,
+                    edgecolors="none",
+                    linewidths=0.0,
+                    alpha=0.72,
                     zorder=4,
                     label="_nolegend_",
                 )
-                ax.scatter([], [], marker="^", s=24, facecolor=OKABE_ITO["black"], edgecolor=OKABE_ITO["black"], label="if_coal output node")
+            if branch_rows:
+                ax.scatter([], [], marker="^", s=24, facecolor=OKABE_ITO["black"], edgecolors="none", linewidths=0.0, label="coalescence partner record")
             ax.set_ylabel("Height (m)")
             ax.set_title(f"{chr(97 + panel_index)}  target {example}", loc="left", fontsize=8, pad=2)
         axes.ravel()[-1].set_xlabel("Time (min)")
@@ -1594,7 +1717,7 @@ def plot_optional_predecessor_tree(rows: list[dict[str, str]], outdir: Path, ste
             unique = dict(zip(labels, handles))
             if unique:
                 axes.ravel()[0].legend(unique.values(), unique.keys(), frameon=False, fontsize=7, loc="upper right")
-            fig.colorbar(scatter, ax=axes.ravel().tolist(), label=f"Radius ({MICRON})", shrink=0.78)
+            fig.colorbar(scatter, ax=axes.ravel().tolist(), label=f"Marker radius ({MICRON})", shrink=0.78)
         stems = [f"{stem}_{batch_index:02d}"]
         if batch_index == 1:
             stems.append(stem)
@@ -1992,6 +2115,7 @@ def plot_all(input_dir: Path, outdir: Path) -> tuple[list[dict[str, Any]], list[
         plot_benchmark(input_dir, outdir),
         plot_tpht_handoff_storage(input_dir, outdir),
         plot_tpht_target_diagnostics(input_dir, outdir),
+        plot_tpht_target_diagnostics_abc(input_dir, outdir),
         plot_scalability_io(input_dir, outdir),
         plot_restart_supp(input_dir, outdir),
         plot_full_benchmark_supp(input_dir, outdir),
@@ -2032,6 +2156,7 @@ Source analysis directory:
 - controlled computational overhead: `main_candidate_controlled_benchmark_overhead`
 - TPHT handoff and storage reduction: `main_candidate_TPHT_handoff_storage`
 - TPHT target diagnostic characterization: `main_candidate_TPHT_target_diagnostics`
+- TPHT target diagnostic characterization, compact three-panel version: `main_candidate_TPHT_target_diagnostics_abc`
 - scalability and I/O sensitivity: `main_candidate_scalability_io_sensitivity`
 
 ## Supplement-Candidate Figure Groups
@@ -2070,7 +2195,7 @@ Detailed availability is written to `tables/diagnostics/tpht_optional_figure_ava
 - Chain-validity direct metrics are still NA; only proxy metrics and reconstructed_time_coverage are available.
 - BW selected-output model time should be interpreted cautiously; do not overclaim forward physical chronology without checking the run convention.
 - Optional TPHT science-diagnostic figures derived from BW selected-output chronology are provisional until the BW output time convention and target-linked coalescence-log linkage are verified.
-- `unknown` / `unclassified` in target-category diagnostics means a deduplicated TPHT target whose first selected condition cannot be recovered from the BW selected-output diagnostics; it is not a third physical selection criterion.
+- In the main TPHT target-category figure, output-level `unknown` / `unclassified` rows are grouped with the radius-threshold category because they have no saved-output or event-log `if_coal` signal and the FW/BW trajectories share the same physical evolution. The raw source table keeps the original diagnostic count for audit.
 - Target-history curves are target-set medians over all reconstructed target records at each output time, not only records currently satisfying the interest criteria; conditional fractions are shown separately.
 - The `unknown` row in the first-large height source table means no first-large height is available for those records, so it is excluded from the height-distribution panel rather than treated as a height bin.
 

@@ -5,7 +5,8 @@ This script uses existing GMD2026 analysis source tables, not raw simulation
 output.  It selects threshold-crossing targets that remain diagnostically
 interesting during the final analysis window and draws one compact target
 history per figure.  Coalescence markers are target-linked event diagnostics,
-not a complete causal formation tree.
+not a complete causal formation tree.  Triangle colors represent the
+coalescing partner radius from the target-linked event table.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import argparse
 import csv
 import math
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -177,6 +179,115 @@ def _collect_rows(path: Path, target_ids: set[str]) -> dict[str, list[dict[str, 
     return output
 
 
+def _event_text(row: dict[str, Any], key: str) -> str:
+    """Return a stable text value for event-row pairing."""
+    value = row.get(key)
+    if value in (None, "", "NA"):
+        return ""
+    return str(value).strip()
+
+
+def _participant_text(row: dict[str, Any]) -> str:
+    """Normalize the participant number for event-row pairing."""
+    value = safe_float(row.get("participant"))
+    if value is None:
+        return _event_text(row, "participant")
+    return str(int(round(value)))
+
+
+def _event_row_key(row: dict[str, Any]) -> tuple[str, str, str, str, str, str]:
+    """Return a key for one participant row in the event-link table."""
+    return (
+        _event_text(row, "source_file"),
+        _event_text(row, "event_time_s"),
+        _event_text(row, "num_col"),
+        _participant_text(row),
+        _event_text(row, "pre_radius_um"),
+        _event_text(row, "partner_radius_um"),
+    )
+
+
+def _counterpart_event_key(row: dict[str, Any]) -> tuple[str, str, str, str, str, str] | None:
+    """Return the expected key for the other participant row in the same event."""
+    participant = _participant_text(row)
+    if participant == "1":
+        counterpart = "2"
+    elif participant == "2":
+        counterpart = "1"
+    else:
+        return None
+    pre_radius = _event_text(row, "pre_radius_um")
+    partner_radius = _event_text(row, "partner_radius_um")
+    if not pre_radius or not partner_radius:
+        return None
+    return (
+        _event_text(row, "source_file"),
+        _event_text(row, "event_time_s"),
+        _event_text(row, "num_col"),
+        counterpart,
+        partner_radius,
+        pre_radius,
+    )
+
+
+def _attach_partner_heights(path: Path, events: dict[str, list[dict[str, Any]]]) -> None:
+    """Attach formal partner heights when the matching participant row exists.
+
+    SD_coal_output_NetCDF records do not carry participant heights.  The
+    target-linked event table, however, contains one row per linked
+    participant.  For plotting only, we recover the partner's selected-output
+    height by matching the opposite participant row from the same event.
+    """
+    wanted: dict[tuple[str, str, str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for rows in events.values():
+        for row in rows:
+            key = _counterpart_event_key(row)
+            if key is not None:
+                wanted[key].append(row)
+    remaining = sum(len(rows) for rows in wanted.values())
+    if remaining == 0:
+        return
+
+    for row in _open_rows(path):
+        key = _event_row_key(row)
+        matches = wanted.get(key)
+        if not matches:
+            continue
+        target_row = matches.pop(0)
+        target_row["partner_height_m"] = row.get("event_height_m")
+        target_row["partner_target_id"] = row.get("target_id")
+        remaining -= 1
+        if not matches:
+            wanted.pop(key, None)
+        if remaining <= 0:
+            break
+
+
+def _validate_partner_radius(events: dict[str, list[dict[str, Any]]]) -> None:
+    """Require partner-radius values before drawing event triangles.
+
+    Older source tables only contained the target participant radius.  Using
+    those rows would silently color triangles by the wrong particle, so fail
+    with an actionable message instead.
+    """
+    missing = 0
+    total = 0
+    for rows in events.values():
+        for row in rows:
+            if safe_float(row.get("event_time_s")) is None or safe_float(row.get("event_height_m")) is None:
+                continue
+            total += 1
+            if "partner_radius_um" not in row or safe_float(row.get("partner_radius_um")) is None:
+                missing += 1
+    if total and missing:
+        raise ValueError(
+            "02_tpht_target_event_links.csv lacks finite partner_radius_um values "
+            f"for {missing}/{total} plotted coalescence records. Rerun "
+            "analysis/02_tpht/analyze_02_tpht_science.py with the updated scripts "
+            "before regenerating predecessor-tree figures."
+        )
+
+
 def _finite(values: list[float | None]) -> list[float]:
     """Return finite values."""
     return [value for value in values if value is not None and math.isfinite(value)]
@@ -312,6 +423,20 @@ def _plot_target_panel(
         height_pad = max(20.0, (max(finite_heights) - min(finite_heights)) * 0.08)
         ax.set_ylim(min(finite_heights) - height_pad, max(finite_heights) + height_pad)
 
+    event_rows = [
+        row
+        for row in events
+        if safe_float(row.get("event_time_s")) is not None and safe_float(row.get("event_height_m")) is not None
+    ]
+    partner_heights = _finite([safe_float(row.get("partner_height_m")) for row in event_rows])
+    if partner_heights:
+        lower, upper = ax.get_ylim()
+        height_pad = max(20.0, (max(finite_heights + partner_heights) - min(finite_heights + partner_heights)) * 0.08)
+        ax.set_ylim(
+            min(lower, min(partner_heights) - height_pad),
+            max(upper, max(partner_heights) + height_pad),
+        )
+
     large_rows = [row for row in trajectory if (safe_float(row.get("radius_um")) or -math.inf) >= 15.0]
     first_large_row = min(large_rows, key=lambda row: safe_float(row.get("time_s")) or math.inf) if large_rows else None
     max_radius_row = max(trajectory, key=lambda row: safe_float(row.get("radius_um")) or -math.inf) if trajectory else None
@@ -335,31 +460,80 @@ def _plot_target_panel(
             marker=marker,
             s=48 if marker == "*" else 32,
             facecolor=radius_color(radius_um),
-            edgecolor=OKABE_ITO["black"],
-            linewidth=0.65,
+            edgecolors=OKABE_ITO["black"],
+            linewidths=0.30,
             zorder=6,
             label=label,
         )
 
-    event_rows = [
-        row
-        for row in events
-        if safe_float(row.get("event_time_s")) is not None and safe_float(row.get("event_height_m")) is not None
-    ]
     if event_rows:
+        marker_x: list[float] = []
+        marker_y: list[float] = []
+        marker_colors: list[Any] = []
+        used_offset_marker = False
+        y_lower, y_upper = ax.get_ylim()
+        x_lower, x_upper = ax.get_xlim()
+        y_span = max(y_upper - y_lower, 1.0)
+        x_span = max(x_upper - x_lower, 1.0e-6)
+        for event_index, row in enumerate(event_rows):
+            event_time_min = (safe_float(row.get("event_time_s")) or 0.0) / 60.0
+            event_height = safe_float(row.get("event_height_m")) or math.nan
+            partner_height = safe_float(row.get("partner_height_m"))
+            if partner_height is None:
+                used_offset_marker = True
+                sign = 1.0 if event_index % 2 == 0 else -1.0
+                candidate_y = event_height + sign * 0.11 * y_span
+                if candidate_y > y_upper - 0.035 * y_span:
+                    candidate_y = event_height - 0.11 * y_span
+                if candidate_y < y_lower + 0.035 * y_span:
+                    candidate_y = event_height + 0.11 * y_span
+                candidate_y = min(max(candidate_y, y_lower + 0.03 * y_span), y_upper - 0.03 * y_span)
+                sign_x = 1.0 if (event_index // 2) % 2 == 0 else -1.0
+                candidate_x = min(max(event_time_min + sign_x * 0.012 * x_span, x_lower), x_upper)
+                ax.plot(
+                    [event_time_min, candidate_x],
+                    [event_height, candidate_y],
+                    color="0.45",
+                    linestyle=(0, (2.0, 2.0)),
+                    linewidth=0.45,
+                    alpha=0.55,
+                    zorder=5,
+                )
+            else:
+                candidate_y = partner_height
+                if abs(partner_height - event_height) < max(8.0, 0.015 * y_span):
+                    used_offset_marker = True
+                    sign_x = 1.0 if event_index % 2 == 0 else -1.0
+                    candidate_x = min(max(event_time_min + sign_x * 0.018 * x_span, x_lower), x_upper)
+                    ax.plot(
+                        [event_time_min, candidate_x],
+                        [event_height, candidate_y],
+                        color="0.45",
+                        linestyle=(0, (2.0, 2.0)),
+                        linewidth=0.45,
+                        alpha=0.55,
+                        zorder=5,
+                    )
+                else:
+                    candidate_x = event_time_min
+            marker_x.append(candidate_x)
+            marker_y.append(candidate_y)
+            marker_colors.append(radius_color(safe_float(row.get("partner_radius_um"))))
         ax.scatter(
-            [(safe_float(row.get("event_time_s")) or 0.0) / 60.0 for row in event_rows],
-            [safe_float(row.get("event_height_m")) or math.nan for row in event_rows],
+            marker_x,
+            marker_y,
             marker="^",
             s=14,
-            c=[radius_color(safe_float(row.get("pre_radius_um")) or safe_float(row.get("post_radius_um"))) for row in event_rows],
-            edgecolor=OKABE_ITO["black"],
-            linewidths=0.20,
+            c=marker_colors,
+            edgecolors=OKABE_ITO["black"],
+            linewidths=0.25,
             alpha=0.52,
             zorder=7,
             label="_nolegend_",
         )
-        ax.scatter([], [], marker="^", s=24, facecolor=OKABE_ITO["black"], edgecolor=OKABE_ITO["black"], label="coalescence record")
+        ax.scatter([], [], marker="^", s=24, facecolor=OKABE_ITO["black"], edgecolors=OKABE_ITO["black"], linewidths=0.25, label="coalescence partner record")
+        if used_offset_marker:
+            ax.plot([], [], color="0.45", linestyle=(0, (2.0, 2.0)), linewidth=0.6, label="dashed link to event point")
 
     _highlighted_title(ax, selected, panel_label, len(event_rows))
     ax.set_ylabel("Height (m)")
@@ -448,7 +622,7 @@ def _write_selected_table(rows: list[dict[str, Any]], tables_dir: Path, start_s:
         output["rank"] = rank
         output["selection_window_start_s"] = start_s
         output["selection_window_end_s"] = end_s
-        output["warnings"] = "selected from sampled trajectory source table; coalescence markers are target-linked SD_coal_output_NetCDF records"
+        output["warnings"] = "selected from sampled trajectory source table; coalescence markers use partner_radius_um and partner selected-output height when the paired participant row is available"
         output_rows.append(output)
     write_table_bundle(output_rows, tables_dir / "supp_candidate_TPHT_predecessor_tree_examples_final10_selected_targets", SELECTED_COLUMNS)
 
@@ -518,6 +692,8 @@ def main() -> None:
     selected_ids = {row["target_id"] for row in selected}
     trajectories = _collect_rows(trajectory_path, selected_ids)
     events = _collect_rows(event_path, selected_ids)
+    _validate_partner_radius(events)
+    _attach_partner_heights(event_path, events)
     batch_size = max(1, args.targets_per_figure)
     for figure_rank, start_index in enumerate(range(0, min(len(selected), target_count), batch_size), start=1):
         if figure_rank > args.max_figures:

@@ -39,6 +39,18 @@ if [ ! -f "${env_helper}" ]; then
   exit 2
 fi
 source "${env_helper}"
+echo "python_env=${GMD2026_PYTHON_ENV:-unknown}"
+echo "python=${GMD2026_PYTHON:-python3}"
+"${GMD2026_PYTHON:-python3}" - <<'PY' || true
+import sys
+print("python_executable=" + sys.executable)
+try:
+    import netCDF4
+except Exception as exc:
+    print("netCDF4_import=FAIL:" + repr(exc))
+else:
+    print("netCDF4_import=OK:" + getattr(netCDF4, "__version__", "unknown"))
+PY
 
 start_epoch=$(date +%s)
 set +e

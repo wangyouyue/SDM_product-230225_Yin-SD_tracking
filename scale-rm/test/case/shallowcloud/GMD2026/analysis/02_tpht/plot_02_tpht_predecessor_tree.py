@@ -53,7 +53,8 @@ def load_or_generate_tree_rows(root: Path, outdir: Path, options: dict[str, Any]
     table_path = outdir / "tables" / f"{TABLE_STEM}.csv"
     cached_rows = read_table(table_path)
     cached_examples = {row.get("example_id") for row in cached_rows if row.get("node_id") not in (None, "", "NA")}
-    if cached_rows and len(cached_examples) >= max_examples:
+    cache_has_partner_radius = all("partner_radius_um" in row for row in cached_rows) if cached_rows else False
+    if cached_rows and len(cached_examples) >= max_examples and cache_has_partner_radius:
         return cached_rows
 
     config = load_config()
@@ -142,8 +143,8 @@ def _plot_tree_batch(plt: Any, grouped: dict[str, list[dict[str, Any]]], example
                 norm=norm,
                 s=28,
                 marker="o",
-                edgecolor="black",
-                linewidth=0.3,
+                edgecolors="none",
+                linewidths=0.0,
                 zorder=3,
                 label="important output node",
             )
@@ -174,7 +175,17 @@ def _plot_tree_batch(plt: Any, grouped: dict[str, list[dict[str, Any]]], example
                 continue
             color = cmap(norm(radius if radius is not None else radius_min))
             ax.plot([x0 / 60.0, x1 / 60.0], [y0, y1], color=color, linewidth=0.8, alpha=0.75, zorder=0)
-            ax.scatter([x0 / 60.0], [y0], marker="^", s=34, color=color, edgecolor=OKABE_ITO["black"], linewidth=0.3, zorder=4, label="triangle: linked partner")
+            ax.scatter(
+                [x0 / 60.0],
+                [y0],
+                marker="^",
+                s=34,
+                color=color,
+                edgecolors="none",
+                linewidths=0.0,
+                zorder=4,
+                label="triangle: linked partner radius",
+            )
 
         ax.set_title(f"{chr(97 + panel_index)}  target {example_id}", loc="left", fontsize=9, pad=2)
         ax.set_ylabel("Height (m)")

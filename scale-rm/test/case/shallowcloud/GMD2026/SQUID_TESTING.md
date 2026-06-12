@@ -10,7 +10,7 @@ bash common/check_makefiles.sh
 bash run_all_static_audits.sh
 ```
 
-`check_makefiles.sh` sources `/etc/profile.d/modules.sh`, loads the SQUID build modules, and sets `SCALE_SYS=Linux64-intel-impi` automatically. `run_all_static_audits.sh` sources `common/load_basepy_2026_quiet.sh`, so it uses `BasePy/2026` or `${HOME}/venvs/gmd2026-netcdf4/bin/python` when that optional venv exists. If `${TOPDIR}/bin` is absent before the first build, the script prints an informational message only; it is not a failed check.
+`check_makefiles.sh` sources `/etc/profile.d/modules.sh`, loads the SQUID build modules, and sets `SCALE_SYS=Linux64-intel-impi` automatically. `run_all_static_audits.sh` sources `common/load_basepy_2026_quiet.sh`, so it prefers the `sdm_env` conda environment and then falls back to `${HOME}/venvs/gmd2026-netcdf4/bin/python` or `BasePy/2026` Python. If `${TOPDIR}/bin` is absent before the first build, the script prints an informational message only; it is not a failed check.
 
 Expected result:
 
@@ -23,7 +23,22 @@ The current benchmark and TPHT groups intentionally run from the initial DYCOMS-
 
 ## 1.1 Python environment
 
-Post-processing job scripts load `BasePy/2026` through `common/load_basepy_2026_quiet.sh`. If you need NetCDF variable checks, create the optional venv once:
+Post-processing job scripts load `BasePy/2026` through `common/load_basepy_2026_quiet.sh` and then preferentially activate the conda environment named `sdm_env`. This is the recommended environment for NetCDF-heavy analysis such as TPHT science diagnostics:
+
+```bash
+source common/load_basepy_2026_quiet.sh
+echo "$GMD2026_PYTHON_ENV"
+"${GMD2026_PYTHON}" -c "import netCDF4; print(netCDF4.__version__)"
+```
+
+If a different conda environment is required, set `GMD2026_CONDA_ENV` before sourcing the helper:
+
+```bash
+export GMD2026_CONDA_ENV=sdm_env
+source common/load_basepy_2026_quiet.sh
+```
+
+If `sdm_env` is unavailable, create the optional venv once:
 
 ```bash
 module purge

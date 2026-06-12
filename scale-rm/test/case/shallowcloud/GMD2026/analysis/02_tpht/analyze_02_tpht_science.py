@@ -127,6 +127,29 @@ EXAMPLE_COLUMNS = [
 ]
 
 
+def _log(message: str) -> None:
+    """Write a flushed progress message for long SQUID TPHT analysis jobs."""
+    print(f"[02_tpht_science] {message}", flush=True)
+
+
+def _emit_warnings(warnings: list[str], limit: int = 20) -> None:
+    """Write a bounded warning list to stderr without flooding batch logs."""
+    if not warnings:
+        return
+    print(f"[02_tpht_science] warnings={len(warnings)}", file=sys.stderr, flush=True)
+    for warning in warnings[:limit]:
+        print(f"[02_tpht_science][warning] {warning}", file=sys.stderr, flush=True)
+    if len(warnings) > limit:
+        print(f"[02_tpht_science][warning] ... {len(warnings) - limit} more warnings omitted", file=sys.stderr, flush=True)
+
+
+def _missing_rows(columns: list[str], warnings: list[str]) -> list[dict[str, Any]]:
+    """Return one explicit NA row with warnings for an unavailable heavy table."""
+    row = {column: None for column in columns}
+    row["warnings"] = warning_text(warnings)
+    return [row]
+
+
 def _quantile(values: list[float], fraction: float) -> float | None:
     """Return a linear quantile for finite values."""
     finite = sorted(value for value in values if math.isfinite(value))
@@ -372,16 +395,32 @@ def analyze(root: Path, outdir: Path, strict: bool, options: dict | None = None)
     _bw_row, bw_files, _records, warnings = collect_case_metrics(root, bw_case, options)
     selected_files = bw_files.get("sd_selected_output_bytes", [])
     coal_files = bw_files.get("coalescence_log_bytes", [])
+    _log(f"root={root}")
+    _log(f"outdir={outdir}")
+    _log(f"case_dir={_bw_row.get('case_dir')}")
+    _log(f"selected_files={len(selected_files)} coal_files={len(coal_files)} options={options}")
     targets, by_time, by_time_height, link_rows, science_warnings = build_stepwise_bw_diagnostics(selected_files, coal_files, options)
     warnings.extend(science_warnings)
+    _log(f"stepwise targets={len(targets)} by_time={len(by_time)} by_time_height={len(by_time_height)} link_rows={len(link_rows)}")
     optional_sources, optional_warnings = build_optional_source_tables(selected_files, coal_files, targets, options) if targets else ({}, [])
     warnings.extend(optional_warnings)
+    optional_counts = {name: len(rows) for name, rows in optional_sources.items()}
+    _log(f"optional_source_rows={optional_counts}")
+    if targets and coal_files and not optional_sources.get("event_links"):
+        warnings.append(
+            "No target-linked coalescence event rows were produced although BW selected-output and coalescence-log files were found; "
+            "check whether the job used --metadata-only/--skip-heavy-netcdf/--max-files, whether coalescence-log times overlap selected-output intervals, "
+            "and whether event pre_dmid/pre_sdid match the following selected-output level."
+        )
+    if not targets:
+        warnings.append("No BW target chains were reconstructed; heavy TPHT science tables contain NA placeholders.")
     summary_rows, pathway_rows, height_rows, coal_rows, time_rows, target_summary_rows, occurrence_rows, example_rows = _build_rows(targets, by_time, by_time_height, warnings)
     if not link_rows:
         link_rows = [{column: None for column in LINK_COLUMNS}]
         link_rows[0]["warnings"] = warning_text(warnings)
     if strict and warnings:
         raise RuntimeError("; ".join(warnings))
+    _emit_warnings(warnings)
     write_table_bundle(summary_rows, outdir / "tables" / "02_tpht_science_summary", SUMMARY_COLUMNS)
     write_table_bundle(pathway_rows, outdir / "tables" / "02_tpht_science_pathways", PATHWAY_COLUMNS)
     write_table_bundle(height_rows, outdir / "tables" / "02_tpht_science_formation_height_bins", HEIGHT_BIN_COLUMNS)
@@ -391,10 +430,11 @@ def analyze(root: Path, outdir: Path, strict: bool, options: dict | None = None)
     write_table_bundle(occurrence_rows, outdir / "tables" / "02_tpht_target_occurrence_zt", OCCURRENCE_ZT_COLUMNS)
     write_table_bundle(example_rows, outdir / "tables" / "02_tpht_science_example_targets", EXAMPLE_COLUMNS)
     write_table_bundle(link_rows, outdir / "tables" / "02_tpht_chain_links_by_time", LINK_COLUMNS)
-    write_table_bundle(optional_sources.get("trajectory") or [{column: None for column in TRAJECTORY_COLUMNS}], outdir / "tables" / "02_tpht_target_trajectory_records", TRAJECTORY_COLUMNS)
-    write_table_bundle(optional_sources.get("ifcoal_timeline") or [{column: None for column in IFCOAL_TIMELINE_COLUMNS}], outdir / "tables" / "02_tpht_target_ifcoal_timeline", IFCOAL_TIMELINE_COLUMNS)
-    write_table_bundle(optional_sources.get("interval") or [{column: None for column in INTERVAL_COLUMNS}], outdir / "tables" / "02_tpht_target_interval_diagnostics", INTERVAL_COLUMNS)
-    write_table_bundle(optional_sources.get("event_links") or [{column: None for column in EVENT_LINK_COLUMNS}], outdir / "tables" / "02_tpht_target_event_links", EVENT_LINK_COLUMNS)
+    write_table_bundle(optional_sources.get("trajectory") or _missing_rows(TRAJECTORY_COLUMNS, warnings), outdir / "tables" / "02_tpht_target_trajectory_records", TRAJECTORY_COLUMNS)
+    write_table_bundle(optional_sources.get("ifcoal_timeline") or _missing_rows(IFCOAL_TIMELINE_COLUMNS, warnings), outdir / "tables" / "02_tpht_target_ifcoal_timeline", IFCOAL_TIMELINE_COLUMNS)
+    write_table_bundle(optional_sources.get("interval") or _missing_rows(INTERVAL_COLUMNS, warnings), outdir / "tables" / "02_tpht_target_interval_diagnostics", INTERVAL_COLUMNS)
+    write_table_bundle(optional_sources.get("event_links") or _missing_rows(EVENT_LINK_COLUMNS, warnings), outdir / "tables" / "02_tpht_target_event_links", EVENT_LINK_COLUMNS)
+    _log("finished writing TPHT science tables")
 
 
 def main() -> None:

@@ -17,6 +17,8 @@ The completed GMD2026 simulation outputs are expected to already exist under the
 ```bash
 cd /path/to/scale-rm/test/case/shallowcloud/GMD2026
 source common/load_basepy_2026_quiet.sh
+echo "$GMD2026_PYTHON_ENV"
+"${GMD2026_PYTHON}" -c "import netCDF4; print(netCDF4.__version__)"
 
 "${GMD2026_PYTHON}" analysis/common/estimate_analysis_cost.py \
   --root "$(pwd)" \
@@ -94,7 +96,7 @@ export GMD2026_OUTDIR=$(pwd)/analysis_outputs
 qsub analysis/job_scripts/submit_analysis_then_plots.sh
 ```
 
-The qsub scripts default to `GMD2026_ROOT=$(pwd)` and `GMD2026_OUTDIR=$(pwd)/analysis_outputs` when these variables are not set. They source the suite Python helper (`common/load_basepy_2026_quiet.sh`) before calling `${GMD2026_PYTHON}`, set `PYTHONUNBUFFERED=1`, write logs under `analysis_outputs/logs/`, and emit `*.analysis_job_metrics.json`.
+The qsub scripts default to `GMD2026_ROOT=$(pwd)` and `GMD2026_OUTDIR=$(pwd)/analysis_outputs` when these variables are not set. They source the suite Python helper (`common/load_basepy_2026_quiet.sh`) before calling `${GMD2026_PYTHON}`, set `PYTHONUNBUFFERED=1`, write logs under `analysis_outputs/logs/`, and emit `*.analysis_job_metrics.json`. The helper prefers the conda environment `sdm_env`; set `GMD2026_CONDA_ENV` before submission if the environment name differs. The shared qsub wrapper records `python_env`, `python_executable`, and the `netCDF4` import status in each job log.
 
 TPHT is split into light and heavy execution. The light part reads logs, `.ids` metadata, handoff integrity, and inexpensive rank-load summaries. The heavy part reads BW selected-output NetCDF variables for target categories, histories, chain-validity diagnostics, target trajectories, if_coal timelines, interval diagnostics, and target-linked event summaries.
 

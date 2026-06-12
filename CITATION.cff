@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "SCALE-SDM super-droplet tracking suite with forward/backward tracking and TPHT"
+authors:
+  - family-names: "Yin"
+    given-names: "Chongzhi"
+version: "1.2.0"
+date-released: "2026-06-12"
+repository-code: "https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking"
+url: "https://github.com/wangyouyue/SDM_product-230225_Yin-SD_tracking"
+abstract: >
+  This release provides a merged forward/backward super-droplet tracking
+  implementation for SCALE-SDM, including Two-Pass Hybrid Tracking (TPHT)
+  for interest-restricted backward reconstruction and the GMD2026
+  shallow-cloud benchmark and analysis workflow.
+keywords:
+  - "SCALE-SDM"
+  - "super-droplet method"
+  - "forward tracking"
+  - "backward tracking"
+  - "TPHT"
+  - "cloud microphysics"
+license: "BSD-2-Clause"

@@ -74,6 +74,8 @@ TREE_COLUMNS = [
     "time_s",
     "height_m",
     "radius_um",
+    "target_pre_radius_um",
+    "partner_radius_um",
     "if_coal",
     "node_role",
     "event_time_s",
@@ -127,9 +129,12 @@ EVENT_LINK_COLUMNS = [
     "event_time_s",
     "event_height_m",
     "pre_radius_um",
+    "partner_radius_um",
     "post_radius_um",
     "delta_r3_um3",
     "participant",
+    "sd_n1",
+    "sd_n2",
     "num_col",
     "category",
     "source_file",
@@ -565,6 +570,12 @@ def build_optional_source_tables(
     warnings = selected_warnings + coal_warnings
     if not selected_groups:
         return {}, warnings + ["No BW selected-output files found for optional TPHT source tables"]
+    print(
+        "[tpht_chain_utils] optional source build: "
+        f"selected_levels={len(selected_groups)} selected_files={len(selected_files)} "
+        f"coal_levels={len(coal_groups)} coal_files={len(coal_files or [])}",
+        flush=True,
+    )
 
     sample_stride = int(options.get("optional_source_stride", 200) or 200)
 
@@ -580,6 +591,12 @@ def build_optional_source_tables(
     next_chain_index = 0
 
     for level_index, (time_s, paths) in enumerate(selected_groups):
+        if level_index == 0 or (level_index + 1) % 50 == 0 or level_index + 1 == len(selected_groups):
+            print(
+                "[tpht_chain_utils] optional source level "
+                f"{level_index + 1}/{len(selected_groups)} time_s={time_s}",
+                flush=True,
+            )
         records, level_warnings = _read_selected_level(paths, time_s, options)
         warnings.extend(level_warnings)
         current_id_to_chain: dict[tuple[int, int], str] = {}
@@ -670,9 +687,9 @@ def build_optional_source_tables(
             events, event_warnings = _read_coal_events(coal_paths, time_s, options)
             warnings.extend(event_warnings)
             for event in events:
-                for participant, key, radius_key in (
-                    (1, event.get("id1"), "sd_r1_m"),
-                    (2, event.get("id2"), "sd_r2_m"),
+                for participant, key, radius_key, partner_radius_key, multiplicity_key in (
+                    (1, event.get("id1"), "sd_r1_m", "sd_r2_m", "sd_n1"),
+                    (2, event.get("id2"), "sd_r2_m", "sd_r1_m", "sd_n2"),
                 ):
                     chain_id = current_id_to_chain.get(key) if key is not None else None
                     if chain_id is None:
@@ -680,6 +697,7 @@ def build_optional_source_tables(
                     target_record = current_record_by_chain.get(chain_id, {})
                     post_radius_m = target_record.get("radius_m")
                     pre_radius_m = event.get(radius_key)
+                    partner_radius_m = event.get(partner_radius_key)
                     metadata = _source_metadata(chain_id, targets)
                     event_rows.append(
                         {
@@ -687,9 +705,12 @@ def build_optional_source_tables(
                             "event_time_s": event.get("event_time_s"),
                             "event_height_m": target_record.get("height_m"),
                             "pre_radius_um": pre_radius_m * 1.0e6 if pre_radius_m is not None else None,
+                            "partner_radius_um": partner_radius_m * 1.0e6 if partner_radius_m is not None else None,
                             "post_radius_um": post_radius_m * 1.0e6 if post_radius_m is not None else None,
                             "delta_r3_um3": (post_radius_m * 1.0e6) ** 3 - (pre_radius_m * 1.0e6) ** 3 if post_radius_m is not None and pre_radius_m is not None else None,
                             "participant": participant,
+                            "sd_n1": event.get(multiplicity_key) if participant == 1 else None,
+                            "sd_n2": event.get(multiplicity_key) if participant == 2 else None,
                             "num_col": event.get("num_col"),
                             "category": metadata["category"],
                             "source_file": event.get("source_file"),
@@ -701,6 +722,17 @@ def build_optional_source_tables(
         previous_record_by_chain = current_record_by_chain
         previous_selected_time = time_s
 
+    if coal_groups and not event_rows:
+        warnings.append(
+            "No target-linked event rows were generated from coalescence logs; "
+            "coalescence event IDs did not match the following selected-output target IDs under the current file/time limits."
+        )
+    print(
+        "[tpht_chain_utils] optional source rows: "
+        f"trajectory={len(trajectory_rows)} ifcoal_timeline={len(ifcoal_rows)} "
+        f"interval={len(interval_rows)} event_links={len(event_rows)}",
+        flush=True,
+    )
     return (
         {
             "trajectory": trajectory_rows,
@@ -992,9 +1024,9 @@ def build_predecessor_tree_examples(
             events, event_warnings = _read_coal_events(coal_paths, time_s, options)
             warnings.extend(event_warnings)
             for event in events:
-                for participant_number, key, radius_key in (
-                    (1, event.get("id1"), "sd_r1_m"),
-                    (2, event.get("id2"), "sd_r2_m"),
+                for participant_number, key, target_radius_key, partner_radius_key in (
+                    (1, event.get("id1"), "sd_r1_m", "sd_r2_m"),
+                    (2, event.get("id2"), "sd_r2_m", "sd_r1_m"),
                 ):
                     if key is None:
                         continue
@@ -1004,6 +1036,8 @@ def build_predecessor_tree_examples(
                     target_node = current_node_by_chain.get(chain_id)
                     target_record = current_record_by_chain.get(chain_id, {})
                     event_counter += 1
+                    target_pre_radius_m = event.get(target_radius_key)
+                    partner_radius_m = event.get(partner_radius_key)
                     rows.append(
                         {
                             "example_id": chain_id,
@@ -1012,7 +1046,9 @@ def build_predecessor_tree_examples(
                             "predecessor_id": target_node,
                             "time_s": event.get("event_time_s"),
                             "height_m": target_record.get("height_m"),
-                            "radius_um": (event.get(radius_key) * 1.0e6) if event.get(radius_key) is not None else None,
+                            "radius_um": (partner_radius_m * 1.0e6) if partner_radius_m is not None else None,
+                            "target_pre_radius_um": (target_pre_radius_m * 1.0e6) if target_pre_radius_m is not None else None,
+                            "partner_radius_um": (partner_radius_m * 1.0e6) if partner_radius_m is not None else None,
                             "if_coal": 1,
                             "node_role": "coalescence_partner_proxy",
                             "event_time_s": event.get("event_time_s"),

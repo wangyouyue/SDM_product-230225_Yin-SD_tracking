@@ -129,10 +129,12 @@ def check_manifest_row(row: dict[str, str], rows: list[dict[str, Any]]) -> None:
         else:
             add(rows, stem, "estimated_quantity", "FAIL", "Estimated full-BW output is not clearly marked")
 
-    if stem == "main_candidate_TPHT_target_diagnostics":
+    if stem in {"main_candidate_TPHT_target_diagnostics", "main_candidate_TPHT_target_diagnostics_abc"}:
         included = row.get("unknown_category_included", "").lower()
         if included == "yes":
             add(rows, stem, "unknown_category", "PASS", "Unknown target category included")
+        elif "grouped_with_radius_threshold" in included:
+            add(rows, stem, "unknown_category", "PASS", "Output-level unknown category is grouped with the radius-threshold class")
         elif "source_na" in included:
             add(rows, stem, "unknown_category", "PASS", "Unknown category is source NA and is not plotted as a physical category")
         else:
