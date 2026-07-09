@@ -181,7 +181,7 @@ def read_restart_valid_pairs(path: str, marker_bytes: int, endian: str):
 
     valid_pairs = set()
     for sd_id, dm_id in zip(sdid, dmid):
-        if sd_id >= 1 and dm_id >= 0:
+        if (sd_id >= 0 or sd_id <= -1000) and dm_id >= 0:
             valid_pairs.add((int(dm_id), int(sd_id)))
 
     return header, valid_pairs

@@ -26,7 +26,7 @@ def parse_args():
     )
     parser.add_argument(
         "--bw-glob",
-        default="./bt_interest_id_baseline/bw_output/SD_selected_NetCDF_*.pe*.nc",
+        default="./bt_interest_id_baseline/bw_output/SD_selected_NetCDF_*.pe*",
     )
     parser.add_argument(
         "--max-report",
@@ -53,7 +53,7 @@ def read_fw_ids(file_path):
 def choose_first_bw_group(file_paths):
     grouped = {}
     for file_path in sorted(file_paths):
-        match = re.match(r"^(.*)\.pe\d{6}\.nc$", file_path)
+        match = re.match(r"^(.*)\.pe\d{6}(?:\.nc)?$", file_path)
         group_key = match.group(1) if match else file_path
         grouped.setdefault(group_key, []).append(file_path)
     first_key = sorted(grouped.keys())[0]

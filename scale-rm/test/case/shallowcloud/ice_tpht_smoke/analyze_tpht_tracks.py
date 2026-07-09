@@ -30,7 +30,7 @@ def parse_args():
         description=(
             "Post-process TPHT BW outputs using (pre_dmid, pre_sdid) as the stable "
             "trajectory key. The script summarizes trajectory evolution and, when "
-            "available, coalescence-event history from SD_coal_output_NetCDF_*."
+            "available, collision-event history from SD_event_collision_NetCDF_*."
         )
     )
     parser.add_argument(
@@ -39,9 +39,14 @@ def parse_args():
         help="Glob for BW SD_selected_NetCDF outputs.",
     )
     parser.add_argument(
+        "--event-glob",
+        default="",
+        help="Optional glob for SD_event_collision_NetCDF outputs.",
+    )
+    parser.add_argument(
         "--coal-glob",
         default="",
-        help="Optional glob for SD_coal_output_NetCDF outputs.",
+        help="Deprecated alias for --event-glob.",
     )
     parser.add_argument(
         "--output-dir",
@@ -126,7 +131,7 @@ def read_bw_group(stamp: str, rank_to_path: dict[int, str]):
 
     tracked_count = 0
     nonlocal_count = 0
-    if_coal_count = 0
+    event_mask_count = 0
     sd_r_values = []
     sd_z_values = []
     sd_x_values = []
@@ -141,9 +146,13 @@ def read_bw_group(stamp: str, rank_to_path: dict[int, str]):
             sd_z = read_ncdump_variable(path, "sd_z", float)
             sd_r = read_ncdump_variable(path, "sd_r", float)
             sd_n = read_ncdump_variable(path, "sd_n", int)
-            if_coal = read_ncdump_variable(
+            sd_event_mask = read_ncdump_variable(
                 path,
-                find_tracking_var_name(variable_names, ["if_coal"], ["if_coal_"]),
+                find_tracking_var_name(
+                    variable_names,
+                    ["sd_event_mask", "if_coal"],
+                    ["sd_event_mask_", "if_coal_"],
+                ),
                 int,
             )
             pre_sdid = read_ncdump_variable(
@@ -163,7 +172,11 @@ def read_bw_group(stamp: str, rank_to_path: dict[int, str]):
                 sd_z = nc_handle.variables["sd_z"][:]
                 sd_r = nc_handle.variables["sd_r"][:]
                 sd_n = nc_handle.variables["sd_n"][:]
-                if_coal = read_tracking_var(nc_handle, ["if_coal"], ["if_coal_"])
+                sd_event_mask = read_tracking_var(
+                    nc_handle,
+                    ["sd_event_mask", "if_coal"],
+                    ["sd_event_mask_", "if_coal_"],
+                )
                 pre_sdid = read_tracking_var(nc_handle, ["pre_sdid", "sd_id"], ["pre_sdid_", "sd_id_"])
                 pre_dmid = read_tracking_var(nc_handle, ["pre_dmid", "dm_id"], ["pre_dmid_", "dm_id_"])
 
@@ -186,7 +199,8 @@ def read_bw_group(stamp: str, rank_to_path: dict[int, str]):
                 "sd_z": float(sd_z[idx]),
                 "sd_r": float(sd_r[idx]),
                 "sd_n": int(sd_n[idx]),
-                "if_coal": int(if_coal[idx]),
+                "sd_event_mask": int(sd_event_mask[idx]),
+                "if_coal": int(sd_event_mask[idx]),
                 "source_path": path,
             }
             records[pair] = record
@@ -194,8 +208,8 @@ def read_bw_group(stamp: str, rank_to_path: dict[int, str]):
             tracked_count += 1
             if pair[0] != rank:
                 nonlocal_count += 1
-            if record["if_coal"] > 0:
-                if_coal_count += 1
+            if record["sd_event_mask"] > 0:
+                event_mask_count += 1
 
             sd_r_values.append(record["sd_r"])
             sd_z_values.append(record["sd_z"])
@@ -210,7 +224,8 @@ def read_bw_group(stamp: str, rank_to_path: dict[int, str]):
         "tracked_count": tracked_count,
         "unique_pairs": len(records),
         "nonlocal_pairs": nonlocal_count,
-        "if_coal_count": if_coal_count,
+        "event_mask_count": event_mask_count,
+        "if_coal_count": event_mask_count,
         "sd_r_mean": sum(sd_r_values) / len(sd_r_values),
         "sd_r_min": min(sd_r_values),
         "sd_r_max": max(sd_r_values),
@@ -260,8 +275,10 @@ def read_coalescence_group(stamp: str, rank_to_path: dict[int, str]):
                 find_tracking_var_name(variable_names, ["pre_dmid2", "dm_id2"], ["pre_dmid2_", "dm_id2_"]),
                 int,
             )
-            num_col = read_ncdump_variable(path, "num_col", int)
-            event_type = read_ncdump_variable(path, "event_type", int) if "event_type" in variable_names else None
+            multiplicity_name = "event_multiplicity" if "event_multiplicity" in variable_names else "num_col"
+            trigger_name = "trigger_code" if "trigger_code" in variable_names else "event_type"
+            event_multiplicity = read_ncdump_variable(path, multiplicity_name, int)
+            trigger_code = read_ncdump_variable(path, trigger_name, int) if trigger_name in variable_names else None
             sd_liqice1 = read_ncdump_variable(path, "sd_liqice1", int) if "sd_liqice1" in variable_names else None
             sd_liqice2 = read_ncdump_variable(path, "sd_liqice2", int) if "sd_liqice2" in variable_names else None
         else:
@@ -271,17 +288,19 @@ def read_coalescence_group(stamp: str, rank_to_path: dict[int, str]):
                 pre_dmid1 = read_tracking_var(nc_handle, ["pre_dmid1", "dm_id1"], ["pre_dmid1_", "dm_id1_"])
                 pre_sdid2 = read_tracking_var(nc_handle, ["pre_sdid2", "sd_id2"], ["pre_sdid2_", "sd_id2_"])
                 pre_dmid2 = read_tracking_var(nc_handle, ["pre_dmid2", "dm_id2"], ["pre_dmid2_", "dm_id2_"])
-                num_col = nc_handle.variables["num_col"][:]
-                event_type = nc_handle.variables["event_type"][:] if "event_type" in variable_names else None
+                multiplicity_name = "event_multiplicity" if "event_multiplicity" in variable_names else "num_col"
+                trigger_name = "trigger_code" if "trigger_code" in variable_names else "event_type"
+                event_multiplicity = nc_handle.variables[multiplicity_name][:]
+                trigger_code = nc_handle.variables[trigger_name][:] if trigger_name in variable_names else None
                 sd_liqice1 = nc_handle.variables["sd_liqice1"][:] if "sd_liqice1" in variable_names else None
                 sd_liqice2 = nc_handle.variables["sd_liqice2"][:] if "sd_liqice2" in variable_names else None
 
-        for idx in range(len(num_col)):
+        for idx in range(len(event_multiplicity)):
             pair1 = (int(pre_dmid1[idx]), int(pre_sdid1[idx]))
             pair2 = (int(pre_dmid2[idx]), int(pre_sdid2[idx]))
-            ncol = int(num_col[idx])
-            event_type_value = int(event_type[idx]) if event_type is not None else 0
-            event_type_label = EVENT_TYPE_LABELS.get(event_type_value, "unknown")
+            multiplicity = int(event_multiplicity[idx])
+            trigger_code_value = int(trigger_code[idx]) if trigger_code is not None else 0
+            trigger_code_label = EVENT_TYPE_LABELS.get(trigger_code_value, "unknown")
 
             event_rows.append(
                 {
@@ -291,17 +310,20 @@ def read_coalescence_group(stamp: str, rank_to_path: dict[int, str]):
                     "pre_sdid1": pair1[1],
                     "pre_dmid2": pair2[0],
                     "pre_sdid2": pair2[1],
-                    "event_type": event_type_value,
-                    "event_type_label": event_type_label,
+                    "trigger_code": trigger_code_value,
+                    "trigger_code_label": trigger_code_label,
+                    "event_type": trigger_code_value,
+                    "event_type_label": trigger_code_label,
                     "sd_liqice1": int(sd_liqice1[idx]) if sd_liqice1 is not None else None,
                     "sd_liqice2": int(sd_liqice2[idx]) if sd_liqice2 is not None else None,
-                    "num_col": ncol,
+                    "event_multiplicity": multiplicity,
+                    "num_col": multiplicity,
                 }
             )
 
             if pair1[0] >= 0 and pair1[1] >= 0:
                 pair_stats[pair1]["event_count"] += 1
-                pair_stats[pair1]["num_col_sum"] += ncol
+                pair_stats[pair1]["num_col_sum"] += multiplicity
                 if pair_stats[pair1]["first_collision_time"] is None:
                     pair_stats[pair1]["first_collision_time"] = stamp
                 pair_stats[pair1]["last_collision_time"] = stamp
@@ -310,7 +332,7 @@ def read_coalescence_group(stamp: str, rank_to_path: dict[int, str]):
 
             if pair2[0] >= 0 and pair2[1] >= 0:
                 pair_stats[pair2]["event_count"] += 1
-                pair_stats[pair2]["num_col_sum"] += ncol
+                pair_stats[pair2]["num_col_sum"] += multiplicity
                 if pair_stats[pair2]["first_collision_time"] is None:
                     pair_stats[pair2]["first_collision_time"] = stamp
                 pair_stats[pair2]["last_collision_time"] = stamp
@@ -358,6 +380,7 @@ def main():
             "first_time": None,
             "last_time": None,
             "max_radius": -1.0,
+            "event_mask_time_count": 0,
             "if_coal_time_count": 0,
         }
     )
@@ -382,13 +405,15 @@ def main():
             overview["first_time"] = stamp if overview["first_time"] is None else overview["first_time"]
             overview["last_time"] = stamp
             overview["max_radius"] = max(overview["max_radius"], record["sd_r"])
-            if record["if_coal"] > 0:
+            if record["sd_event_mask"] > 0:
+                overview["event_mask_time_count"] += 1
                 overview["if_coal_time_count"] += 1
 
     all_pairs = sorted(reference_pairs if reference_pairs is not None else [])
     all_pair_set = set(all_pairs)
 
-    coal_paths = sorted(glob.glob(args.coal_glob)) if args.coal_glob else []
+    event_glob = args.event_glob or args.coal_glob
+    coal_paths = sorted(glob.glob(event_glob)) if event_glob else []
     coal_pair_stats = defaultdict(lambda: {"event_count": 0, "num_col_sum": 0, "partners": set()})
     collision_events = []
     coal_stamps = []
@@ -475,6 +500,7 @@ def main():
                 "sd_z",
                 "sd_r",
                 "sd_n",
+                "sd_event_mask",
                 "if_coal",
             ]
         )
@@ -497,6 +523,7 @@ def main():
                         record["sd_z"],
                         record["sd_r"],
                         record["sd_n"],
+                        record["sd_event_mask"],
                         record["if_coal"],
                     ]
                 )
@@ -523,6 +550,7 @@ def main():
                 "first_file_rank": per_time_records[overview["first_time"]][pair]["file_rank"],
                 "last_file_rank": per_time_records[overview["last_time"]][pair]["file_rank"],
                 "max_radius": overview["max_radius"],
+                "event_mask_time_count": overview["event_mask_time_count"],
                 "if_coal_time_count": overview["if_coal_time_count"],
                 "event_count": coal_stats["event_count"],
                 "num_col_sum": coal_stats["num_col_sum"],
@@ -551,6 +579,7 @@ def main():
                 "first_file_rank",
                 "last_file_rank",
                 "max_radius",
+                "event_mask_time_count",
                 "if_coal_time_count",
                 "event_count",
                 "num_col_sum",
@@ -565,7 +594,7 @@ def main():
     collision_rows = [
         row
         for row in pair_overview_rows
-        if row["if_coal_time_count"] > 0 or row["event_count"] > 0 or row["num_col_sum"] > 0
+        if row["event_mask_time_count"] > 0 or row["event_count"] > 0 or row["num_col_sum"] > 0
     ]
     collision_csv = os.path.join(args.output_dir, "tpht_collision_summary.csv")
     with open(collision_csv, "w", newline="") as handle:
@@ -574,6 +603,7 @@ def main():
             fieldnames=[
                 "pre_dmid",
                 "pre_sdid",
+                "event_mask_time_count",
                 "if_coal_time_count",
                 "event_count",
                 "num_col_sum",
@@ -586,6 +616,7 @@ def main():
                 {
                     "pre_dmid": row["pre_dmid"],
                     "pre_sdid": row["pre_sdid"],
+                    "event_mask_time_count": row["event_mask_time_count"],
                     "if_coal_time_count": row["if_coal_time_count"],
                     "event_count": row["event_count"],
                     "num_col_sum": row["num_col_sum"],
@@ -604,10 +635,13 @@ def main():
                 "pre_sdid1",
                 "pre_dmid2",
                 "pre_sdid2",
+                "trigger_code",
+                "trigger_code_label",
                 "event_type",
                 "event_type_label",
                 "sd_liqice1",
                 "sd_liqice2",
+                "event_multiplicity",
                 "num_col",
                 "pair1_tracked",
                 "pair2_tracked",
@@ -662,6 +696,7 @@ def main():
                 "sd_z",
                 "sd_r",
                 "sd_n",
+                "sd_event_mask",
                 "if_coal",
             ]
         )
@@ -683,6 +718,7 @@ def main():
                         record["sd_z"],
                         record["sd_r"],
                         record["sd_n"],
+                        record["sd_event_mask"],
                         record["if_coal"],
                     ]
                 )
@@ -690,6 +726,7 @@ def main():
     summary_json = os.path.join(args.output_dir, "tpht_analysis_summary.json")
     summary_payload = {
         "bw_glob": args.bw_glob,
+        "event_glob": event_glob,
         "coal_glob": args.coal_glob,
         "output_dir": args.output_dir,
         "time_labels": bw_stamps,
@@ -701,6 +738,9 @@ def main():
         ),
         "coal_file_count": len(coal_paths),
         "collision_event_count": len(collision_events),
+        "collision_trigger_code_counts": dict(
+            Counter(row.get("trigger_code_label", "unknown") for row in collision_events)
+        ),
         "collision_event_type_counts": dict(
             Counter(row.get("event_type_label", "unknown") for row in collision_events)
         ),
@@ -720,6 +760,7 @@ def main():
     )
     print(f"coal_file_count={len(coal_paths)}")
     print(f"collision_event_count={len(collision_events)}")
+    print(f"collision_trigger_code_counts={summary_payload['collision_trigger_code_counts']}")
     print(f"collision_event_type_counts={summary_payload['collision_event_type_counts']}")
     print(f"collision_pair_count={len(collision_rows)}")
     print(f"time_summary_csv={os.path.join(args.output_dir, 'tpht_time_summary.csv')}")
@@ -741,6 +782,7 @@ def main():
                 "tracked_count",
                 "unique_pairs",
                 "nonlocal_pairs",
+                "event_mask_count",
                 "if_coal_count",
                 "missing_vs_first_group",
                 "extra_vs_first_group",
