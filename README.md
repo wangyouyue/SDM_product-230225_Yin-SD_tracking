@@ -22,6 +22,7 @@ This repository integrates SDM into SCALE version 5.2.6, leveraging both SDM’s
 - [9. Random Perturbations in SD Motion](#9-random-perturbations-in-sd-motion)
 - [10. Installation and Usage](#10-installation-and-usage)
 - [11. Representativeness Tests](#11-representativeness-tests)
+- [12. Cold TPHT Current Base and Future Porting Plan](#12-cold-tpht-current-base-and-future-porting-plan)
 
 ## 1. Overview of New Features (vs. SCALE-SDM)
 Compared with the original SCALE-SDM branch, this merged branch introduces a unified, sampling-aware tracking framework with the following characteristics:
@@ -205,9 +206,9 @@ variables:
   `SD_coal_output_NetCDF_*`.
 - Cold tracking interval state is restart-exact for new-format cold SD restarts:
   when `sdm_cold = .true.`, restart output appends a
-  cold tracking block containing `sd_event_mask`, `sd_diag_mask`,
-  `sd_phase_change_flag`, `sd_spatial_visit_flag`, and the seven interval
-  maxima. The current v3 block also saves and restores
+  cold tracking block containing `sd_event_mask`, `sd_event_sig_mask`,
+  `sd_diag_mask`, `sd_phase_change_flag`, `sd_spatial_visit_flag`, and the
+  seven interval maxima. The current v4 block also saves and restores
   `tracking_next_dynamic_sd_id`.
 - Older cold SD restarts without this optional block are still accepted as legacy
   restarts; their cold tracking interval state is initialized to zero and
@@ -236,11 +237,13 @@ variables:
   controlled local runtime-smoke coverage. These smokes use test-only
   `tracking_cleanup_*` namelist flags that default to `.false.` and are not
   production controls.
-- Occurrence records and significant records are independent. When a
-  significant mode is enabled and its threshold is exceeded, the same physical
-  update can produce both the occurrence record and an additional significant
-  record with a different `trigger_code`. Post-processing should distinguish
-  them by `trigger_code` and should not count them as identical statistics.
+- Occurrence-level and significant-level controls are independent, but the
+  event stream is mutually exclusive for a single process update. When a
+  significant mode is enabled and its threshold is exceeded, the significant
+  record uses the same process `trigger_code` with `trigger_level=2` and
+  overrides the occurrence-level record for that update. If the significant
+  gate is not hit and the occurrence control is enabled, one occurrence record
+  is written with `trigger_level=1`.
 - New cold tracking comments follow the local Fortran comment style of
   neighboring SDM files. They document mask semantics, interval
   update/reset/restart behavior, categorical-vs-bitmask code usage,
@@ -316,7 +319,8 @@ future work. The main boundaries are:
   `TRACK_COLD_OUTPUT_THERMO_CONTEXT`, and
   `TRACK_COLD_OUTPUT_KOHLER_CONTEXT`. Ice geometry, rime morphology, and Kohler
   context control real optional output groups. The aerosol and thermodynamic
-  switches are active reserved controls and currently write no variables.
+  switches currently write safe single-process context variables; collision
+  aerosol and thermodynamic context remain future work.
   `TRACK_COLD_EVENT_EXTENDED_GEOMETRY` remains as a backward-compatible broad
   alias for the first two groups.
 - v1.2+ adds spatial-visit tracking with `sd_spatial_visit_flag`; the current
@@ -327,8 +331,8 @@ future work. The main boundaries are:
 - Long-term work includes deliquescence/efflorescence, dry/wet aerosol
   phase-state expansion, aerosol-core and water-film morphology, lifecycle
   tracking, primary ice nucleation source tracking, secondary ice /
-  fragmentation, spatial-visit filtering, hail wet/dry growth attribution, and
-  OpenMP reproducibility characterization.
+  fragmentation, multi-region spatial-visit metadata, hail wet/dry growth
+  attribution, and OpenMP reproducibility characterization.
 
 ## 2. Core Tracking State Variables (`sd_id/dm_id`, `pre_sdid/pre_dmid`, `if_coal`)
 The merged implementation retains both identifier systems because FW and BW encode different trajectory semantics:
@@ -1197,6 +1201,104 @@ python evaluate_representativeness.py
 - Evaluate both scalar metrics and distribution metrics; agreement in one does not guarantee agreement in the other.
 - Use multi-seed spread as an uncertainty estimate for sampling robustness.
 
+## 12. Cold TPHT Current Base and Future Porting Plan
+
+Cold TPHT extends the FW/BW/TPHT tracking workflow from warm liquid
+coalescence histories to cold and mixed-phase SDM process histories. The
+current v1.3+ implementation is intended as a research-development branch with
+validated smoke, schema, restart, MPI, FW/BW/TPHT, and SQUID calibration
+coverage. It should not be read as full real-science production validation.
+When `sdm_cold = .false.`, the warm tracking boundary is preserved: legacy
+ordinary `if_coal`, warm `SD_coal_output_NetCDF_*`, and collision
+`event_multiplicity` behavior remain the compatibility path.
+
+For cold mode, the main user-facing additions are:
+- process event files with `trigger_code` as process identity and
+  `trigger_level=1/2` for occurrence/significant records;
+- interval masks and flags in ordinary, selected, and history output:
+  `sd_event_mask`, `sd_event_sig_mask`, `sd_diag_mask`,
+  `sd_phase_change_flag`, `sd_spatial_visit_flag`, and seven maintained
+  interval maxima;
+- cold event streams `SD_event_collision_NetCDF_*`,
+  `SD_event_singleproc_NetCDF_*`, `SD_event_diag_NetCDF_*`, and the lightweight
+  `SD_lifecycle_NetCDF_*` sidecar skeleton;
+- optional output groups for ice geometry, rime morphology, single-process
+  aerosol context, single-process thermodynamic context, and derived Kohler
+  activation/deactivation context;
+- Level-3 spatial-visit tracking with a Level-2 current-position fallback and a
+  default-off rank-subdomain pruning option.
+
+The implementation intentionally leaves several extension interfaces in place
+without claiming that all future runtime paths are already active:
+- process-specific occurrence controls (`tracking_evt_*_enable`) and
+  significant controls (`tracking_sig_*_enable` plus thresholds);
+- shared process bit mapping for `sd_event_mask` and `sd_event_sig_mask`;
+- optional context switches:
+  `TRACK_COLD_OUTPUT_ICE_GEOMETRY`,
+  `TRACK_COLD_OUTPUT_RIME_MORPHOLOGY`,
+  `TRACK_COLD_OUTPUT_AEROSOL_CONTEXT`,
+  `TRACK_COLD_OUTPUT_THERMO_CONTEXT`,
+  `TRACK_COLD_OUTPUT_KOHLER_CONTEXT`, and the legacy alias
+  `TRACK_COLD_EVENT_EXTENDED_GEOMETRY`;
+- lifecycle-safe ID predicates, a dynamic-ID namespace where
+  `sd_id <= -1000` is valid and `-999` is the only invalid sentinel, an exact
+  `(sd_id, dm_id)` lookup path, and restart storage for the dynamic-ID counter;
+- a fixed-width `SD_lifecycle_NetCDF_*` schema for future SD creation, removal,
+  split, domain-entry, global-halo, seeding, and `sdm_aslform`-like lifecycle
+  records;
+- test-only lifecycle harnesses for helper semantics, without activating the
+  production `sdm_adjsdnum` path.
+
+Before using this branch as a base for new science cases, the recommended
+verification ladder is:
+1. build the model and run the warm regression;
+2. run cold schema smokes for ordinary, selected, history, collision,
+   single-process, diagnostic, and lifecycle files;
+3. cover process triggers and `trigger_level` combinations required by the
+   study;
+4. run restart-exact checks, including `sd_event_sig_mask` and spatial flags;
+5. run MPI rank-2/rank-4 smokes and selected-ID copy checks;
+6. run FW/BW/TPHT consistency checks;
+7. run SQUID full validation if the target machine is SQUID;
+8. run production I/O and threshold calibration for the actual science case.
+
+The next porting step is to move the Cold TPHT v1.3+ patch set to the latest
+SCALE-SDM code base instead of assuming this development branch already tracks
+upstream. High-risk files and modules for that port include
+`contrib/SDM/scale_atmos_phy_mp_sdm.F90`, the mirrored
+`scalelib/src/atmos-physics/microphysics/scale_atmos_phy_mp_sdm.F90`,
+`sdm_common.f90`, `sdm_tracking_cold.f90`, `sdm_io.f90`, `sdm_boundary.f90`,
+`sdm_idutil.f90`, `sdm_coalescence_cold.f90`, `sdm_condensation_water.f90`,
+`sdm_meltfreeze.f90`, `sdm_subldep.f90`, `sdm_memmgr.f90`, build-system
+dependencies, restart read/write blocks, validators, and smoke-case configs.
+The port should be treated as a staged integration: first isolate the patch
+series and namelist/build changes, then reconnect interval state arrays,
+restart/MPI/selected-copy paths, event writers, physical process hooks,
+spatial/lifecycle helpers, validators, and finally SQUID/production I/O
+calibration.
+
+Longer-term Cold TPHT development should focus on:
+- collision aerosol and thermodynamic context after a separate collision-path
+  variable audit;
+- active global-halo, non-periodic boundary-entry, seeding, and `sdm_aslform`
+  lifecycle hooks;
+- production `sdm_adjsdnum`, `sdm_sdadd`, and `sdm_sdremove` runtime lifecycle
+  validation;
+- horizontal MPI source cleanup and collision invalidation cleanup, only after
+  send-buffer and event-capture ordering are explicitly validated;
+- primary ice nucleation source split, secondary ice production, breakup,
+  fragmentation, and SIP process tracking;
+- deliquescence, efflorescence, dry-core/water-film aerosol morphology, and
+  expanded dry/wet aerosol phase-state handling;
+- possible `sd_id` / `dm_id` migration to 64-bit storage if future dynamic-ID
+  production approaches 32-bit limits.
+
+Final reminder: the current Cold TPHT v1.3+ implementation in this repository
+is developed on the SCALE 5.2.6 / SCALE-SDM 5.2.6-2.3.1 code base. A future
+port should update the implementation to the latest SCALE-SDM version and rerun
+the full validation ladder before treating it as an upstream-ready or
+production-ready feature.
+
 ## Acknowledgements
 I would like to sincerely thank my advisor, Prof. Shin-ichiro Shima, for his invaluable suggestions on the code and algorithms, his scientific and technical guidance, and his generous support in providing computational resources. I would also like to express my special gratitude to my Ph.D. supervisor, Prof. Chunsong Lu, for his mentorship and cultivation throughout my doctoral studies. I would also like to thank Mikito Toda for his generous support and informative discussions.
 
@@ -1204,12 +1306,14 @@ I would like to sincerely thank my advisor, Prof. Shin-ichiro Shima, for his inv
 Questions, issues, and discussions about SCALE-SDM can be directed here. Contributions and feedback are highly encouraged to enhance the model's capabilities and user experience. Please feel free to contact me: yinchongzhi@gmail.com. :grin:
 
 ## Reference
+*Shima, S.-i., Kusano, K., Kawano, A., Sugiyama, T., and Kawahara, S.: The super-droplet method for the numerical simulation of clouds and precipitation: A particle-based and probabilistic microphysics model coupled with a non-hydrostatic model, Quarterly Journal of the Royal Meteorological Society, 135, 1307-1320, [https://doi.org/10.1002/qj.441](https://doi.org/10.1002/qj.441), 2009.*
+
 *Nishizawa, S., Yashiro, H., Sato, Y., Miyamoto, Y., and Tomita, H.: Influence of grid aspect ratio on planetary boundary layer turbulence in large-eddy simulations, Geoscientific Model Development, 8, 3393-3419, [https://doi.org/10.5194/gmd-8-33932015](https://doi.org/10.5194/gmd-8-33932015), 2015.*
 
 *Sato, Y., Nishizawa, S., Yashiro, H., Miyamoto, Y., Kajikawa, Y., and Tomita, H.: Impacts of cloud microphysics on trade wind cumulus: which cloud microphysics processes contribute to the diversity in a large eddy simulation?, Progress in Earth and Planetary Science, 2, 1-16, [https://doi.org/10.1186/s40645-015-0053-6](https://doi.org/10.1186/s40645-015-0053-6), 2015.*
 
-*Shima, S.-i., Kusano, K., Kawano, A., Sugiyama, T., and Kawahara, S.: The super-droplet method for the numerical simulation of clouds and precipitation: A particle-based and probabilistic microphysics model coupled with a non-hydrostatic model, Quarterly Journal of the Royal Meteorological Society, 135, 1307-1320, [https://doi.org/10.1002/qj.441](https://doi.org/10.1002/qj.441), 2009.*
+*Shima, S., Sato, Y., Hashimoto, A., and Misumi, R.: Predicting the morphology of ice particles in deep convection using the super-droplet method: development and evaluation of SCALE-SDM 0.2.5-2.2.0, -2.2.1, and -2.2.2, Geosci. Model Dev., 13, 4107-4157, [https://doi.org/10.5194/gmd-13-4107-2020](https://doi.org/10.5194/gmd-13-4107-2020), 2020.*
+
+*Yin, C., Shima, S., Xue, L., Lu, C., et al.: Simulation of marine stratocumulus using the super-droplet method: numerical convergence and comparison to a double-moment bulk scheme using SCALE-SDM 5.2.6-2.3.1, Geoscientific Model Development, 17, 5167-5189, [https://doi.org/10.5194/gmd-17-5167-2024](https://doi.org/10.5194/gmd-17-5167-2024), 2024.*
 
 *Yin, C., Shima, Si., Lu, C. et al.: Resolving Entrainment–Mixing in Marine Stratocumulus: The Role of LES Grid Resolution and Super-Droplet Number, Advances in Atmospheric Sciences, 43, 845-860, [https://doi.org/10.1007/s00376-025-5043-z](https://doi.org/10.1007/s00376-025-5043-z), 2026.*
-
-*Yin, C.\*, Shima, S., Xue, L., Lu, C., et al.: Simulation of marine stratocumulus using the super-droplet method: numerical convergence and comparison to a double-moment bulk scheme using SCALE-SDM 5.2.6-2.3.1, Geoscientific Model Development, 17, 5167-5189, [https://doi.org/10.5194/gmd-17-5167-2024](https://doi.org/10.5194/gmd-17-5167-2024), 2024.*
