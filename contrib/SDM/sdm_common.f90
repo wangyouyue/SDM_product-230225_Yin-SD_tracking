@@ -94,6 +94,11 @@ module m_sdm_common
   integer, allocatable, save :: sdid_s2c(:)  ! save index
   integer, allocatable, save :: dmid_s2c(:)  ! domain index
   integer(i2), allocatable, save :: ifcoal_s2c(:)   ! coal flag
+  integer, allocatable, save :: sd_event_mask_s2c(:) ! cold event occurrence mask over the SD output interval
+  integer, allocatable, save :: sd_event_sig_mask_s2c(:) ! cold significant-event subset mask over the SD output interval
+  integer, allocatable, save :: sd_diag_mask_s2c(:)  ! cold diagnostic mask evaluated from interval maxima
+  integer, allocatable, save :: sd_phase_change_flag_s2c(:) ! 0/1 cold phase-state category-change interval flag
+  integer, allocatable, save :: sd_spatial_visit_flag_s2c(:) ! 0/1 interval flag for Level-2 spatial visit
   real(RP), allocatable, save :: sdri_s2c(:)     ! index-i(real) of s.d.
   real(RP), allocatable, save :: sdrj_s2c(:)     ! index-j(real) of s.d.
   real(RP), allocatable, save :: sdrk_s2c(:)     ! index-k(real) of s.d.
@@ -130,6 +135,14 @@ module m_sdm_common
   integer, allocatable, save :: sortfreq_s2c(:)
   integer, allocatable, save :: sortkey_s2c(:)
   integer, allocatable, save :: sorttag_s2c(:)
+  ! Cold diagnostic maxima are reset after SD output and restored by new restarts.
+  real(RP), allocatable, save :: sd_liq_radius_max_interval_s2c(:)
+  real(RP), allocatable, save :: sd_ice_rvol_max_interval_s2c(:)
+  real(RP), allocatable, save :: sd_mixed_rvol_max_interval_s2c(:)
+  real(RP), allocatable, save :: sd_rime_mass_max_interval_s2c(:)
+  real(RP), allocatable, save :: sd_rime_frac_max_interval_s2c(:)
+  real(RP), allocatable, save :: sd_nmono_max_interval_s2c(:)
+  real(RP), allocatable, save :: sd_aspect_ratio_max_interval_s2c(:)
   real(DP), allocatable :: rbuf_r8(:,:,:)
                        ! reciving buffer for MPI (real8)
                        ! dim02 = 1 - ( 7+sd_numasl (+5) )
@@ -177,6 +190,11 @@ module m_sdm_common
   integer, allocatable, target :: sd_i4tmp1(:)
   integer, allocatable, target :: sd_i4tmp2(:)
   integer(DP), allocatable, target :: sd_i8tmp1(:)
+  integer, allocatable, target, save :: sd_event_mask_tmp(:)
+  integer, allocatable, target, save :: sd_event_sig_mask_tmp(:)
+  integer, allocatable, target, save :: sd_diag_mask_tmp(:)
+  integer, allocatable, target, save :: sd_phase_change_flag_tmp(:)
+  integer, allocatable, target, save :: sd_spatial_visit_flag_tmp(:)
   real(RP), allocatable, target, save :: sd_dtmp1(:)
   real(RP), allocatable, target, save :: sd_dtmp2(:)
   real(RP), allocatable, target, save :: sd_dtmp3(:)
@@ -185,6 +203,13 @@ module m_sdm_common
   real(RP), allocatable, target, save :: sd_dtmp6(:)
   real(RP), allocatable, target, save :: sd_dtmp7(:)
   real(RP), allocatable, target, save :: sd_dtmp8(:)
+  real(RP), allocatable, target, save :: sd_liq_radius_max_interval_tmp(:)
+  real(RP), allocatable, target, save :: sd_ice_rvol_max_interval_tmp(:)
+  real(RP), allocatable, target, save :: sd_mixed_rvol_max_interval_tmp(:)
+  real(RP), allocatable, target, save :: sd_rime_mass_max_interval_tmp(:)
+  real(RP), allocatable, target, save :: sd_rime_frac_max_interval_tmp(:)
+  real(RP), allocatable, target, save :: sd_nmono_max_interval_tmp(:)
+  real(RP), allocatable, target, save :: sd_aspect_ratio_max_interval_tmp(:)
   real(RP), allocatable, target, save :: sd_asltmp1(:,:)
   real(RP), allocatable, save :: QTRC_sdm(:,:,:,:)
   ! Module variables (SDM for ice)
@@ -230,6 +255,18 @@ module m_sdm_common
   type(c_rng_uniform_mt), save   :: rng_s2c_restart
   integer(i2), allocatable, save :: sdliqice_s2c_restart(:) ! phase(liquid/ice) of s.d.
   type(sdicedef), save :: sdice_s2c_restart                 ! ice attributes of s.d.
+  integer, allocatable, save :: sd_event_mask_s2c_restart(:)
+  integer, allocatable, save :: sd_event_sig_mask_s2c_restart(:)
+  integer, allocatable, save :: sd_diag_mask_s2c_restart(:)
+  integer, allocatable, save :: sd_phase_change_flag_s2c_restart(:)
+  integer, allocatable, save :: sd_spatial_visit_flag_s2c_restart(:)
+  real(RP), allocatable, save :: sd_liq_radius_max_interval_s2c_restart(:)
+  real(RP), allocatable, save :: sd_ice_rvol_max_interval_s2c_restart(:)
+  real(RP), allocatable, save :: sd_mixed_rvol_max_interval_s2c_restart(:)
+  real(RP), allocatable, save :: sd_rime_mass_max_interval_s2c_restart(:)
+  real(RP), allocatable, save :: sd_rime_frac_max_interval_s2c_restart(:)
+  real(RP), allocatable, save :: sd_nmono_max_interval_s2c_restart(:)
+  real(RP), allocatable, save :: sd_aspect_ratio_max_interval_s2c_restart(:)
 
   !------------------------------------------------------------------------------
   !
@@ -285,6 +322,8 @@ module m_sdm_common
   integer(DP), parameter :: INVALID_i8 = -999_DP ! value indicated as invalid super-droplets
   integer(i2), parameter :: INVALID_i2 = -999_i2 ! value indicated as invalid super-droplets
   integer, parameter :: INVALID_i4 = -999 ! value indicated as invalid super-droplets
+  integer, parameter :: TRACK_ID_INVALID = INVALID_i4 ! invalid/missing tracking ID sentinel
+  integer, parameter :: TRACK_SD_ID_DYNAMIC_START = -1000 ! first valid dynamic SD ID
 
   !------------------------------------------------------------------------------
   !
@@ -485,6 +524,8 @@ module m_sdm_common
                                              ! 2: backward tracking
   logical, save :: forward_tracking_enable = .false.  ! Internal runtime flag derived from tracking_mode
   logical, save :: backward_tracking_enable = .false. ! Internal runtime flag derived from tracking_mode
+  integer, save :: tracking_next_dynamic_sd_id = TRACK_SD_ID_DYNAMIC_START
+                                             ! Rank-local dynamic SD ID counter for future lifecycle-created SDs
   character(len=32), save :: tracking_selection_mode = 'random' ! random/stratified/none selection
   real(RP), save :: tracking_fraction = 1.0_RP       ! 1.0 disables downsampling; ignored when tracking_selection_mode='none'
   integer, save :: max_tracked_sds = 0
@@ -501,7 +542,97 @@ module m_sdm_common
   character(len=H_LONG), save :: tracking_id_output_basename = ''
   logical, save :: tracking_interest_radius_enable = .false.
   real(RP), save :: tracking_interest_radius_threshold = 0.0_RP ! SDs with radius >= this value are treated as interest targets
+  logical, save :: tracking_interest_ice_radius_enable = .false.
+  real(RP), save :: tracking_interest_ice_radius_threshold = 0.0_RP
+  logical, save :: tracking_interest_ice_phase_enable = .false.
+  logical, save :: tracking_interest_rime_mass_enable = .false.
+  real(RP), save :: tracking_interest_rime_mass_threshold = 0.0_RP
   logical, save :: tracking_interest_coalescence_enable = .false.
+  logical, save :: tracking_event_type_smoke_enable = .false.
+  logical, save :: tracking_event_type_smoke_liq_liq_only = .false.
+  integer, save :: tracking_event_type_smoke_repetitions = 1
+  integer(DP), save :: tracking_event_type_smoke_multiplicity = 1000000_DP
+  real(RP), save :: tracking_event_type_smoke_z = 600.0_RP
+  real(RP), save :: tracking_event_type_smoke_collision_floor = 2.0_RP
+  logical, save :: tracking_spatial_level3_smoke_enable = .false.
+  real(RP), save :: tracking_spatial_level3_smoke_dx = 0.0_RP
+  real(RP), save :: tracking_spatial_level3_smoke_dy = 0.0_RP
+  real(RP), save :: tracking_spatial_level3_smoke_dz = 0.0_RP
+  logical, save :: tracking_cleanup_debug_enable = .false.
+  logical, save :: tracking_cleanup_terminal_smoke_enable = .false.
+  logical, save :: tracking_cleanup_vertical_smoke_enable = .false.
+  logical, save :: tracking_kohler_activation_smoke_enable = .false.
+  logical, save :: tracking_kohler_deactivation_smoke_enable = .false.
+  real(RP), save :: tracking_kohler_smoke_asl_mass = 1.0E-16_RP
+  real(RP), save :: tracking_kohler_smoke_margin_fraction = 1.0E-8_RP
+  logical, save :: tracking_vapor_sublimation_smoke_enable = .false.
+  real(RP), save :: tracking_vapor_sublimation_smoke_qv_factor = 0.25_RP
+  logical, save :: TRACK_COLD_EVENT_EXTENDED_GEOMETRY = .false.
+  logical, save :: TRACK_COLD_OUTPUT_ICE_GEOMETRY = .false.
+  logical, save :: TRACK_COLD_OUTPUT_RIME_MORPHOLOGY = .false.
+  logical, save :: TRACK_COLD_OUTPUT_AEROSOL_CONTEXT = .false.
+  logical, save :: TRACK_COLD_OUTPUT_THERMO_CONTEXT = .false.
+  logical, save :: TRACK_COLD_OUTPUT_KOHLER_CONTEXT = .false.
+  logical, save :: tracking_evt_coalescence_enable = .false.
+  logical, save :: tracking_evt_liq_liq_coal_enable = .false. ! deprecated alias for tracking_evt_coalescence_enable
+  logical, save :: tracking_evt_riming_enable = .false.
+  logical, save :: tracking_evt_aggregation_enable = .false.
+  logical, save :: tracking_evt_freezing_enable = .false.
+  logical, save :: tracking_evt_melting_enable = .false.
+  logical, save :: tracking_evt_deposition_enable = .false.
+  logical, save :: tracking_evt_sublimation_enable = .false.
+  logical, save :: tracking_evt_condensation_enable = .false.
+  logical, save :: tracking_evt_evaporation_enable = .false.
+  logical, save :: tracking_evt_activation_enable = .false.
+  logical, save :: tracking_evt_deactivation_enable = .false.
+  logical, save :: tracking_sig_deposition_enable = .false.
+  real(RP), save :: tracking_sig_deposition_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_sublimation_enable = .false.
+  real(RP), save :: tracking_sig_sublimation_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_condensation_enable = .false.
+  real(RP), save :: tracking_sig_condensation_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_evaporation_enable = .false.
+  real(RP), save :: tracking_sig_evaporation_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_freezing_enable = .false.
+  real(RP), save :: tracking_sig_freezing_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_melting_enable = .false.
+  real(RP), save :: tracking_sig_melting_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_riming_enable = .false.
+  real(RP), save :: tracking_sig_riming_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_aggregation_enable = .false.
+  real(RP), save :: tracking_sig_aggregation_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_coalescence_enable = .false.
+  real(RP), save :: tracking_sig_coalescence_relmass_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_liq_liq_coal_enable = .false. ! deprecated alias
+  real(RP), save :: tracking_sig_liq_liq_coal_relmass_threshold = huge(1.0_RP) ! deprecated alias
+  logical, save :: tracking_sig_activation_enable = .false.
+  real(RP), save :: tracking_sig_activation_radius_threshold = huge(1.0_RP)
+  logical, save :: tracking_sig_deactivation_enable = .false.
+  real(RP), save :: tracking_sig_deactivation_radius_threshold = huge(1.0_RP)
+  logical, save :: tracking_diag_liq_radius_enable = .false.
+  real(RP), save :: tracking_diag_liq_radius_threshold = huge(1.0_RP)
+  logical, save :: tracking_diag_ice_rvol_enable = .false.
+  real(RP), save :: tracking_diag_ice_rvol_threshold = huge(1.0_RP)
+  logical, save :: tracking_diag_mixed_rvol_enable = .false.
+  real(RP), save :: tracking_diag_mixed_rvol_threshold = huge(1.0_RP)
+  logical, save :: tracking_diag_rime_mass_enable = .false.
+  real(RP), save :: tracking_diag_rime_mass_threshold = huge(1.0_RP)
+  logical, save :: tracking_diag_rime_frac_enable = .false.
+  real(RP), save :: tracking_diag_rime_frac_threshold = huge(1.0_RP)
+  logical, save :: tracking_diag_nmono_enable = .false.
+  real(RP), save :: tracking_diag_nmono_threshold = huge(1.0_RP)
+  logical, save :: tracking_diag_aspect_ratio_enable = .false.
+  real(RP), save :: tracking_diag_aspect_ratio_threshold = huge(1.0_RP)
+  logical, save :: tracking_spatial_visit_enable = .false.
+  real(RP), save :: tracking_spatial_x_min = huge(1.0_RP)
+  real(RP), save :: tracking_spatial_x_max = -huge(1.0_RP)
+  real(RP), save :: tracking_spatial_y_min = huge(1.0_RP)
+  real(RP), save :: tracking_spatial_y_max = -huge(1.0_RP)
+  real(RP), save :: tracking_spatial_z_min = huge(1.0_RP)
+  real(RP), save :: tracking_spatial_z_max = -huge(1.0_RP)
+  real(RP), save :: tracking_spatial_rank_margin = 0.0_RP
+  logical, save :: tracking_spatial_rank_pruning_enable = .false.
+  logical, save :: tracking_spatial_active_rank = .false.
   logical, save :: tracking_sample_initialized = .false.
   real(DP), save :: tracking_time_id_assign = 0.0_DP
   real(DP), save :: tracking_time_boundary_x = 0.0_DP
@@ -579,6 +710,9 @@ module m_sdm_common
   integer(kind=i2), parameter :: STAT_ICE = 10_i2  !! all ice
   integer(kind=i2), parameter :: STAT_MIX = 11_i2  !! mixture of ice
                                                    !! and liquid
+  integer(kind=i2), parameter :: TRACK_EVENT_LIQ_COAL = 1_i2
+  integer(kind=i2), parameter :: TRACK_EVENT_RIMING = 2_i2
+  integer(kind=i2), parameter :: TRACK_EVENT_AGGREGATION = 3_i2
 
 ! Table of the inherent growth ratio (Chen and Lamb 1994)
 ! T(n) = (1.375-n)/4. Here, T is the temperature in [degreeC], and n is the index.
@@ -664,12 +798,107 @@ module m_sdm_common
        tracking_id_output_basename, &
        tracking_interest_radius_enable, &
        tracking_interest_radius_threshold, &
+       tracking_interest_ice_radius_enable, &
+       tracking_interest_ice_radius_threshold, &
+       tracking_interest_ice_phase_enable, &
+       tracking_interest_rime_mass_enable, &
+       tracking_interest_rime_mass_threshold, &
        tracking_interest_coalescence_enable, &
+       tracking_event_type_smoke_enable, &
+       tracking_event_type_smoke_liq_liq_only, &
+       tracking_event_type_smoke_repetitions, &
+       tracking_event_type_smoke_multiplicity, &
+       tracking_event_type_smoke_z, &
+       tracking_event_type_smoke_collision_floor, &
+       tracking_spatial_level3_smoke_enable, &
+       tracking_spatial_level3_smoke_dx, &
+       tracking_spatial_level3_smoke_dy, &
+       tracking_spatial_level3_smoke_dz, &
        coalescence_output_enable, &
        gmd_benchmark_diag_enable, &
        random_perturbation_enable, &
        random_perturbation_amp, &
        sdm_noise_amp,       &
        coal_output
+
+  NAMELIST / PARAM_ATMOS_PHY_MP_SDM_TRACKING / &
+       TRACK_COLD_EVENT_EXTENDED_GEOMETRY, &
+       TRACK_COLD_OUTPUT_ICE_GEOMETRY, &
+       TRACK_COLD_OUTPUT_RIME_MORPHOLOGY, &
+       TRACK_COLD_OUTPUT_AEROSOL_CONTEXT, &
+       TRACK_COLD_OUTPUT_THERMO_CONTEXT, &
+       TRACK_COLD_OUTPUT_KOHLER_CONTEXT, &
+       tracking_evt_coalescence_enable, &
+       tracking_evt_liq_liq_coal_enable, &
+       tracking_evt_riming_enable, &
+       tracking_evt_aggregation_enable, &
+       tracking_evt_freezing_enable, &
+       tracking_evt_melting_enable, &
+       tracking_evt_deposition_enable, &
+       tracking_evt_sublimation_enable, &
+       tracking_evt_condensation_enable, &
+       tracking_evt_evaporation_enable, &
+       tracking_evt_activation_enable, &
+       tracking_evt_deactivation_enable, &
+       tracking_sig_deposition_enable, &
+       tracking_sig_deposition_relmass_threshold, &
+       tracking_sig_sublimation_enable, &
+       tracking_sig_sublimation_relmass_threshold, &
+       tracking_sig_condensation_enable, &
+       tracking_sig_condensation_relmass_threshold, &
+       tracking_sig_evaporation_enable, &
+       tracking_sig_evaporation_relmass_threshold, &
+       tracking_sig_freezing_enable, &
+       tracking_sig_freezing_relmass_threshold, &
+       tracking_sig_melting_enable, &
+       tracking_sig_melting_relmass_threshold, &
+       tracking_sig_riming_enable, &
+       tracking_sig_riming_relmass_threshold, &
+       tracking_sig_aggregation_enable, &
+       tracking_sig_aggregation_relmass_threshold, &
+       tracking_sig_coalescence_enable, &
+       tracking_sig_coalescence_relmass_threshold, &
+       tracking_sig_liq_liq_coal_enable, &
+       tracking_sig_liq_liq_coal_relmass_threshold, &
+       tracking_sig_activation_enable, &
+       tracking_sig_activation_radius_threshold, &
+       tracking_sig_deactivation_enable, &
+       tracking_sig_deactivation_radius_threshold, &
+       tracking_diag_liq_radius_enable, &
+       tracking_diag_liq_radius_threshold, &
+       tracking_diag_ice_rvol_enable, &
+       tracking_diag_ice_rvol_threshold, &
+       tracking_diag_mixed_rvol_enable, &
+       tracking_diag_mixed_rvol_threshold, &
+       tracking_diag_rime_mass_enable, &
+       tracking_diag_rime_mass_threshold, &
+       tracking_diag_rime_frac_enable, &
+       tracking_diag_rime_frac_threshold, &
+       tracking_diag_nmono_enable, &
+       tracking_diag_nmono_threshold, &
+       tracking_diag_aspect_ratio_enable, &
+       tracking_diag_aspect_ratio_threshold, &
+       tracking_spatial_visit_enable, &
+       tracking_spatial_x_min, &
+       tracking_spatial_x_max, &
+       tracking_spatial_y_min, &
+       tracking_spatial_y_max, &
+       tracking_spatial_z_min, &
+       tracking_spatial_z_max, &
+       tracking_spatial_rank_margin, &
+       tracking_spatial_rank_pruning_enable, &
+       tracking_spatial_level3_smoke_enable, &
+       tracking_spatial_level3_smoke_dx, &
+       tracking_spatial_level3_smoke_dy, &
+       tracking_spatial_level3_smoke_dz, &
+       tracking_cleanup_debug_enable, &
+       tracking_cleanup_terminal_smoke_enable, &
+       tracking_cleanup_vertical_smoke_enable, &
+       tracking_kohler_activation_smoke_enable, &
+       tracking_kohler_deactivation_smoke_enable, &
+       tracking_kohler_smoke_asl_mass, &
+       tracking_kohler_smoke_margin_fraction, &
+       tracking_vapor_sublimation_smoke_enable, &
+       tracking_vapor_sublimation_smoke_qv_factor
 
 end module m_sdm_common

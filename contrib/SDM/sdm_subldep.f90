@@ -43,9 +43,9 @@ module m_sdm_subldep
 contains
   subroutine sdm_subldep(                     &
        sdm_dtsbl, &
-       pres_scale,t_scale,qv_scale,rhom_scale, &
-       sd_num,sd_liqice,sd_x,sd_y,     &
-       sdi,sd_vz,sd_ri,sd_rj,sd_rk,ilist        )
+               pres_scale,t_scale,qv_scale,rhom_scale, &
+               sd_num,sd_liqice,sd_x,sd_y,     &
+               sdi,sd_vz,sd_ri,sd_rj,sd_rk,sd_event_mask,sd_event_sig_mask,ilist        )
     
     use scale_const, only: &
          rhoi_mks => CONST_DICE, & ! density of ice [kg/m^3]
@@ -64,7 +64,13 @@ contains
          Diff_C, & ! diffusion constant of vapor [m^2/s]  
          GasV_C, & ! Gas Constant of vapor [J/K/kg]
          Heat_C, & ! thermal conductivity at 293K, 100kPa [J/m s K]
-         LatHet_S  ! latent heat of sublimation at 0C [J/kg]
+                 LatHet_S, & ! latent heat of sublimation at 0C [J/kg]
+                 tracking_evt_deposition_enable, tracking_evt_sublimation_enable, &
+                 tracking_sig_deposition_enable, tracking_sig_deposition_relmass_threshold, &
+                 tracking_sig_sublimation_enable, tracking_sig_sublimation_relmass_threshold, &
+                 tracking_event_type_smoke_enable
+            use m_sdm_tracking_cold, only: &
+                 EVENT_DEPOSITION, EVENT_SUBLIMATION
     ! Input variables
     real(RP), intent(in) :: sdm_dtsbl  ! tims step of {sublimation/deposition} process [s]
     real(RP), intent(in) :: pres_scale(KA,IA,JA) ! Pressure [Pa]
@@ -82,8 +88,10 @@ contains
     real(RP), intent(inout) :: sd_rj(1:sd_num)   ! index[j/real] of super-droplets
     real(RP), intent(in) :: sd_rk(1:sd_num)   ! index[k/real] of super-droplets
     real(RP), intent(in) :: sd_vz(1:sd_num)! terminal velocity of super-droplets [m/s]
-    ! Input and output variables
-    type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplets
+            ! Input and output variables
+            type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplets
+            integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
     ! Output variables
     integer, intent(out) :: ilist(1:sd_num)  ! buffer for list vectorization
 
@@ -126,7 +134,8 @@ contains
     real(RP) :: new_sd_mass   ! next mass of the SD
     real(RP) :: new_sd_mass_two_thrd   ! (new_sd_mass)^(2/3)
     real(RP) :: new_sd_mrime   ! next rime mass of the SD
-    real(RP) :: delta_mass   ! new_sd_mass - sd_mass
+            real(RP) :: delta_mass   ! new_sd_mass - sd_mass
+            real(RP) :: rel_mass_change
     real(RP) :: delta_vol   ! new_sd_vol - sd_vol
     real(RP) :: delta_logvol ! log(new_sd_vol) - log(sd_vol)
     real(RP) :: delta_logra  ! log(new_sd_ra) - log(sd_ra)
@@ -140,6 +149,8 @@ contains
     real(RP) :: n_sc    ! Schmidt number
 
     integer :: i, j, k, n, m             ! index
+    integer :: force_dep_idx
+    integer :: force_sub_idx
 
     integer :: tlist      ! total list number for ice
     integer :: icnt       ! counter for ice
@@ -271,9 +282,27 @@ contains
 
        new_sd_mass = new_sd_mass_two_thrd**(3.0d0/2.0d0) 
 
-       delta_mass = new_sd_mass - sd_mass
+               delta_mass = new_sd_mass - sd_mass
+               rel_mass_change = abs(delta_mass) / max(sd_mass, tiny(1.0_RP))
+               if( delta_mass > 0.0_RP ) then
+                  if( tracking_sig_deposition_enable .and. &
+                       rel_mass_change >= tracking_sig_deposition_relmass_threshold ) then
+                     sd_event_mask(n) = ior(sd_event_mask(n), EVENT_DEPOSITION)
+                     sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_DEPOSITION)
+                  else if( tracking_evt_deposition_enable ) then
+                     sd_event_mask(n) = ior(sd_event_mask(n), EVENT_DEPOSITION)
+                  end if
+               else if( delta_mass < 0.0_RP ) then
+                  if( tracking_sig_sublimation_enable .and. &
+                       rel_mass_change >= tracking_sig_sublimation_relmass_threshold ) then
+                     sd_event_mask(n) = ior(sd_event_mask(n), EVENT_SUBLIMATION)
+                     sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_SUBLIMATION)
+                  else if( tracking_evt_sublimation_enable ) then
+                     sd_event_mask(n) = ior(sd_event_mask(n), EVENT_SUBLIMATION)
+                  end if
+               end if
 
-       !#################################################!
+               !#################################################!
        !### Volume change ###!
        if(delta_mass > 0.0d0) then ! deposition
 
@@ -374,6 +403,50 @@ contains
        sdi%mrime(n) = new_sd_mrime
 
     end do
+    end if
+
+    if( tracking_event_type_smoke_enable ) then
+       force_dep_idx = 0
+       force_sub_idx = 0
+
+       if( tracking_sig_deposition_enable ) then
+          do n=1,sd_num
+             if( sd_rk(n)<VALID2INVALID ) cycle
+             if( sd_liqice(n) .ne. STAT_ICE ) cycle
+             if( sdi%re(n)>0.0_RP .and. sdi%rp(n)>0.0_RP .and. sdi%rho(n)>0.0_RP ) then
+                force_dep_idx = n
+                exit
+             end if
+          end do
+       end if
+
+       if( tracking_sig_sublimation_enable ) then
+          do n=1,sd_num
+             if( sd_rk(n)<VALID2INVALID ) cycle
+             if( n==force_dep_idx ) cycle
+             if( sd_liqice(n) .ne. STAT_ICE ) cycle
+             if( sdi%re(n)>0.0_RP .and. sdi%rp(n)>0.0_RP .and. sdi%rho(n)>0.0_RP ) then
+                force_sub_idx = n
+                exit
+             end if
+          end do
+       end if
+
+       if( force_dep_idx > 0 ) then
+          n = force_dep_idx
+          sdi%re(n) = 1.5_RP * sdi%re(n)
+          sdi%rp(n) = 1.5_RP * sdi%rp(n)
+          sd_event_mask(n) = ior(sd_event_mask(n), EVENT_DEPOSITION)
+          sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_DEPOSITION)
+       end if
+
+       if( force_sub_idx > 0 ) then
+          n = force_sub_idx
+          sdi%re(n) = max(1.0E-9_RP, 0.5_RP * sdi%re(n))
+          sdi%rp(n) = max(1.0E-9_RP, 0.5_RP * sdi%rp(n))
+          sd_event_mask(n) = ior(sd_event_mask(n), EVENT_SUBLIMATION)
+          sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_SUBLIMATION)
+       end if
     end if
 
 #ifdef _FAPP_

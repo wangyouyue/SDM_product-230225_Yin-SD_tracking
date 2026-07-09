@@ -110,6 +110,7 @@ contains
 
           if( sd_rk(n)>=rku ) then
              sd_rk(n) = INVALID
+             cycle
           end if
 
        end if
@@ -151,7 +152,11 @@ contains
   subroutine sdm_boundary(wbc,ebc,sbc,nbc,                         &
                          sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,   &
                          sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,       &
-                         if_coal,bufsiz1,                                  &
+                         if_coal,sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+                         sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                         sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                         sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                         sd_aspect_ratio_max_interval,bufsiz1,             &
                          bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                          sd_itmp1,                              &
                          rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
@@ -193,6 +198,11 @@ contains
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
+    integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+    integer, intent(inout) :: sd_diag_mask(1:sd_num)
+    integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+    integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -206,6 +216,13 @@ contains
     real(RP), intent(inout) :: sd_r(1:sd_num) ! equivalent radius of super-droplets
     real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplets
+    real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
 
     real(DP), intent(inout) ::                                   &
          &                             rbuf_r8(1:bufsiz1,1:bufsiz2_r8,1:2)
@@ -278,6 +295,11 @@ contains
        call sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
             sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
+            sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+            sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+            sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+            sd_rime_frac_max_interval,sd_nmono_max_interval, &
+            sd_aspect_ratio_max_interval, &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -290,6 +312,11 @@ contains
        call sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
             sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
+            sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+            sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+            sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+            sd_rime_frac_max_interval,sd_nmono_max_interval, &
+            sd_aspect_ratio_max_interval, &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -318,6 +345,11 @@ contains
        call sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
             sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
+            sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+            sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+            sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+            sd_rime_frac_max_interval,sd_nmono_max_interval, &
+            sd_aspect_ratio_max_interval, &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -330,6 +362,11 @@ contains
        call sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,              &
             sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz,    &
             sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
+            sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+            sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+            sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+            sd_rime_frac_max_interval,sd_nmono_max_interval, &
+            sd_aspect_ratio_max_interval, &
             bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
             stat,sd_itmp1,                            &
             rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -364,6 +401,11 @@ contains
   subroutine sdm_putbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
        sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,        &
+       sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+       sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+       sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+       sd_rime_frac_max_interval,sd_nmono_max_interval, &
+       sd_aspect_ratio_max_interval, &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -386,6 +428,11 @@ contains
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
+    integer, intent(in) :: sd_event_mask(1:sd_num)
+    integer, intent(in) :: sd_event_sig_mask(1:sd_num)
+    integer, intent(in) :: sd_diag_mask(1:sd_num)
+    integer, intent(in) :: sd_phase_change_flag(1:sd_num)
+    integer, intent(in) :: sd_spatial_visit_flag(1:sd_num)
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -397,6 +444,13 @@ contains
     real(RP), intent(in) :: sd_r(1:sd_num) ! equivalent radius of super-droplets
     real(RP), intent(in) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     type(sdicedef), intent(in) :: sdi   ! ice phase super-droplet
+    real(RP), intent(in) :: sd_liq_radius_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_ice_rvol_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_mixed_rvol_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_rime_mass_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_rime_frac_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_nmono_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_aspect_ratio_max_interval(1:sd_num)
     integer, intent(in) :: bufsiz1  ! buffer size for MPI
     integer, intent(in) :: bufsiz2_r8 ! buffer size for MPI (real8)
     integer, intent(in) :: bufsiz2_i8 ! buffer size for MPI (int8)
@@ -517,7 +571,19 @@ contains
                 sbuf_r8(m,nwsdm+3,1) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,1) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,1) = sdi%mrime(n)
+                sbuf_r8(m,nwsdm+6,1) = sd_liq_radius_max_interval(n)
+                sbuf_r8(m,nwsdm+7,1) = sd_ice_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+8,1) = sd_mixed_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+9,1) = sd_rime_mass_max_interval(n)
+                sbuf_r8(m,nwsdm+10,1) = sd_rime_frac_max_interval(n)
+                sbuf_r8(m,nwsdm+11,1) = sd_nmono_max_interval(n)
+                sbuf_r8(m,nwsdm+12,1) = sd_aspect_ratio_max_interval(n)
                 sbuf_i4(m,3,1)       = sdi%nmono(n)
+                sbuf_i4(m,4,1)       = sd_event_mask(n)
+                sbuf_i4(m,5,1)       = sd_event_sig_mask(n)
+                sbuf_i4(m,6,1)       = sd_diag_mask(n)
+                sbuf_i4(m,7,1)       = sd_phase_change_flag(n)
+                sbuf_i4(m,8,1)       = sd_spatial_visit_flag(n)
 
              end do
 
@@ -592,7 +658,19 @@ contains
                 sbuf_r8(m,nwsdm+3,2) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,2) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,2) = sdi%mrime(n)
+                sbuf_r8(m,nwsdm+6,2) = sd_liq_radius_max_interval(n)
+                sbuf_r8(m,nwsdm+7,2) = sd_ice_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+8,2) = sd_mixed_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+9,2) = sd_rime_mass_max_interval(n)
+                sbuf_r8(m,nwsdm+10,2) = sd_rime_frac_max_interval(n)
+                sbuf_r8(m,nwsdm+11,2) = sd_nmono_max_interval(n)
+                sbuf_r8(m,nwsdm+12,2) = sd_aspect_ratio_max_interval(n)
                 sbuf_i4(m,3,2)       = sdi%nmono(n)
+                sbuf_i4(m,4,2)       = sd_event_mask(n)
+                sbuf_i4(m,5,2)       = sd_event_sig_mask(n)
+                sbuf_i4(m,6,2)       = sd_diag_mask(n)
+                sbuf_i4(m,7,2)       = sd_phase_change_flag(n)
+                sbuf_i4(m,8,2)       = sd_spatial_visit_flag(n)
 
              end do
 
@@ -842,6 +920,11 @@ contains
   subroutine sdm_getbufsx(wbc,ebc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
        sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,            &
+       sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+       sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+       sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+       sd_rime_frac_max_interval,sd_nmono_max_interval, &
+       sd_aspect_ratio_max_interval, &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -892,6 +975,11 @@ contains
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
+    integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+    integer, intent(inout) :: sd_diag_mask(1:sd_num)
+    integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+    integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -905,6 +993,13 @@ contains
     real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
     real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
     type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplet
+    real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
     ! Output variable
     integer, intent(out) :: ilist(1:sd_num) ! buffer for list vectorization
     ! Work variables
@@ -999,7 +1094,19 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,1)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,1)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,1)
+                sd_liq_radius_max_interval(n) = rbuf_r8(m,nwsdm+6,1)
+                sd_ice_rvol_max_interval(n) = rbuf_r8(m,nwsdm+7,1)
+                sd_mixed_rvol_max_interval(n) = rbuf_r8(m,nwsdm+8,1)
+                sd_rime_mass_max_interval(n) = rbuf_r8(m,nwsdm+9,1)
+                sd_rime_frac_max_interval(n) = rbuf_r8(m,nwsdm+10,1)
+                sd_nmono_max_interval(n) = rbuf_r8(m,nwsdm+11,1)
+                sd_aspect_ratio_max_interval(n) = rbuf_r8(m,nwsdm+12,1)
                 sdi%nmono(n)  = rbuf_i4(m,3,1)
+                sd_event_mask(n) = rbuf_i4(m,4,1)
+                sd_event_sig_mask(n) = rbuf_i4(m,5,1)
+                sd_diag_mask(n) = rbuf_i4(m,6,1)
+                sd_phase_change_flag(n) = rbuf_i4(m,7,1)
+                sd_spatial_visit_flag(n) = rbuf_i4(m,8,1)
 
              end do
 
@@ -1075,7 +1182,19 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,2)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,2)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,2)
+                sd_liq_radius_max_interval(n) = rbuf_r8(m,nwsdm+6,2)
+                sd_ice_rvol_max_interval(n) = rbuf_r8(m,nwsdm+7,2)
+                sd_mixed_rvol_max_interval(n) = rbuf_r8(m,nwsdm+8,2)
+                sd_rime_mass_max_interval(n) = rbuf_r8(m,nwsdm+9,2)
+                sd_rime_frac_max_interval(n) = rbuf_r8(m,nwsdm+10,2)
+                sd_nmono_max_interval(n) = rbuf_r8(m,nwsdm+11,2)
+                sd_aspect_ratio_max_interval(n) = rbuf_r8(m,nwsdm+12,2)
                 sdi%nmono(n)  = rbuf_i4(m,3,2)
+                sd_event_mask(n) = rbuf_i4(m,4,2)
+                sd_event_sig_mask(n) = rbuf_i4(m,5,2)
+                sd_diag_mask(n) = rbuf_i4(m,6,2)
+                sd_phase_change_flag(n) = rbuf_i4(m,7,2)
+                sd_spatial_visit_flag(n) = rbuf_i4(m,8,2)
 
              end do
 
@@ -1091,6 +1210,11 @@ contains
   subroutine sdm_putbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
        sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,            &
+       sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+       sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+       sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+       sd_rime_frac_max_interval,sd_nmono_max_interval, &
+       sd_aspect_ratio_max_interval, &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                   &
        sbuf_r8,sbuf_i8,sbuf_i2,sbuf_i4)
@@ -1113,6 +1237,11 @@ contains
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
+    integer, intent(in) :: sd_event_mask(1:sd_num)
+    integer, intent(in) :: sd_event_sig_mask(1:sd_num)
+    integer, intent(in) :: sd_diag_mask(1:sd_num)
+    integer, intent(in) :: sd_phase_change_flag(1:sd_num)
+    integer, intent(in) :: sd_spatial_visit_flag(1:sd_num)
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1124,6 +1253,13 @@ contains
     real(RP), intent(in) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
     real(RP), intent(in) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
     type(sdicedef), intent(in) :: sdi   ! ice phase super-droplet
+    real(RP), intent(in) :: sd_liq_radius_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_ice_rvol_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_mixed_rvol_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_rime_mass_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_rime_frac_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_nmono_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_aspect_ratio_max_interval(1:sd_num)
     integer, intent(in) :: bufsiz1  ! buffer size for MPI
     integer, intent(in) :: bufsiz2_r8 ! buffer size for MPI (real8)
     integer, intent(in) :: bufsiz2_i8 ! buffer size for MPI (int8)
@@ -1244,7 +1380,19 @@ contains
                 sbuf_r8(m,nwsdm+3,1) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,1) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,1) = sdi%mrime(n)
-                sbuf_i4(m,3,1) = sdi%nmono(n)
+                sbuf_r8(m,nwsdm+6,1) = sd_liq_radius_max_interval(n)
+                sbuf_r8(m,nwsdm+7,1) = sd_ice_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+8,1) = sd_mixed_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+9,1) = sd_rime_mass_max_interval(n)
+                sbuf_r8(m,nwsdm+10,1) = sd_rime_frac_max_interval(n)
+                sbuf_r8(m,nwsdm+11,1) = sd_nmono_max_interval(n)
+                sbuf_r8(m,nwsdm+12,1) = sd_aspect_ratio_max_interval(n)
+                sbuf_i4(m,3,1)       = sdi%nmono(n)
+                sbuf_i4(m,4,1)       = sd_event_mask(n)
+                sbuf_i4(m,5,1)       = sd_event_sig_mask(n)
+                sbuf_i4(m,6,1)       = sd_diag_mask(n)
+                sbuf_i4(m,7,1)       = sd_phase_change_flag(n)
+                sbuf_i4(m,8,1)       = sd_spatial_visit_flag(n)
 
              end do
           end if
@@ -1319,7 +1467,19 @@ contains
                 sbuf_r8(m,nwsdm+3,2) = sdi%rho(n)
                 sbuf_r8(m,nwsdm+4,2) = sdi%tf(n)
                 sbuf_r8(m,nwsdm+5,2) = sdi%mrime(n)
-                sbuf_i4(m,3,2) = sdi%nmono(n)
+                sbuf_r8(m,nwsdm+6,2) = sd_liq_radius_max_interval(n)
+                sbuf_r8(m,nwsdm+7,2) = sd_ice_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+8,2) = sd_mixed_rvol_max_interval(n)
+                sbuf_r8(m,nwsdm+9,2) = sd_rime_mass_max_interval(n)
+                sbuf_r8(m,nwsdm+10,2) = sd_rime_frac_max_interval(n)
+                sbuf_r8(m,nwsdm+11,2) = sd_nmono_max_interval(n)
+                sbuf_r8(m,nwsdm+12,2) = sd_aspect_ratio_max_interval(n)
+                sbuf_i4(m,3,2)       = sdi%nmono(n)
+                sbuf_i4(m,4,2)       = sd_event_mask(n)
+                sbuf_i4(m,5,2)       = sd_event_sig_mask(n)
+                sbuf_i4(m,6,2)       = sd_diag_mask(n)
+                sbuf_i4(m,7,2)       = sd_phase_change_flag(n)
+                sbuf_i4(m,8,2)       = sd_spatial_visit_flag(n)
 
              end do
           end if
@@ -1569,6 +1729,11 @@ contains
   subroutine sdm_getbufsy(sbc,nbc,sd_num,sd_numasl,         &
        sd_n,sd_liqice,sd_x,sd_y,sd_rk,sd_u,sd_v,sd_vz, &
        sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,                    &
+       sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+       sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+       sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+       sd_rime_frac_max_interval,sd_nmono_max_interval, &
+       sd_aspect_ratio_max_interval, &
        bufsiz1,bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4, &
        stat,ilist,                               &
        rbuf_r8,rbuf_i8,rbuf_i2,rbuf_i4)
@@ -1619,6 +1784,11 @@ contains
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
+    integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+    integer, intent(inout) :: sd_diag_mask(1:sd_num)
+    integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+    integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -1632,6 +1802,13 @@ contains
     real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
     real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
     type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplet
+    real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
     ! Output variable
     integer, intent(out) :: ilist(1:sd_num)  ! buffer for list vectorization
     ! Work variables
@@ -1726,7 +1903,19 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,1)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,1)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,1)
+                sd_liq_radius_max_interval(n) = rbuf_r8(m,nwsdm+6,1)
+                sd_ice_rvol_max_interval(n) = rbuf_r8(m,nwsdm+7,1)
+                sd_mixed_rvol_max_interval(n) = rbuf_r8(m,nwsdm+8,1)
+                sd_rime_mass_max_interval(n) = rbuf_r8(m,nwsdm+9,1)
+                sd_rime_frac_max_interval(n) = rbuf_r8(m,nwsdm+10,1)
+                sd_nmono_max_interval(n) = rbuf_r8(m,nwsdm+11,1)
+                sd_aspect_ratio_max_interval(n) = rbuf_r8(m,nwsdm+12,1)
                 sdi%nmono(n)  = rbuf_i4(m,3,1)
+                sd_event_mask(n) = rbuf_i4(m,4,1)
+                sd_event_sig_mask(n) = rbuf_i4(m,5,1)
+                sd_diag_mask(n) = rbuf_i4(m,6,1)
+                sd_phase_change_flag(n) = rbuf_i4(m,7,1)
+                sd_spatial_visit_flag(n) = rbuf_i4(m,8,1)
 
              end do
 
@@ -1800,7 +1989,19 @@ contains
                 sdi%rho(n) = rbuf_r8(m,nwsdm+3,2)
                 sdi%tf(n)  = rbuf_r8(m,nwsdm+4,2)
                 sdi%mrime(n)  = rbuf_r8(m,nwsdm+5,2)
+                sd_liq_radius_max_interval(n) = rbuf_r8(m,nwsdm+6,2)
+                sd_ice_rvol_max_interval(n) = rbuf_r8(m,nwsdm+7,2)
+                sd_mixed_rvol_max_interval(n) = rbuf_r8(m,nwsdm+8,2)
+                sd_rime_mass_max_interval(n) = rbuf_r8(m,nwsdm+9,2)
+                sd_rime_frac_max_interval(n) = rbuf_r8(m,nwsdm+10,2)
+                sd_nmono_max_interval(n) = rbuf_r8(m,nwsdm+11,2)
+                sd_aspect_ratio_max_interval(n) = rbuf_r8(m,nwsdm+12,2)
                 sdi%nmono(n)  = rbuf_i4(m,3,2)
+                sd_event_mask(n) = rbuf_i4(m,4,2)
+                sd_event_sig_mask(n) = rbuf_i4(m,5,2)
+                sd_diag_mask(n) = rbuf_i4(m,6,2)
+                sd_phase_change_flag(n) = rbuf_i4(m,7,2)
+                sd_spatial_visit_flag(n) = rbuf_i4(m,8,2)
 
              end do
 

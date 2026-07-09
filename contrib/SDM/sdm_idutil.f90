@@ -88,9 +88,31 @@ module m_sdm_idutil
   implicit none
   private
   public :: sdm_sort,sdm_getperm,sdm_copy_selected_sd,sdm_select_stratified_random_particles, &
-       sdm_select_particles_from_id_file
+       sdm_select_particles_from_id_file, sdm_tracking_effective_radius
 
 contains
+  real(RP) function sdm_tracking_effective_radius(sd_r, sd_liqice, sdi_re, sdi_rp)
+    use m_sdm_common, only: i2, STAT_LIQ, STAT_ICE, STAT_MIX
+    implicit none
+
+    real(RP), intent(in) :: sd_r
+    integer(i2), intent(in), optional :: sd_liqice
+    real(RP), intent(in), optional :: sdi_re, sdi_rp
+
+    sdm_tracking_effective_radius = sd_r
+
+    if( present(sd_liqice) .and. present(sdi_re) .and. present(sdi_rp) ) then
+      if( sd_liqice == STAT_ICE .or. sd_liqice == STAT_MIX ) then
+        sdm_tracking_effective_radius = max(sdi_re, sdi_rp)
+        if( sdm_tracking_effective_radius <= 0.0_RP ) sdm_tracking_effective_radius = sd_r
+      else if( sd_liqice /= STAT_LIQ ) then
+        sdm_tracking_effective_radius = max(sd_r, sdi_re, sdi_rp)
+      end if
+    end if
+
+    return
+  end function sdm_tracking_effective_radius
+!---------------------------------------------------------------------------------------------------------------------------------
   subroutine sdm_getperm(freq_max,ni_sdm,nj_sdm,nk_sdm,sd_num,    &
                          sort_tag0,fsort_tag,fsort_id,            &
                          sd_rand,sd_perm)
@@ -249,8 +271,16 @@ contains
   !---------------------------------------------------------------------------------------------------------------------------------
   subroutine sdm_copy_selected_sd(sd_num,    sd_numasl,    sd_n,    sd_x,    sd_y,    sd_ri,    sd_rj,    sd_rk,     &
        &                          sd_liqice,    sd_asl,    sd_r,    sdi,     sd_id,   dm_id,    if_coal,             &
+       &                          sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag,             &
+       &                          sd_liq_radius_max_interval,sd_ice_rvol_max_interval,                              &
+       &                          sd_mixed_rvol_max_interval,sd_rime_mass_max_interval,                             &
+       &                          sd_rime_frac_max_interval,sd_nmono_max_interval,sd_aspect_ratio_max_interval,     &
        &                          sd_num_tmp,sd_numasl_tmp,sd_n_tmp,sd_x_tmp,sd_y_tmp,sd_ri_tmp,sd_rj_tmp,sd_rk_tmp, &
        &                          sd_liqice_tmp,sd_asl_tmp,sd_r_tmp,sdi_tmp,sd_id_tmp,dm_id_tmp,if_coal_tmp,         &
+       &                          sd_event_mask_tmp,sd_event_sig_mask_tmp,sd_diag_mask_tmp,sd_phase_change_flag_tmp,sd_spatial_visit_flag_tmp, &
+       &                          sd_liq_radius_max_interval_tmp,sd_ice_rvol_max_interval_tmp,                      &
+       &                          sd_mixed_rvol_max_interval_tmp,sd_rime_mass_max_interval_tmp,                     &
+       &                          sd_rime_frac_max_interval_tmp,sd_nmono_max_interval_tmp,sd_aspect_ratio_max_interval_tmp, &
        &                          TEMP0,ilist,sdtype)
     use scale_process, only: &
          & PRC_MPIstop
@@ -258,8 +288,10 @@ contains
          & IA,JA,KA
     use m_sdm_common, only: &
          & i2, sdicedef, sdm_cold, num_threads, VALID2INVALID, STAT_LIQ, STAT_ICE, &
-         & sdm_aslset, mass_amsul, ion_amsul, mass_nacl, ion_nacl, CurveF, ASL_FF, &
+         & sdm_aslset, sdm_aslmw, sdm_aslion, &
          & INVALID_i4
+    use m_sdm_tracking_cold, only: &
+         & sdm_kohler_solute_params, sdm_kohler_critical_radius, sdm_kohler_activated_state
     use m_sdm_coordtrans, only: &
          & sdm_x2ri, sdm_y2rj
 
@@ -275,6 +307,11 @@ contains
                        ! flag of coalescence
                        ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
                        ! 1 = Super Droplet has undergone coalescence during the previous output interval
+    integer, intent(in) :: sd_event_mask(1:sd_num)
+    integer, intent(in) :: sd_event_sig_mask(1:sd_num)
+    integer, intent(in) :: sd_diag_mask(1:sd_num)
+    integer, intent(in) :: sd_phase_change_flag(1:sd_num)
+    integer, intent(in) :: sd_spatial_visit_flag(1:sd_num)
     integer(i2), intent(in) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -284,6 +321,13 @@ contains
     type(sdicedef), intent(in) :: sdi   ! ice phase super-droplets
     integer, intent(in) :: sd_id(1:sd_num)
     integer, intent(in) :: dm_id(1:sd_num)
+    real(RP), intent(in) :: sd_liq_radius_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_ice_rvol_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_mixed_rvol_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_rime_mass_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_rime_frac_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_nmono_max_interval(1:sd_num)
+    real(RP), intent(in) :: sd_aspect_ratio_max_interval(1:sd_num)
 
     integer,  intent(out) :: sd_num_tmp  ! number of super-droplets
     integer,  intent(out)  :: sd_numasl_tmp   ! number of kind of chemical material contained as water-soluble aerosol in super droplets
@@ -300,6 +344,18 @@ contains
     integer, intent(out) :: sd_id_tmp(1:sd_num)
     integer, intent(out) :: dm_id_tmp(1:sd_num)
     integer(i2), intent(out) :: if_coal_tmp(1:sd_num)
+    integer, intent(out) :: sd_event_mask_tmp(1:sd_num)
+    integer, intent(out) :: sd_event_sig_mask_tmp(1:sd_num)
+    integer, intent(out) :: sd_diag_mask_tmp(1:sd_num)
+    integer, intent(out) :: sd_phase_change_flag_tmp(1:sd_num)
+    integer, intent(out) :: sd_spatial_visit_flag_tmp(1:sd_num)
+    real(RP), intent(out) :: sd_liq_radius_max_interval_tmp(1:sd_num)
+    real(RP), intent(out) :: sd_ice_rvol_max_interval_tmp(1:sd_num)
+    real(RP), intent(out) :: sd_mixed_rvol_max_interval_tmp(1:sd_num)
+    real(RP), intent(out) :: sd_rime_mass_max_interval_tmp(1:sd_num)
+    real(RP), intent(out) :: sd_rime_frac_max_interval_tmp(1:sd_num)
+    real(RP), intent(out) :: sd_nmono_max_interval_tmp(1:sd_num)
+    real(RP), intent(out) :: sd_aspect_ratio_max_interval_tmp(1:sd_num)
 
     real(RP), intent(in)  :: TEMP0(KA,IA,JA)       ! temperature [K]
 
@@ -311,12 +367,7 @@ contains
     integer :: i_threads
     real(RP):: sd_aslmw(1:22) ! Molecular mass of chemical material contained as water-soluble aerosol in super droplets (default+20)
     real(RP):: sd_aslion(1:22) ! Degree of ion dissociation of chemical material contained as water-soluble aerosol in super droplets (default+20)
-    integer :: idx_nasl(1:22)  ! index for vactorization
-    real(RP) :: dmask(1:22)  ! mask for vactorization
-    real(RP):: coef_a, coef_b ! Coefficients of Kohler curve
     real(RP) :: t_sd      ! temperature of the grid contained the SD
-    real(RP) :: ivt_sd    ! 1.d0 / t_sd
-    real(RP) :: dtmp      ! temporary for interation  
 
     call sdm_x2ri(sd_num,sd_x,sd_ri,sd_rk)
     call sdm_y2rj(sd_num,sd_y,sd_rj,sd_rk)
@@ -324,71 +375,7 @@ contains
     !### Copy the same aerosol chemical componets
     sd_numasl_tmp = sd_numasl
 
-    !### Setup aerosol related parameters
-    if( abs(mod(sdm_aslset,10))==1 ) then
-
-       !### numasl=1 @ init+rest : (NH4)2SO4 ###!
-
-       sd_aslmw(1)  = mass_amsul
-       sd_aslion(1) = ion_amsul
-
-    else if( abs(mod(sdm_aslset,10))==2 ) then
-
-       if( abs(sdm_aslset)==2 ) then
-
-          !### numasl=1 @ init : NaCl ###!
-
-          sd_aslmw(1)  = mass_nacl
-          sd_aslion(1) = ion_nacl
-
-       else if( abs(sdm_aslset)==12 ) then
-
-          !### numasl=2 @ init : NaCl, rest : (NH4)2SO4 ###!
-
-          sd_aslmw(1) = mass_amsul
-          sd_aslmw(2) = mass_nacl
-          sd_aslion(1) = ion_amsul
-          sd_aslion(2) = ion_nacl
-
-       end if
-
-    else if( abs(mod(sdm_aslset,10))==3 ) then
-
-       !### numasl>=2 @ init+rest : (NH4)2SO4, NaCl, ... ###!
-
-       sd_aslmw(1) = mass_amsul
-       sd_aslmw(2) = mass_nacl
-
-       sd_aslion(1) = ion_amsul
-       sd_aslion(2) = ion_nacl
-
-       !! Must be a Bug. This cannot be simply commented out
-       do n=1,20
-       !            call getrname( id_sdm_aslmw  + (n-1), sd_aslmw(n+2)  )
-       !            call getrname( id_sdm_aslion + (n-1), sd_aslion(n+2) )
-       end do
-
-    else if( abs(mod(sdm_aslset,10))==5 ) then
-
-       !### numasl=1 @ init+rest : (NH4)HSO4 ###!
-
-       sd_aslmw(1)  = mass_amsul
-       sd_aslion(1) = ion_amsul
-
-    end if
-
-    do n=1,22
-
-       if( n<=sd_numasl ) then
-          idx_nasl(n) = n
-          dmask(n) = 1.0_RP
-       else
-          idx_nasl(n) = sd_numasl
-          dmask(n) = 0.0_RP
-       end if
-
-    end do
-
+    call sdm_kohler_solute_params(sdm_aslset, sdm_aslmw, sdm_aslion, sd_aslmw, sd_aslion)
 
     ! Get index list of the selected SDs
     cnt = 0
@@ -429,29 +416,11 @@ contains
 
              t_sd  = TEMP0(k,i,j)
 
-             ivt_sd = 1.0_RP / t_sd
-             coef_a  = CurveF * ivt_sd
+             sd_thld_radi = sdm_kohler_critical_radius(sd_numasl, sd_asl(n,:), &
+                  sd_aslmw, sd_aslion, t_sd)
 
-             !! calculate the coefficient b of Kohler curve
-             coef_b = 0.0_RP
-
-!OCL UNROLL('full'),NOSWP  
-             do t=1,22
-
-                s = idx_nasl(t)
-
-                dtmp = sd_asl(n,s) * (real(sd_aslion(s),kind=RP)            &
-                     / real(sd_aslmw(s),kind=RP))
-                coef_b = coef_b + dmask(t) * dtmp
-                
-             end do
-
-             coef_b = coef_b * ASL_FF
-
-             !! calculate critical radius
-             sd_thld_radi = sqrt(3.0_RP*coef_b/coef_a)
-
-             if( sd_r(n)>sd_thld_radi ) then
+             if( sdm_kohler_activated_state(.true., sd_liqice(n), sd_r(n), &
+                  sd_thld_radi, 0.0_RP) ) then
                 cnt = cnt + 1
                 ilist(cnt) = n
              end if
@@ -496,11 +465,23 @@ contains
           sd_rk_tmp(m)     = sd_rk(n)
           sd_liqice_tmp(m) = sd_liqice(n)
           sd_r_tmp(m)      = sd_r(n)
-          sd_id_tmp(m)      = sd_id(n)
-          dm_id_tmp(m)      = dm_id(n)
-          if_coal_tmp(m)      = if_coal(n)
+                  sd_id_tmp(m)      = sd_id(n)
+                  dm_id_tmp(m)      = dm_id(n)
+                  if_coal_tmp(m)      = if_coal(n)
+                  sd_event_mask_tmp(m) = sd_event_mask(n)
+                  sd_event_sig_mask_tmp(m) = sd_event_sig_mask(n)
+                  sd_diag_mask_tmp(m) = sd_diag_mask(n)
+                  sd_phase_change_flag_tmp(m) = sd_phase_change_flag(n)
+                  sd_spatial_visit_flag_tmp(m) = sd_spatial_visit_flag(n)
+                  sd_liq_radius_max_interval_tmp(m) = sd_liq_radius_max_interval(n)
+                  sd_ice_rvol_max_interval_tmp(m) = sd_ice_rvol_max_interval(n)
+                  sd_mixed_rvol_max_interval_tmp(m) = sd_mixed_rvol_max_interval(n)
+                  sd_rime_mass_max_interval_tmp(m) = sd_rime_mass_max_interval(n)
+                  sd_rime_frac_max_interval_tmp(m) = sd_rime_frac_max_interval(n)
+                  sd_nmono_max_interval_tmp(m) = sd_nmono_max_interval(n)
+                  sd_aspect_ratio_max_interval_tmp(m) = sd_aspect_ratio_max_interval(n)
 
-       end do
+               end do
        end do
 
        do k=1,sd_numasl_tmp
@@ -543,6 +524,9 @@ contains
          PRC_NUM_X, PRC_NUM_Y
     use m_sdm_common, only: &
          i2, INVALID_i4
+    use m_sdm_tracking_cold, only: &
+         sdm_tracking_find_slot_by_id, sdm_tracking_invalid_sd_id, &
+         sdm_tracking_invalid_dm_id, sdm_tracking_valid_id_pair
 
     implicit none
 
@@ -563,6 +547,8 @@ contains
     integer, allocatable :: target_sd_id(:), target_dm_id(:)
     logical, allocatable :: local_track_mask(:)
     logical :: do_track, file_exists, meta_found
+    logical :: found_slot
+    integer :: matched_slot
 
     status_rdm = 0
     meta_found = .false.
@@ -645,6 +631,8 @@ contains
 
     rewind(fid)
 
+    ! Backward TPHT may enter here before static slot IDs have been materialized.
+    ! Bootstrap only invalid slots so dynamic IDs still require an exact pair match.
     valid_before = 0
     matched_cnt = 0
 
@@ -675,19 +663,26 @@ contains
     end do
     close(fid)
 
-    valid_before = sd_num
+    valid_before = 0
+    do n = 1, sd_num
+      if( sdm_tracking_invalid_sd_id(sd_id(n)) .and. sdm_tracking_invalid_dm_id(dm_id(n)) ) then
+        sd_id(n) = n
+        dm_id(n) = mype
+      end if
+      if( sdm_tracking_valid_id_pair(sd_id(n), dm_id(n)) ) valid_before = valid_before + 1
+    end do
     matched_cnt = 0
 
     allocate(local_track_mask(sd_num))
     local_track_mask(:) = .false.
 
     do m = 1, pair_cnt
-      if( target_dm_id(m) == mype ) then
-        if( target_sd_id(m) >= 1 .and. target_sd_id(m) <= sd_num ) then
-          if( .not. local_track_mask(target_sd_id(m)) ) then
-            local_track_mask(target_sd_id(m)) = .true.
-            matched_cnt = matched_cnt + 1
-          end if
+      call sdm_tracking_find_slot_by_id(target_sd_id(m), target_dm_id(m), sd_id, dm_id, &
+           sd_num, found_slot, matched_slot)
+      if( found_slot ) then
+        if( .not. local_track_mask(matched_slot) ) then
+          local_track_mask(matched_slot) = .true.
+          matched_cnt = matched_cnt + 1
         end if
       end if
     end do
@@ -695,8 +690,7 @@ contains
     do n = 1, sd_num
       do_track = local_track_mask(n)
       if( do_track ) then
-        sd_id(n) = n
-        dm_id(n) = mype
+        ! Keep the matched identity; dynamic IDs are not local slot numbers.
       else
         sd_id(n) = INVALID_i4
         dm_id(n) = INVALID_i4
@@ -727,10 +721,12 @@ contains
                                                     tracking_min_per_bin,         &
                                                     tracking_fallback_to_random,  &
                                                     tracking_sample_initialized,  &
-                                                    dm_id, sd_id, if_coal, status_rdm)
+                                                    dm_id, sd_id, if_coal, status_rdm, sd_liqice, sdi)
     use scale_precision
     use scale_grid, only: DZ
-    use m_sdm_common, only: VALID2INVALID, INVALID_i4, i2
+    use m_sdm_common, only: VALID2INVALID, INVALID_i4, i2, sdicedef
+    use m_sdm_tracking_cold, only: &
+         sdm_tracking_valid_id_pair
     use scale_process, only: mype => PRC_myrank
 
     implicit none
@@ -755,6 +751,8 @@ contains
     integer, intent(inout) :: dm_id(1:sd_num)
     integer(i2), intent(inout) :: if_coal(1:sd_num)
     integer, intent(out) :: status_rdm
+    integer(i2), intent(in), optional :: sd_liqice(1:sd_num)
+    type(sdicedef), intent(in), optional :: sdi
 
     integer :: n, iz, ir, ibin
     integer :: tracked_cnt, candidate_cnt, target_cnt
@@ -765,8 +763,18 @@ contains
     logical :: do_track, use_none, use_stratified, stratified_selected, use_radius_upper_bound
     integer, allocatable :: bin_cnt(:), bin_quota(:), bin_selected(:), bin_remaining(:), bin_min(:)
     real(RP), allocatable :: bin_frac(:)
+    real(RP), allocatable :: sd_track_radius(:)
 
     status_rdm = 0
+
+    allocate(sd_track_radius(sd_num))
+    do n = 1, sd_num
+      if( present(sd_liqice) .and. present(sdi) ) then
+        sd_track_radius(n) = sdm_tracking_effective_radius(sd_r(n), sd_liqice(n), sdi%re(n), sdi%rp(n))
+      else
+        sd_track_radius(n) = sd_r(n)
+      end if
+    end do
 
     use_none = trim(adjustl(tracking_selection_mode)) == 'none' .or. &
                trim(adjustl(tracking_selection_mode)) == 'NONE' .or. &
@@ -820,10 +828,10 @@ contains
           if( sd_rk(n) <= VALID2INVALID ) cycle
           z_height = sd_rk(n) * DZ
           if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
-              sd_r(n) >= tracking_radius_min .and. &
-              ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+              sd_track_radius(n) >= tracking_radius_min .and. &
+              ( .not. use_radius_upper_bound .or. sd_track_radius(n) <= tracking_radius_max ) ) then
             candidate_cnt = candidate_cnt + 1
-            if( sd_r(n) > r_max_eff ) r_max_eff = sd_r(n)
+            if( sd_track_radius(n) > r_max_eff ) r_max_eff = sd_track_radius(n)
           end if
         end do
 
@@ -851,15 +859,15 @@ contains
             if( sd_rk(n) <= VALID2INVALID ) cycle
             z_height = sd_rk(n) * DZ
             if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
-                sd_r(n) >= tracking_radius_min .and. &
-                ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+                sd_track_radius(n) >= tracking_radius_min .and. &
+                ( .not. use_radius_upper_bound .or. sd_track_radius(n) <= tracking_radius_max ) ) then
               iz = int( (z_height-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
               iz = min( tracking_nz_bin, max(1,iz) )
               if( tracking_nr_bin == 1 ) then
                 ir = 1
               else
-                if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
-                  ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                if( log_r_span > 0.0_RP .and. sd_track_radius(n) > r_min_eff ) then
+                  ir = int( log(sd_track_radius(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
                 else
                   ir = 1
                 end if
@@ -922,15 +930,15 @@ contains
             if( sd_rk(n) > VALID2INVALID ) then
               z_height = sd_rk(n) * DZ
               if( z_height >= tracking_height_min .and. z_height <= tracking_height_max .and. &
-                  sd_r(n) >= tracking_radius_min .and. &
-                  ( .not. use_radius_upper_bound .or. sd_r(n) <= tracking_radius_max ) ) then
+                  sd_track_radius(n) >= tracking_radius_min .and. &
+                  ( .not. use_radius_upper_bound .or. sd_track_radius(n) <= tracking_radius_max ) ) then
                 iz = int( (z_height-tracking_height_min) / z_span * real(tracking_nz_bin,kind=RP) ) + 1
                 iz = min( tracking_nz_bin, max(1,iz) )
                 if( tracking_nr_bin == 1 ) then
                   ir = 1
                 else
-                  if( log_r_span > 0.0_RP .and. sd_r(n) > r_min_eff ) then
-                    ir = int( log(sd_r(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
+                  if( log_r_span > 0.0_RP .and. sd_track_radius(n) > r_min_eff ) then
+                    ir = int( log(sd_track_radius(n)/r_min_eff) / log_r_span * real(tracking_nr_bin,kind=RP) ) + 1
                   else
                     ir = 1
                   end if
@@ -996,7 +1004,7 @@ contains
       end if
     else
       do n = 1, sd_num
-        if( sd_id(n) > INVALID_i4 .and. dm_id(n) > INVALID_i4 ) then
+        if( sdm_tracking_valid_id_pair(sd_id(n), dm_id(n)) ) then
           tracked_cnt = tracked_cnt + 1
         end if
         if_coal(n) = 0_i2

@@ -30,9 +30,10 @@ module m_sdm_meltfreeze
 
 contains
   subroutine sdm_meltfreeze(           &
-       t_scale,pres_scale,qv_scale,    &
-       sd_num,sd_liqice,sd_x,sd_y,     &
-       sd_r,sd_ri,sd_rj,sd_rk,sdi      )
+               t_scale,pres_scale,qv_scale,    &
+               sd_num,sd_liqice,sd_x,sd_y,     &
+               sd_r,sd_ri,sd_rj,sd_rk,sdi,     &
+               sd_event_mask,sd_phase_change_flag )
     
     use scale_const, only: &
          t0   => CONST_TEM00, &      ! 0 degC in [K] 
@@ -44,8 +45,12 @@ contains
         ATMOS_SATURATION_pres2qsat_liq
     use m_sdm_coordtrans, only: &
          sdm_x2ri, sdm_y2rj
-    use m_sdm_common, only: &
-         VALID2INVALID, DNS_RL, i2, sdicedef, STAT_LIQ, STAT_ICE
+            use m_sdm_common, only: &
+                 VALID2INVALID, DNS_RL, i2, sdicedef, STAT_LIQ, STAT_ICE, &
+                 tracking_event_type_smoke_enable, &
+                 tracking_evt_freezing_enable, tracking_evt_melting_enable
+            use m_sdm_tracking_cold, only: &
+                 EVENT_FREEZING, EVENT_MELTING
 
     ! Input variables
     real(RP), intent(in) :: t_scale(KA,IA,JA) ! Temperature [K]
@@ -62,8 +67,10 @@ contains
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
                        ! 11 = mixture of ice and liquid
-    real(RP), intent(inout) :: sd_r(1:sd_num) ! equivalent radius of super-droplets
-    type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplets
+            real(RP), intent(inout) :: sd_r(1:sd_num) ! equivalent radius of super-droplets
+            type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplets
+            integer, intent(inout), optional :: sd_event_mask(1:sd_num)
+            integer, intent(inout), optional :: sd_phase_change_flag(1:sd_num)
     ! Work variables
     real(RP) :: p_sd      ! pressure of the grid contained the SD    [Pa]
     real(RP) :: t_sd      ! temperature of the grid contained the SD [K]
@@ -72,6 +79,8 @@ contains
     real(RP) :: rwori_onethird = (dens_w_mks/dens_i_mks)**(1.0d0/3.0d0)
 
     integer :: i, j, k, n    ! index
+    integer :: force_freeze_idx
+    integer :: force_melt_idx
     !---------------------------------------------------------------------
 #ifdef _FAPP_
     ! Section specification for fapp profiler
@@ -121,11 +130,17 @@ contains
           sdi%re(n)    = sd_r(n) * rwori_onethird
           sdi%rp(n)    = sd_r(n) * rwori_onethird
           sdi%rho(n)   = dens_i_mks
-          sdi%mrime(n) = 0.0d0
-          sdi%nmono(n) = 1
-          sd_r(n)      = 0.0d0
+                  sdi%mrime(n) = 0.0d0
+                  sdi%nmono(n) = 1
+                  sd_r(n)      = 0.0d0
+                  if( present(sd_event_mask) .and. present(sd_phase_change_flag) ) then
+                     if( tracking_evt_freezing_enable ) then
+                        sd_event_mask(n) = ior(sd_event_mask(n), EVENT_FREEZING)
+                     end if
+                     sd_phase_change_flag(n) = 1
+                  end if
 
-       end if
+               end if
 
        !### melting ###!
          
@@ -135,13 +150,76 @@ contains
           sd_r(n)      = (sdi%re(n)**2 * sdi%rp(n) * sdi%rho(n) / dens_w_mks)**(1.0d0/3.0d0)
           sdi%rho(n)   = 0.0d0
           sdi%re(n)    = 0.0d0
+                  sdi%rp(n)    = 0.0d0
+                  sdi%mrime(n) = 0.0d0
+                  sdi%nmono(n) = 0
+                  if( present(sd_event_mask) .and. present(sd_phase_change_flag) ) then
+                     if( tracking_evt_melting_enable ) then
+                        sd_event_mask(n) = ior(sd_event_mask(n), EVENT_MELTING)
+                     end if
+                     sd_phase_change_flag(n) = 1
+                  end if
+
+               end if
+
+    end do
+
+    if( tracking_event_type_smoke_enable ) then
+       force_freeze_idx = 0
+       force_melt_idx = 0
+
+       do n=1,sd_num
+          if( sd_rk(n)<VALID2INVALID ) cycle
+          if( sd_liqice(n)==STAT_LIQ .and. sd_r(n)>0.0_RP ) then
+             force_freeze_idx = n
+             exit
+          end if
+       end do
+
+       do n=1,sd_num
+          if( sd_rk(n)<VALID2INVALID ) cycle
+          if( n==force_freeze_idx ) cycle
+          if( sd_liqice(n)==STAT_ICE .and. sdi%re(n)>0.0_RP .and. &
+              sdi%rp(n)>0.0_RP .and. sdi%rho(n)>0.0_RP ) then
+             force_melt_idx = n
+             exit
+          end if
+       end do
+
+       if( force_freeze_idx > 0 ) then
+          n = force_freeze_idx
+          sd_liqice(n) = STAT_ICE
+          sdi%re(n)    = sd_r(n) * rwori_onethird
+          sdi%rp(n)    = sd_r(n) * rwori_onethird
+          sdi%rho(n)   = dens_i_mks
+          sdi%mrime(n) = 0.0d0
+          sdi%nmono(n) = 1
+          sd_r(n)      = 0.0d0
+          if( present(sd_event_mask) .and. present(sd_phase_change_flag) ) then
+             if( tracking_evt_freezing_enable ) then
+                sd_event_mask(n) = ior(sd_event_mask(n), EVENT_FREEZING)
+             end if
+             sd_phase_change_flag(n) = 1
+          end if
+       end if
+
+       if( force_melt_idx > 0 ) then
+          n = force_melt_idx
+          sd_liqice(n) = STAT_LIQ
+          sd_r(n)      = (sdi%re(n)**2 * sdi%rp(n) * sdi%rho(n) / dens_w_mks)**(1.0d0/3.0d0)
+          sdi%rho(n)   = 0.0d0
+          sdi%re(n)    = 0.0d0
           sdi%rp(n)    = 0.0d0
           sdi%mrime(n) = 0.0d0
           sdi%nmono(n) = 0
-          
+          if( present(sd_event_mask) .and. present(sd_phase_change_flag) ) then
+             if( tracking_evt_melting_enable ) then
+                sd_event_mask(n) = ior(sd_event_mask(n), EVENT_MELTING)
+             end if
+             sd_phase_change_flag(n) = 1
+          end if
        end if
-
-    end do
+    end if
 
 #ifdef _FAPP_
     ! Section specification for fapp profiler

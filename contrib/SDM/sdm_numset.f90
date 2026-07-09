@@ -155,8 +155,8 @@ contains
     bufsiz2_i4 = 2                   !! save and domain index
 
     if( sdm_cold ) then
-       bufsiz2_i4 = 3                !! nmono (cold), save and domain index
-       bufsiz2_r8 = bufsiz2_r8 + 5   !! re,ro,rho,tf,mrime
+       bufsiz2_i4 = 8                !! nmono, save/domain index, cold masks, spatial visit
+       bufsiz2_r8 = bufsiz2_r8 + 12  !! re,rp,rho,tf,mrime and interval maxima
     end if
 
     return

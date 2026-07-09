@@ -24,6 +24,7 @@ MODS	= \
 	  m_sdm_sd2fluid.mod \
 	  m_sdm_coalescence.mod \
 	  m_sdm_coalescence_cold.mod \
+	  m_sdm_tracking_cold.mod \
 	  m_sdm_idutil.mod \
 	  m_sdm_motion.mod \
 	  m_sdm_boundary.mod \
@@ -41,6 +42,7 @@ OBJS	= \
 	  sdm_sd2fluid.o \
 	  sdm_coalescence.o \
 	  sdm_coalescence_cold.o \
+	  sdm_tracking_cold.o \
 	  sdm_idutil.o \
 	  sdm_motion.o \
 	  sdm_boundary.o \
@@ -72,6 +74,7 @@ scale_atmos_phy_mp_sdm.F90: $(OBJS)
 
 sdm_subldep.o: sdm_subldep.f90 \
 	$(DEPENDLIB) \
+	sdm_tracking_cold.o \
 	sdm_coordtrans.o \
 	sdm_common.o \
 	sdm_fluidconv.o \
@@ -84,6 +87,7 @@ sdm_subldep.o: sdm_subldep.f90 \
 
 sdm_meltfreeze.o: sdm_meltfreeze.f90 \
 	$(DEPENDLIB) \
+	sdm_tracking_cold.o \
 	sdm_coordtrans.o \
 	sdm_common.o \
 	sdm_fluidconv.o \
@@ -131,6 +135,7 @@ sdm_coalescence_cold.o: sdm_coalescence_cold.f90 \
 	$(DEPENDLIB) \
 	sdm_common.o \
 	sdm_coordtrans.o \
+	sdm_tracking_cold.o \
 	sdm_idutil.o \
 	$(SCALESRCDIR)/scale_grid_index.o \
 	$(SCALESRCDIR)/scale_const.o \
@@ -138,6 +143,13 @@ sdm_coalescence_cold.o: sdm_coalescence_cold.f90 \
 	$(MTDIR)/rng_uniform_mt.mod \
 	$(GAGETRYDIR)/gadg_algorithm.mod
 	$(FC) $(FFLAGS) $(FFLAGS_SDM3) $(FFLAGS_SDM_MONIT) -I$(OBJ_DIR) -I$(SCALESRCDIR) -I$(MODDIR) -I$(DCUTILSDIR) -I$(GTOOLDIR) -I$(MTDIR) -I$(GAGETRYDIR) -I$(SDMDIR) -o $@ -c $<
+
+sdm_tracking_cold.o: sdm_tracking_cold.f90 \
+	$(DEPENDLIB) \
+	sdm_common.o \
+	$(SCALESRCDIR)/scale_const.o \
+	$(SCALESRCDIR)/scale_precision.o
+	$(FC) $(FFLAGS) $(FFLAGS_SDM_MONIT) -I$(OBJ_DIR) -I$(SCALESRCDIR) -I$(MODDIR) -I$(DCUTILSDIR) -I$(GTOOLDIR) -I$(MTDIR) -I$(GAGETRYDIR) -I$(SDMDIR) -o $@ -c $<
 
 sdm_idutil.o: sdm_idutil.f90 \
 	$(DEPENDLIB) \
@@ -183,6 +195,8 @@ sdm_fluidconv.o: sdm_fluidconv.f90 \
 
 sdm_io.o: sdm_io.f90 \
 	$(DEPENDLIB) \
+	sdm_idutil.o \
+	sdm_tracking_cold.o \
 	sdm_common.o \
 	$(SCALESRCDIR)/scale_process.o \
 	$(SCALESRCDIR)/scale_precision.o \

@@ -66,6 +66,18 @@ contains
     allocate(sdid_s2c(1:sdnum_s2c))
     allocate(dmid_s2c(1:sdnum_s2c))
     allocate(ifcoal_s2c(1:sdnum_s2c))
+    allocate(sd_event_mask_s2c(1:sdnum_s2c))
+    allocate(sd_event_sig_mask_s2c(1:sdnum_s2c))
+    allocate(sd_diag_mask_s2c(1:sdnum_s2c))
+    allocate(sd_phase_change_flag_s2c(1:sdnum_s2c))
+    allocate(sd_spatial_visit_flag_s2c(1:sdnum_s2c))
+    allocate(sd_liq_radius_max_interval_s2c(1:sdnum_s2c))
+    allocate(sd_ice_rvol_max_interval_s2c(1:sdnum_s2c))
+    allocate(sd_mixed_rvol_max_interval_s2c(1:sdnum_s2c))
+    allocate(sd_rime_mass_max_interval_s2c(1:sdnum_s2c))
+    allocate(sd_rime_frac_max_interval_s2c(1:sdnum_s2c))
+    allocate(sd_nmono_max_interval_s2c(1:sdnum_s2c))
+    allocate(sd_aspect_ratio_max_interval_s2c(1:sdnum_s2c))
     allocate(sdasl_s2c(1:sdnum_s2c,1:sdnumasl_s2c))
     allocate(sdn_fm(1:sdfmnum_s2c))
     allocate(sdri_fm(1:sdfmnum_s2c))
@@ -154,6 +166,11 @@ contains
     allocate(sd_i8tmp1(1:sdnum_s2c))
     allocate(sd_i4tmp1(1:sdnum_s2c))
     allocate(sd_i4tmp2(1:sdnum_s2c))
+    allocate(sd_event_mask_tmp(1:sdnum_s2c))
+    allocate(sd_event_sig_mask_tmp(1:sdnum_s2c))
+    allocate(sd_diag_mask_tmp(1:sdnum_s2c))
+    allocate(sd_phase_change_flag_tmp(1:sdnum_s2c))
+    allocate(sd_spatial_visit_flag_tmp(1:sdnum_s2c))
 
     allocate(sd_dtmp1(1:sdnum_s2c))
     allocate(sd_dtmp2(1:sdnum_s2c))
@@ -163,6 +180,13 @@ contains
     allocate(sd_dtmp6(1:sdnum_s2c))
     allocate(sd_dtmp7(1:sdnum_s2c))
     allocate(sd_dtmp8(1:sdnum_s2c))
+    allocate(sd_liq_radius_max_interval_tmp(1:sdnum_s2c))
+    allocate(sd_ice_rvol_max_interval_tmp(1:sdnum_s2c))
+    allocate(sd_mixed_rvol_max_interval_tmp(1:sdnum_s2c))
+    allocate(sd_rime_mass_max_interval_tmp(1:sdnum_s2c))
+    allocate(sd_rime_frac_max_interval_tmp(1:sdnum_s2c))
+    allocate(sd_nmono_max_interval_tmp(1:sdnum_s2c))
+    allocate(sd_aspect_ratio_max_interval_tmp(1:sdnum_s2c))
 
     allocate(sd_asltmp1(1:sdnum_s2c,1:sdnumasl_s2c))
 
@@ -207,6 +231,18 @@ contains
        sdid_s2c(n) = 0
        dmid_s2c(n) = 0
        ifcoal_s2c(n) = 0
+       sd_event_mask_s2c(n) = 0
+       sd_event_sig_mask_s2c(n) = 0
+       sd_diag_mask_s2c(n) = 0
+       sd_phase_change_flag_s2c(n) = 0
+       sd_spatial_visit_flag_s2c(n) = 0
+       sd_liq_radius_max_interval_s2c(n) = 0.0_RP
+       sd_ice_rvol_max_interval_s2c(n) = 0.0_RP
+       sd_mixed_rvol_max_interval_s2c(n) = 0.0_RP
+       sd_rime_mass_max_interval_s2c(n) = 0.0_RP
+       sd_rime_frac_max_interval_s2c(n) = 0.0_RP
+       sd_nmono_max_interval_s2c(n) = 0.0_RP
+       sd_aspect_ratio_max_interval_s2c(n) = 0.0_RP
 
        sd_itmp1(n) = 0
        sd_itmp2(n) = 0
@@ -214,6 +250,18 @@ contains
 
        sd_dtmp1(n) = 0.0_RP
        sd_dtmp2(n) = 0.0_RP
+       sd_event_mask_tmp(n) = 0
+       sd_event_sig_mask_tmp(n) = 0
+       sd_diag_mask_tmp(n) = 0
+       sd_phase_change_flag_tmp(n) = 0
+       sd_spatial_visit_flag_tmp(n) = 0
+       sd_liq_radius_max_interval_tmp(n) = 0.0_RP
+       sd_ice_rvol_max_interval_tmp(n) = 0.0_RP
+       sd_mixed_rvol_max_interval_tmp(n) = 0.0_RP
+       sd_rime_mass_max_interval_tmp(n) = 0.0_RP
+       sd_rime_frac_max_interval_tmp(n) = 0.0_RP
+       sd_nmono_max_interval_tmp(n) = 0.0_RP
+       sd_aspect_ratio_max_interval_tmp(n) = 0.0_RP
     enddo
 
     do s = 1, sdnumasl_s2c
@@ -266,6 +314,31 @@ contains
     allocate(dmid_s2c_restart(1:sdnum_s2c))
     allocate(ifcoal_s2c_restart(1:sdnum_s2c))
     allocate(sdliqice_s2c_restart(1:sdnum_s2c))
+    allocate(sd_event_mask_s2c_restart(1:sdnum_s2c))
+    allocate(sd_event_sig_mask_s2c_restart(1:sdnum_s2c))
+    allocate(sd_diag_mask_s2c_restart(1:sdnum_s2c))
+    allocate(sd_phase_change_flag_s2c_restart(1:sdnum_s2c))
+    allocate(sd_spatial_visit_flag_s2c_restart(1:sdnum_s2c))
+    allocate(sd_liq_radius_max_interval_s2c_restart(1:sdnum_s2c))
+    allocate(sd_ice_rvol_max_interval_s2c_restart(1:sdnum_s2c))
+    allocate(sd_mixed_rvol_max_interval_s2c_restart(1:sdnum_s2c))
+    allocate(sd_rime_mass_max_interval_s2c_restart(1:sdnum_s2c))
+    allocate(sd_rime_frac_max_interval_s2c_restart(1:sdnum_s2c))
+    allocate(sd_nmono_max_interval_s2c_restart(1:sdnum_s2c))
+    allocate(sd_aspect_ratio_max_interval_s2c_restart(1:sdnum_s2c))
+    sd_event_mask_s2c_restart(:) = 0
+    sd_event_sig_mask_s2c_restart(:) = 0
+    sd_diag_mask_s2c_restart(:) = 0
+    sd_phase_change_flag_s2c_restart(:) = 0
+    sd_spatial_visit_flag_s2c_restart(:) = 0
+    sd_liq_radius_max_interval_s2c_restart(:) = 0.0_RP
+    sd_ice_rvol_max_interval_s2c_restart(:) = 0.0_RP
+    sd_mixed_rvol_max_interval_s2c_restart(:) = 0.0_RP
+    sd_rime_mass_max_interval_s2c_restart(:) = 0.0_RP
+    sd_rime_frac_max_interval_s2c_restart(:) = 0.0_RP
+    sd_nmono_max_interval_s2c_restart(:) = 0.0_RP
+    sd_aspect_ratio_max_interval_s2c_restart(:) = 0.0_RP
+    tracking_next_dynamic_sd_id = TRACK_SD_ID_DYNAMIC_START
     if( sdm_cold ) then
        allocate(sdice_s2c_restart%re(1:sdnum_s2c))
        allocate(sdice_s2c_restart%rp(1:sdnum_s2c))

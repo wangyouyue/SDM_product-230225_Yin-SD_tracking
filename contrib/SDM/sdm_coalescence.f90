@@ -39,7 +39,14 @@ contains
                         ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl, &
                         sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,&
                         sd_id, dm_id, sd_id1, sd_id2, dm_id1, dm_id2, num_col, num_pair,&
-                        sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,coal_output,sort_id,sort_key,sort_freq,sort_tag,&
+                        sdr1_out,sdr2_out,sdn1_out,sdn2_out, &
+                        event_x_out,event_y_out,event_z_out, &
+                        sdn1_post_out,sdn2_post_out, &
+                        hydro_radius1_pre_out,hydro_radius2_pre_out, &
+                        hydro_radius1_post_out,hydro_radius2_post_out, &
+                        hydro_mass1_pre_out,hydro_mass2_pre_out, &
+                        hydro_mass1_post_out,hydro_mass2_post_out, &
+                        if_coal,coal_output,sort_id,sort_key,sort_freq,sort_tag,&
                         sd_rng,sd_rand,                        &
                         sort_tag0,fsort_id,icp,sd_perm,c_rate  )
     use gadg_algorithm, only: &
@@ -53,13 +60,14 @@ contains
          rw => CONST_Rvap,  &    ! Gas Constant of vapor [J/K/kg]
          rd => CONST_Rdry,  &    ! Gas Constant of dry air [J/K/kg]
          cp => CONST_CPdry, &
-         p0 => CONST_PRE00       ! Reference Pressure [Pa]
+         p0 => CONST_PRE00, &    ! Reference Pressure [Pa]
+         dens_w_mks => CONST_DWATR
     use m_sdm_common, only: &
          VALID2INVALID,INVALID,knum_sdm,INVALID_i4, &
          rho_amsul,rho_nacl,ONE_PI,m2micro,r0col,ratcol,ecoll,micro2m,dxiv_sdm,dyiv_sdm,F_THRD,O_THRD,rrst,boltz,mass_air,i2, &
          forward_tracking_enable, backward_tracking_enable
     use m_sdm_coordtrans, only: &
-         sdm_x2ri, sdm_y2rj
+         sdm_x2ri, sdm_y2rj, sdm_rk2z
     use m_sdm_idutil, only: &
          sdm_sort, sdm_getperm
     !  Input variables
@@ -118,6 +126,19 @@ contains
     real(RP), allocatable, intent(out) :: sdr2_out(:)
     integer(DP), allocatable, intent(out) :: sdn1_out(:)
     integer(DP), allocatable, intent(out) :: sdn2_out(:)
+    real(RP), allocatable, intent(out) :: event_x_out(:)
+    real(RP), allocatable, intent(out) :: event_y_out(:)
+    real(RP), allocatable, intent(out) :: event_z_out(:)
+    integer(DP), allocatable, intent(out) :: sdn1_post_out(:)
+    integer(DP), allocatable, intent(out) :: sdn2_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius1_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius2_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius1_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius2_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass1_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass2_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass1_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass2_post_out(:)
     integer, intent(out) :: num_pair           ! number of selected coalescent SD pairs
     ! Internal shared variables
     real(RP) :: sd_aslrho(1:22) ! Density of chemical material contained as water-soluble aerosol in super droplets
@@ -189,6 +210,20 @@ contains
     real(RP), allocatable :: sdr2_temp(:)
     integer(DP), allocatable :: sdn1_temp(:)
     integer(DP), allocatable :: sdn2_temp(:)
+    real(RP), allocatable :: event_x_temp(:)
+    real(RP), allocatable :: event_y_temp(:)
+    real(RP), allocatable :: event_z_temp(:)
+    integer(DP), allocatable :: sdn1_post_temp(:)
+    integer(DP), allocatable :: sdn2_post_temp(:)
+    real(RP), allocatable :: hydro_radius1_pre_temp(:)
+    real(RP), allocatable :: hydro_radius2_pre_temp(:)
+    real(RP), allocatable :: hydro_radius1_post_temp(:)
+    real(RP), allocatable :: hydro_radius2_post_temp(:)
+    real(RP), allocatable :: hydro_mass1_pre_temp(:)
+    real(RP), allocatable :: hydro_mass2_pre_temp(:)
+    real(RP), allocatable :: hydro_mass1_post_temp(:)
+    real(RP), allocatable :: hydro_mass2_post_temp(:)
+    real(RP), allocatable :: sd_z_event(:)
 
     integer, allocatable :: fsort_tag(:) ! buffer for sorting
     integer, allocatable :: fsort_freq(:) ! buffer for sorting
@@ -207,6 +242,7 @@ contains
     integer :: sort_tag0m
     integer :: sort_freqm
     integer :: icptc, icptp
+    integer :: idx1, idx2
     logical :: write_tracking_ids
     logical :: write_coal
     !--------------------------------------------------------------------
@@ -941,6 +977,21 @@ contains
        allocate(sdr2_temp(sd_num/2))
        allocate(sdn1_temp(sd_num/2))
        allocate(sdn2_temp(sd_num/2))
+       allocate(event_x_temp(sd_num/2))
+       allocate(event_y_temp(sd_num/2))
+       allocate(event_z_temp(sd_num/2))
+       allocate(sdn1_post_temp(sd_num/2))
+       allocate(sdn2_post_temp(sd_num/2))
+       allocate(hydro_radius1_pre_temp(sd_num/2))
+       allocate(hydro_radius2_pre_temp(sd_num/2))
+       allocate(hydro_radius1_post_temp(sd_num/2))
+       allocate(hydro_radius2_post_temp(sd_num/2))
+       allocate(hydro_mass1_pre_temp(sd_num/2))
+       allocate(hydro_mass2_pre_temp(sd_num/2))
+       allocate(hydro_mass1_post_temp(sd_num/2))
+       allocate(hydro_mass2_post_temp(sd_num/2))
+       allocate(sd_z_event(sd_num))
+       call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_z_event, sd_ri, sd_rj)
     end if
 
     num_pair = 0
@@ -978,6 +1029,8 @@ contains
           end if
 
           if( sd_n(icptc) > sd_n(icptp) ) then
+             idx1 = icptc
+             idx2 = icptp
 
              sd_n1  = sd_n( icptc )
              sd_r1  = sd_r( icptc )
@@ -1004,6 +1057,8 @@ contains
              end do
 
           else
+             idx1 = icptp
+             idx2 = icptc
 
              sd_n1  = sd_n( icptp )
              sd_r1  = sd_r( icptp )
@@ -1034,11 +1089,18 @@ contains
           sd_ncol = min( sd_ncol, int(sd_n1/sd_n2,kind=DP) )
 
           if( write_coal ) then
+             event_x_temp( num_pair ) = 0.5_RP * (sd_x(idx1) + sd_x(idx2))
+             event_y_temp( num_pair ) = 0.5_RP * (sd_y(idx1) + sd_y(idx2))
+             event_z_temp( num_pair ) = 0.5_RP * (sd_z_event(idx1) + sd_z_event(idx2))
              sdr1_temp( num_pair ) = sd_r1
              sdn1_temp( num_pair ) = sd_n1
              sdr2_temp( num_pair ) = sd_r2
              sdn2_temp( num_pair ) = sd_n2
              num_col_temp( num_pair ) = sd_ncol
+             hydro_radius1_pre_temp( num_pair ) = sd_r1
+             hydro_radius2_pre_temp( num_pair ) = sd_r2
+             hydro_mass1_pre_temp( num_pair ) = (4.0_RP/3.0_RP) * ONE_PI * dens_w_mks * sd_r1**3
+             hydro_mass2_pre_temp( num_pair ) = (4.0_RP/3.0_RP) * ONE_PI * dens_w_mks * sd_r2**3
           end if
 
           if( sd_n1 > sd_n2*sd_ncol ) then
@@ -1088,6 +1150,15 @@ contains
                 sd_rk1 = INVALID
              end if
 
+          end if
+
+          if( write_coal ) then
+             sdn1_post_temp( num_pair ) = sd_n1
+             sdn2_post_temp( num_pair ) = sd_n2
+             hydro_radius1_post_temp( num_pair ) = sd_r1
+             hydro_radius2_post_temp( num_pair ) = sd_r2
+             hydro_mass1_post_temp( num_pair ) = (4.0_RP/3.0_RP) * ONE_PI * dens_w_mks * sd_r1**3
+             hydro_mass2_post_temp( num_pair ) = (4.0_RP/3.0_RP) * ONE_PI * dens_w_mks * sd_r2**3
           end if
 
           !! This never happens
@@ -1153,11 +1224,37 @@ contains
         allocate(sdr2_out( num_pair ))
         allocate(sdn1_out( num_pair ))
         allocate(sdn2_out( num_pair ))
+        allocate(event_x_out( num_pair ))
+        allocate(event_y_out( num_pair ))
+        allocate(event_z_out( num_pair ))
+        allocate(sdn1_post_out( num_pair ))
+        allocate(sdn2_post_out( num_pair ))
+        allocate(hydro_radius1_pre_out( num_pair ))
+        allocate(hydro_radius2_pre_out( num_pair ))
+        allocate(hydro_radius1_post_out( num_pair ))
+        allocate(hydro_radius2_post_out( num_pair ))
+        allocate(hydro_mass1_pre_out( num_pair ))
+        allocate(hydro_mass2_pre_out( num_pair ))
+        allocate(hydro_mass1_post_out( num_pair ))
+        allocate(hydro_mass2_post_out( num_pair ))
         num_col = num_col_temp( :num_pair )
         sdr1_out = sdr1_temp( :num_pair )
         sdr2_out = sdr2_temp( :num_pair )
         sdn1_out = sdn1_temp( :num_pair )
         sdn2_out = sdn2_temp( :num_pair )
+        event_x_out = event_x_temp( :num_pair )
+        event_y_out = event_y_temp( :num_pair )
+        event_z_out = event_z_temp( :num_pair )
+        sdn1_post_out = sdn1_post_temp( :num_pair )
+        sdn2_post_out = sdn2_post_temp( :num_pair )
+        hydro_radius1_pre_out = hydro_radius1_pre_temp( :num_pair )
+        hydro_radius2_pre_out = hydro_radius2_pre_temp( :num_pair )
+        hydro_radius1_post_out = hydro_radius1_post_temp( :num_pair )
+        hydro_radius2_post_out = hydro_radius2_post_temp( :num_pair )
+        hydro_mass1_pre_out = hydro_mass1_pre_temp( :num_pair )
+        hydro_mass2_pre_out = hydro_mass2_pre_temp( :num_pair )
+        hydro_mass1_post_out = hydro_mass1_post_temp( :num_pair )
+        hydro_mass2_post_out = hydro_mass2_post_temp( :num_pair )
     end if
 
     deallocate( fsort_tag  )
@@ -1174,6 +1271,20 @@ contains
        deallocate( sdr2_temp )
        deallocate( sdn1_temp )
        deallocate( sdn2_temp )
+       deallocate( event_x_temp )
+       deallocate( event_y_temp )
+       deallocate( event_z_temp )
+       deallocate( sdn1_post_temp )
+       deallocate( sdn2_post_temp )
+       deallocate( hydro_radius1_pre_temp )
+       deallocate( hydro_radius2_pre_temp )
+       deallocate( hydro_radius1_post_temp )
+       deallocate( hydro_radius2_post_temp )
+       deallocate( hydro_mass1_pre_temp )
+       deallocate( hydro_mass2_pre_temp )
+       deallocate( hydro_mass1_post_temp )
+       deallocate( hydro_mass2_post_temp )
+       deallocate( sd_z_event )
     end if
 
 #ifdef _FAPP_

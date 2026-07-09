@@ -71,7 +71,28 @@ contains
                         ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl, &
                         sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,&
                         sdi,                             &
-                        ! sd_id,                             &
+                        sd_id, dm_id, sd_id1, sd_id2, dm_id1, dm_id2, num_col, num_pair,&
+                        sdr1_out,sdr2_out,sdn1_out,sdn2_out, &
+                        trigger_code_out,trigger_level_out,phase_state1_pre_out,phase_state2_pre_out, &
+                        phase_state1_post_out,phase_state2_post_out, &
+                        event_x_out,event_y_out,event_z_out, &
+                        sdn1_post_out,sdn2_post_out, &
+                        hydro_radius1_pre_out,hydro_radius2_pre_out, &
+                        hydro_radius1_post_out,hydro_radius2_post_out, &
+                        hydro_mass1_pre_out,hydro_mass2_pre_out, &
+                        hydro_mass1_post_out,hydro_mass2_post_out, &
+                        x1_out,y1_out,z1_out,x2_out,y2_out,z2_out, &
+                        ice_re1_pre_out,ice_rp1_pre_out,ice_rho1_pre_out, &
+                        ice_re1_post_out,ice_rp1_post_out,ice_rho1_post_out, &
+                        ice_re2_pre_out,ice_rp2_pre_out,ice_rho2_pre_out, &
+                        ice_re2_post_out,ice_rp2_post_out,ice_rho2_post_out, &
+                        rime_mass1_pre_out,rime_mass1_post_out, &
+                        rime_mass2_pre_out,rime_mass2_post_out, &
+                        rime_frac1_pre_out,rime_frac1_post_out, &
+                        rime_frac2_pre_out,rime_frac2_post_out, &
+                        aspect_ratio1_pre_out,aspect_ratio1_post_out, &
+                        aspect_ratio2_pre_out,aspect_ratio2_post_out, &
+                        if_coal,sd_event_mask,sd_event_sig_mask,coal_output,&
                         sort_id,sort_key,sort_freq,sort_tag,   &
                         sd_rng,sd_rand,                        &
                         sort_tag0,fsort_id,icp,sd_perm,c_rate  )
@@ -88,11 +109,29 @@ contains
     use m_sdm_common, only: &
          VALID2INVALID,INVALID,knum_sdm, &
          sdicedef,STAT_LIQ,STAT_ICE,     &
-         rho_amsul,rho_nacl,ONE_PI,dxiv_sdm,dyiv_sdm,F_THRD,O_THRD,rrst,boltz,mass_air,i2,var_k_coef
+         rho_amsul,rho_nacl,ONE_PI,dxiv_sdm,dyiv_sdm,F_THRD,O_THRD,rrst,boltz,mass_air,i2,var_k_coef, &
+         forward_tracking_enable,backward_tracking_enable, &
+         TRACK_EVENT_LIQ_COAL,TRACK_EVENT_RIMING,TRACK_EVENT_AGGREGATION, &
+         tracking_event_type_smoke_enable, tracking_event_type_smoke_liq_liq_only, &
+         tracking_event_type_smoke_collision_floor, &
+         tracking_evt_coalescence_enable, tracking_evt_liq_liq_coal_enable, tracking_evt_riming_enable, &
+         tracking_evt_aggregation_enable, &
+         tracking_sig_riming_enable, tracking_sig_riming_relmass_threshold, &
+         tracking_sig_aggregation_enable, tracking_sig_aggregation_relmass_threshold, &
+         tracking_sig_coalescence_enable, tracking_sig_coalescence_relmass_threshold, &
+         tracking_sig_liq_liq_coal_enable, tracking_sig_liq_liq_coal_relmass_threshold
     use m_sdm_coordtrans, only: &
-         sdm_x2ri, sdm_y2rj
-    use m_sdm_idutil, only: &
-         sdm_sort, sdm_getperm
+         sdm_x2ri, sdm_y2rj, sdm_rk2z
+            use m_sdm_idutil, only: &
+                 sdm_sort, sdm_getperm
+            use m_sdm_tracking_cold, only: &
+                 sdm_cold_phase_state, &
+                 sdm_cold_collision_trigger, sdm_cold_event_bit_from_trigger, &
+                 sdm_cold_hydro_radius, sdm_cold_hydro_mass, &
+                 sdm_cold_rime_fraction, sdm_cold_aspect_ratio, &
+                 PHASE_LIQUID, PHASE_ICE, &
+                 TRIG_PROC_COALESCENCE, TRIG_PROC_RIMING, TRIG_PROC_AGGREGATION, &
+                 TRIG_LEVEL_OCCURRENCE, TRIG_LEVEL_SIGNIFICANT
     !  Input variables
     integer, intent(in) :: sdm_colkrnl   ! Kernel type for coalescence process
     integer, intent(in) :: sdm_colbrwn   ! Control flag of Brownian Coagulation and Scavenging process
@@ -112,6 +151,8 @@ contains
     real(RP), intent(in) :: sd_x(1:sd_num) ! x-coordinate of super-droplets
     real(RP), intent(in) :: sd_y(1:sd_num) ! y-coordinate of super-droplets
     real(RP), intent(in) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets
+    integer, intent(in) :: sd_id(1:sd_num)   ! SD ID of super-droplets
+    integer, intent(in) :: dm_id(1:sd_num)   ! domain ID of super-droplets
     ! Input and output variables
     type(c_rng_uniform_mt), intent(inout) :: sd_rng ! random number generator
     real(RP),intent(inout) :: sd_rand(1:sd_num) ! random numbers
@@ -120,7 +161,11 @@ contains
     integer, intent(inout) :: sort_freq(1:ni_sdm*nj_sdm*nk_sdm+1) ! number of super-droplets in each SD-grid
     integer, intent(inout) :: sort_tag(1:ni_sdm*nj_sdm*nk_sdm+2) ! accumulated number of super-droplets in each SD-grid
     integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
-    ! integer(DP), intent(inout) :: sd_id(1:sd_num) ! universal ID of super-droplets
+            integer(i2), intent(inout) :: if_coal(1:sd_num)
+                               ! flag of coalescence during the previous output interval
+            integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+            integer(i2), intent(in) :: coal_output
     integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
@@ -137,6 +182,65 @@ contains
     integer, intent(out) :: icp(1:sd_num) ! index of coalescence pair
     integer, intent(out) :: sd_perm(1:sd_num) ! random permutations
     real(RP), intent(out) :: c_rate(1:sd_num) ! coalescence probability
+    integer, allocatable, intent(out) :: sd_id1(:)   ! SD ID of super-droplets with large multiplicity
+    integer, allocatable, intent(out) :: sd_id2(:)   ! SD ID of super-droplets  with small multiplicity
+    integer, allocatable, intent(out) :: dm_id1(:)   ! domain ID of super-droplets with large multiplicity
+    integer, allocatable, intent(out) :: dm_id2(:)   ! domain ID of super-droplets with small multiplicity
+    integer, allocatable, intent(out) :: num_col(:)  ! number of coalescence of pairs of SDs
+    real(RP), allocatable, intent(out) :: sdr1_out(:)
+    real(RP), allocatable, intent(out) :: sdr2_out(:)
+    integer(DP), allocatable, intent(out) :: sdn1_out(:)
+    integer(DP), allocatable, intent(out) :: sdn2_out(:)
+    integer, allocatable, intent(out) :: trigger_code_out(:)
+    integer, allocatable, intent(out) :: trigger_level_out(:)
+    integer, allocatable, intent(out) :: phase_state1_pre_out(:)
+    integer, allocatable, intent(out) :: phase_state2_pre_out(:)
+    integer, allocatable, intent(out) :: phase_state1_post_out(:)
+    integer, allocatable, intent(out) :: phase_state2_post_out(:)
+    real(RP), allocatable, intent(out) :: event_x_out(:)
+    real(RP), allocatable, intent(out) :: event_y_out(:)
+    real(RP), allocatable, intent(out) :: event_z_out(:)
+    integer(DP), allocatable, intent(out) :: sdn1_post_out(:)
+    integer(DP), allocatable, intent(out) :: sdn2_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius1_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius2_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius1_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_radius2_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass1_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass2_pre_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass1_post_out(:)
+    real(RP), allocatable, intent(out) :: hydro_mass2_post_out(:)
+    real(RP), allocatable, intent(out) :: x1_out(:)
+    real(RP), allocatable, intent(out) :: y1_out(:)
+    real(RP), allocatable, intent(out) :: z1_out(:)
+    real(RP), allocatable, intent(out) :: x2_out(:)
+    real(RP), allocatable, intent(out) :: y2_out(:)
+    real(RP), allocatable, intent(out) :: z2_out(:)
+    real(RP), allocatable, intent(out) :: ice_re1_pre_out(:)
+    real(RP), allocatable, intent(out) :: ice_rp1_pre_out(:)
+    real(RP), allocatable, intent(out) :: ice_rho1_pre_out(:)
+    real(RP), allocatable, intent(out) :: ice_re1_post_out(:)
+    real(RP), allocatable, intent(out) :: ice_rp1_post_out(:)
+    real(RP), allocatable, intent(out) :: ice_rho1_post_out(:)
+    real(RP), allocatable, intent(out) :: ice_re2_pre_out(:)
+    real(RP), allocatable, intent(out) :: ice_rp2_pre_out(:)
+    real(RP), allocatable, intent(out) :: ice_rho2_pre_out(:)
+    real(RP), allocatable, intent(out) :: ice_re2_post_out(:)
+    real(RP), allocatable, intent(out) :: ice_rp2_post_out(:)
+    real(RP), allocatable, intent(out) :: ice_rho2_post_out(:)
+    real(RP), allocatable, intent(out) :: rime_mass1_pre_out(:)
+    real(RP), allocatable, intent(out) :: rime_mass1_post_out(:)
+    real(RP), allocatable, intent(out) :: rime_mass2_pre_out(:)
+    real(RP), allocatable, intent(out) :: rime_mass2_post_out(:)
+    real(RP), allocatable, intent(out) :: rime_frac1_pre_out(:)
+    real(RP), allocatable, intent(out) :: rime_frac1_post_out(:)
+    real(RP), allocatable, intent(out) :: rime_frac2_pre_out(:)
+    real(RP), allocatable, intent(out) :: rime_frac2_post_out(:)
+    real(RP), allocatable, intent(out) :: aspect_ratio1_pre_out(:)
+    real(RP), allocatable, intent(out) :: aspect_ratio1_post_out(:)
+    real(RP), allocatable, intent(out) :: aspect_ratio2_pre_out(:)
+    real(RP), allocatable, intent(out) :: aspect_ratio2_post_out(:)
+    integer, intent(out) :: num_pair           ! number of selected coalescent SD pairs
     ! Internal shared variables
     real(RP) :: sd_aslrho(1:22) ! Density of chemical material contained as water-soluble aerosol in super droplets
     integer(DP)  :: sd_ncol ! how many times coalescence occurs
@@ -234,6 +338,66 @@ contains
     integer(DP) :: sd_n2    ! multiplicity of super-droplets  with small multiplicity
     integer(i2) :: sd_li1, sd_li2
 
+    integer, allocatable :: sd_id1_temp(:)
+    integer, allocatable :: sd_id2_temp(:)
+    integer, allocatable :: dm_id1_temp(:)
+    integer, allocatable :: dm_id2_temp(:)
+    integer, allocatable :: num_col_temp(:)
+    real(RP), allocatable :: sdr1_temp(:)
+    real(RP), allocatable :: sdr2_temp(:)
+    integer(DP), allocatable :: sdn1_temp(:)
+    integer(DP), allocatable :: sdn2_temp(:)
+    integer, allocatable :: trigger_code_temp(:)
+    integer, allocatable :: trigger_level_temp(:)
+    integer, allocatable :: phase_state1_pre_temp(:)
+    integer, allocatable :: phase_state2_pre_temp(:)
+    integer, allocatable :: phase_state1_post_temp(:)
+    integer, allocatable :: phase_state2_post_temp(:)
+    real(RP), allocatable :: event_x_temp(:)
+    real(RP), allocatable :: event_y_temp(:)
+    real(RP), allocatable :: event_z_temp(:)
+    integer(DP), allocatable :: sdn1_post_temp(:)
+    integer(DP), allocatable :: sdn2_post_temp(:)
+    real(RP), allocatable :: hydro_radius1_pre_temp(:)
+    real(RP), allocatable :: hydro_radius2_pre_temp(:)
+    real(RP), allocatable :: hydro_radius1_post_temp(:)
+    real(RP), allocatable :: hydro_radius2_post_temp(:)
+    real(RP), allocatable :: hydro_mass1_pre_temp(:)
+    real(RP), allocatable :: hydro_mass2_pre_temp(:)
+    real(RP), allocatable :: hydro_mass1_post_temp(:)
+    real(RP), allocatable :: hydro_mass2_post_temp(:)
+    real(RP), allocatable :: x1_temp(:)
+    real(RP), allocatable :: y1_temp(:)
+    real(RP), allocatable :: z1_temp(:)
+    real(RP), allocatable :: x2_temp(:)
+    real(RP), allocatable :: y2_temp(:)
+    real(RP), allocatable :: z2_temp(:)
+    real(RP), allocatable :: ice_re1_pre_temp(:)
+    real(RP), allocatable :: ice_rp1_pre_temp(:)
+    real(RP), allocatable :: ice_rho1_pre_temp(:)
+    real(RP), allocatable :: ice_re1_post_temp(:)
+    real(RP), allocatable :: ice_rp1_post_temp(:)
+    real(RP), allocatable :: ice_rho1_post_temp(:)
+    real(RP), allocatable :: ice_re2_pre_temp(:)
+    real(RP), allocatable :: ice_rp2_pre_temp(:)
+    real(RP), allocatable :: ice_rho2_pre_temp(:)
+    real(RP), allocatable :: ice_re2_post_temp(:)
+    real(RP), allocatable :: ice_rp2_post_temp(:)
+    real(RP), allocatable :: ice_rho2_post_temp(:)
+    real(RP), allocatable :: rime_mass1_pre_temp(:)
+    real(RP), allocatable :: rime_mass1_post_temp(:)
+    real(RP), allocatable :: rime_mass2_pre_temp(:)
+    real(RP), allocatable :: rime_mass2_post_temp(:)
+    real(RP), allocatable :: rime_frac1_pre_temp(:)
+    real(RP), allocatable :: rime_frac1_post_temp(:)
+    real(RP), allocatable :: rime_frac2_pre_temp(:)
+    real(RP), allocatable :: rime_frac2_post_temp(:)
+    real(RP), allocatable :: aspect_ratio1_pre_temp(:)
+    real(RP), allocatable :: aspect_ratio1_post_temp(:)
+    real(RP), allocatable :: aspect_ratio2_pre_temp(:)
+    real(RP), allocatable :: aspect_ratio2_post_temp(:)
+    real(RP), allocatable :: sd_z_event(:)
+
     integer, allocatable :: fsort_tag(:) ! buffer for sorting
     integer, allocatable :: fsort_freq(:) ! buffer for sorting
 
@@ -247,8 +411,25 @@ contains
     integer :: i_col
 
     integer :: sort_tag0m
-    integer :: sort_freqm
-    integer :: icptc, icptp
+            integer :: sort_freqm
+            integer :: icptc, icptp
+            integer :: idx1, idx2
+            integer :: trigger_code, event_bit
+            integer :: selected_trigger_level
+            integer :: occurrence_event_bit
+            integer :: phase_state1_pre, phase_state2_pre
+            integer :: phase_state1_post, phase_state2_post
+            integer(DP) :: sd_n1_pre, sd_n2_pre
+            real(RP) :: sd_r1_pre, sd_re1_pre, sd_rp1_pre, sd_rho1_pre, sd_mrime1_pre
+            real(RP) :: sd_r2_pre, sd_re2_pre, sd_rp2_pre, sd_rho2_pre, sd_mrime2_pre
+            real(RP) :: hydro_radius1_pre, hydro_radius2_pre
+            real(RP) :: hydro_mass1_pre, hydro_mass2_pre
+            real(RP) :: x1_pre, y1_pre, z1_pre, x2_pre, y2_pre, z2_pre
+            real(RP) :: sig_added_mass, sig_reference_mass, sig_rel_mass_change
+            logical :: significant_hit
+            logical :: occurrence_enabled
+            logical :: write_tracking_ids
+    logical :: write_coal
 
     !
     real(RP), parameter :: lambda_mfp = 6.62E-8 ! mean free path of air [m]
@@ -424,7 +605,6 @@ contains
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Get effective coalescence/riming/aggregation kernel for "Gravitational Settling" 
     
-!OCL NORECURRENCE
     do m=1,gnum
        if( sort_freq(m) <= 1 ) cycle
 
@@ -966,6 +1146,12 @@ contains
           ! IAND(sort_freq(i),1) => even:0, odd:1
 
           c_rate(tc) = c_rate(tc) * real( sd_nmax*ipremium, kind=RP )
+          if( tracking_event_type_smoke_enable .and. tracking_event_type_smoke_collision_floor > 0.0_RP ) then
+             if( tracking_event_type_smoke_liq_liq_only .or. &
+                 (sd_liqice(icptc) .eq. STAT_ICE) .or. (sd_liqice(icptp) .eq. STAT_ICE) ) then
+                c_rate(tc) = max(c_rate(tc), tracking_event_type_smoke_collision_floor)
+             end if
+          end if
        end do
     end do
 
@@ -979,6 +1165,79 @@ contains
 !!$            tp = tc + sort_freq(m)/2
 
 !OCL NORECURRENCE
+       write_coal = coal_output == 1_i2 .and. ( &
+            tracking_evt_coalescence_enable .or. tracking_evt_liq_liq_coal_enable .or. &
+            tracking_evt_riming_enable .or. tracking_evt_aggregation_enable .or. &
+            tracking_sig_coalescence_enable .or. tracking_sig_liq_liq_coal_enable .or. &
+            tracking_sig_riming_enable .or. tracking_sig_aggregation_enable )
+    write_tracking_ids = write_coal
+
+    if( write_coal ) then
+       if( write_tracking_ids ) then
+          allocate(sd_id1_temp(sd_num))
+          allocate(sd_id2_temp(sd_num))
+          allocate(dm_id1_temp(sd_num))
+          allocate(dm_id2_temp(sd_num))
+       end if
+       allocate(num_col_temp(sd_num))
+       allocate(sdr1_temp(sd_num))
+       allocate(sdr2_temp(sd_num))
+       allocate(sdn1_temp(sd_num))
+       allocate(sdn2_temp(sd_num))
+       allocate(trigger_code_temp(sd_num))
+       allocate(trigger_level_temp(sd_num))
+       allocate(phase_state1_pre_temp(sd_num))
+       allocate(phase_state2_pre_temp(sd_num))
+       allocate(phase_state1_post_temp(sd_num))
+       allocate(phase_state2_post_temp(sd_num))
+       allocate(event_x_temp(sd_num))
+       allocate(event_y_temp(sd_num))
+       allocate(event_z_temp(sd_num))
+       allocate(sdn1_post_temp(sd_num))
+       allocate(sdn2_post_temp(sd_num))
+       allocate(hydro_radius1_pre_temp(sd_num))
+       allocate(hydro_radius2_pre_temp(sd_num))
+       allocate(hydro_radius1_post_temp(sd_num))
+       allocate(hydro_radius2_post_temp(sd_num))
+       allocate(hydro_mass1_pre_temp(sd_num))
+       allocate(hydro_mass2_pre_temp(sd_num))
+       allocate(hydro_mass1_post_temp(sd_num))
+       allocate(hydro_mass2_post_temp(sd_num))
+       allocate(x1_temp(sd_num))
+       allocate(y1_temp(sd_num))
+       allocate(z1_temp(sd_num))
+       allocate(x2_temp(sd_num))
+       allocate(y2_temp(sd_num))
+       allocate(z2_temp(sd_num))
+       allocate(ice_re1_pre_temp(sd_num))
+       allocate(ice_rp1_pre_temp(sd_num))
+       allocate(ice_rho1_pre_temp(sd_num))
+       allocate(ice_re1_post_temp(sd_num))
+       allocate(ice_rp1_post_temp(sd_num))
+       allocate(ice_rho1_post_temp(sd_num))
+       allocate(ice_re2_pre_temp(sd_num))
+       allocate(ice_rp2_pre_temp(sd_num))
+       allocate(ice_rho2_pre_temp(sd_num))
+       allocate(ice_re2_post_temp(sd_num))
+       allocate(ice_rp2_post_temp(sd_num))
+       allocate(ice_rho2_post_temp(sd_num))
+       allocate(rime_mass1_pre_temp(sd_num))
+       allocate(rime_mass1_post_temp(sd_num))
+       allocate(rime_mass2_pre_temp(sd_num))
+       allocate(rime_mass2_post_temp(sd_num))
+       allocate(rime_frac1_pre_temp(sd_num))
+       allocate(rime_frac1_post_temp(sd_num))
+       allocate(rime_frac2_pre_temp(sd_num))
+       allocate(rime_frac2_post_temp(sd_num))
+       allocate(aspect_ratio1_pre_temp(sd_num))
+       allocate(aspect_ratio1_post_temp(sd_num))
+       allocate(aspect_ratio2_pre_temp(sd_num))
+       allocate(aspect_ratio2_post_temp(sd_num))
+       allocate(sd_z_event(sd_num))
+       call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_z_event, sd_ri, sd_rj)
+    end if
+
+    num_pair = 0
     do m=1,gnum
        if( sort_freq(m) <= 1 ) cycle
 
@@ -1006,8 +1265,15 @@ contains
           if( sd_ncol<=0 ) cycle  !! no coalesecense
 
           !### coalescence procudure ###!
+          if( write_coal ) then
+             num_pair = num_pair + 1
+             if_coal( icptp ) = 1_i2
+             if_coal( icptc ) = 1_i2
+          end if
 
           if( sd_n(icptc) > sd_n(icptp) ) then
+             idx1 = icptc
+             idx2 = icptp
 
              ! SD with larger multiplicity
              sd_n1  = sd_n( icptc )
@@ -1046,7 +1312,16 @@ contains
 
              sd_vz2 = sd_vz(icptp)
 
+             if( write_coal .and. write_tracking_ids ) then
+                sd_id1_temp( num_pair ) = sd_id( icptc )
+                dm_id1_temp( num_pair ) = dm_id( icptc )
+                sd_id2_temp( num_pair ) = sd_id( icptp )
+                dm_id2_temp( num_pair ) = dm_id( icptp )
+             end if
+
           else
+             idx1 = icptp
+             idx2 = icptc
 
              ! SD with larger multiplicity
              sd_n1  = sd_n( icptp )
@@ -1085,11 +1360,48 @@ contains
 
              sd_vz2 = sd_vz(icptc)
 
+             if( write_coal .and. write_tracking_ids ) then
+                sd_id1_temp( num_pair ) = sd_id( icptp )
+                dm_id1_temp( num_pair ) = dm_id( icptp )
+                sd_id2_temp( num_pair ) = sd_id( icptc )
+                dm_id2_temp( num_pair ) = dm_id( icptc )
+             end if
+
           end if
 
           !! calculate the attributes after coalescence
           sd_ncol = min( sd_ncol, int(sd_n1/sd_n2,kind=DP) )
 
+          sd_n1_pre = sd_n1
+          sd_n2_pre = sd_n2
+          sd_r1_pre = sd_r1
+          sd_r2_pre = sd_r2
+          sd_re1_pre = sd_re1
+          sd_rp1_pre = sd_rp1
+          sd_rho1_pre = sd_rho1
+          sd_re2_pre = sd_re2
+          sd_rp2_pre = sd_rp2
+          sd_rho2_pre = sd_rho2
+          sd_mrime1_pre = sd_mrime1
+          sd_mrime2_pre = sd_mrime2
+          phase_state1_pre = sdm_cold_phase_state(sd_li1, sd_r1, sd_re1, sd_rp1)
+          phase_state2_pre = sdm_cold_phase_state(sd_li2, sd_r2, sd_re2, sd_rp2)
+          hydro_radius1_pre = sdm_cold_hydro_radius(phase_state1_pre, sd_r1, sd_re1, sd_rp1)
+          hydro_radius2_pre = sdm_cold_hydro_radius(phase_state2_pre, sd_r2, sd_re2, sd_rp2)
+          hydro_mass1_pre = sdm_cold_hydro_mass(phase_state1_pre, sd_r1, sd_re1, sd_rp1, sd_rho1)
+          hydro_mass2_pre = sdm_cold_hydro_mass(phase_state2_pre, sd_r2, sd_re2, sd_rp2, sd_rho2)
+          if( write_coal ) then
+             x1_pre = sd_x(idx1)
+             y1_pre = sd_y(idx1)
+             z1_pre = sd_z_event(idx1)
+             x2_pre = sd_x(idx2)
+             y2_pre = sd_y(idx2)
+             z2_pre = sd_z_event(idx2)
+          end if
+
+          trigger_code = sdm_cold_collision_trigger(sd_li1, sd_li2)
+          occurrence_enabled = collision_occurrence_enabled(trigger_code)
+          occurrence_event_bit = sdm_cold_event_bit_from_trigger(trigger_code)
           if( (sd_li1 .eq. STAT_LIQ) .and. (sd_li2 .eq. STAT_LIQ) ) then ! droplet-droplet coalescence
 
              call sdm_outcome_drolet_coalescence(sd_ncol, sd_r1, sd_r2)
@@ -1238,6 +1550,80 @@ contains
 
           end if
 
+          if( write_coal ) then
+             phase_state1_post = sdm_cold_phase_state(sd_li1, sd_r1, sd_re1, sd_rp1)
+             phase_state2_post = sdm_cold_phase_state(sd_li2, sd_r2, sd_re2, sd_rp2)
+             significant_hit = collision_significant_hit(trigger_code)
+             selected_trigger_level = 0
+             if( significant_hit ) then
+                selected_trigger_level = TRIG_LEVEL_SIGNIFICANT
+             else if( occurrence_enabled ) then
+                selected_trigger_level = TRIG_LEVEL_OCCURRENCE
+             end if
+             if( selected_trigger_level > 0 .and. occurrence_event_bit > 0 ) then
+                sd_event_mask(icptp) = ior(sd_event_mask(icptp), occurrence_event_bit)
+                sd_event_mask(icptc) = ior(sd_event_mask(icptc), occurrence_event_bit)
+                if( selected_trigger_level == TRIG_LEVEL_SIGNIFICANT ) then
+                   sd_event_sig_mask(icptp) = ior(sd_event_sig_mask(icptp), occurrence_event_bit)
+                   sd_event_sig_mask(icptc) = ior(sd_event_sig_mask(icptc), occurrence_event_bit)
+                end if
+             end if
+             trigger_code_temp(num_pair) = merge(trigger_code, 0, selected_trigger_level > 0)
+             trigger_level_temp(num_pair) = selected_trigger_level
+             phase_state1_pre_temp(num_pair) = phase_state1_pre
+             phase_state2_pre_temp(num_pair) = phase_state2_pre
+             phase_state1_post_temp(num_pair) = phase_state1_post
+             phase_state2_post_temp(num_pair) = phase_state2_post
+             event_x_temp(num_pair) = 0.5_RP * (x1_pre + x2_pre)
+             event_y_temp(num_pair) = 0.5_RP * (y1_pre + y2_pre)
+             event_z_temp(num_pair) = 0.5_RP * (z1_pre + z2_pre)
+             sdr1_temp(num_pair) = sd_r1_pre
+             sdr2_temp(num_pair) = sd_r2_pre
+             sdn1_temp(num_pair) = sd_n1_pre
+             sdn2_temp(num_pair) = sd_n2_pre
+             sdn1_post_temp(num_pair) = sd_n1
+             sdn2_post_temp(num_pair) = sd_n2
+             num_col_temp(num_pair) = sd_ncol
+             hydro_radius1_pre_temp(num_pair) = hydro_radius1_pre
+             hydro_radius2_pre_temp(num_pair) = hydro_radius2_pre
+             hydro_radius1_post_temp(num_pair) = sdm_cold_hydro_radius(phase_state1_post, sd_r1, sd_re1, sd_rp1)
+             hydro_radius2_post_temp(num_pair) = sdm_cold_hydro_radius(phase_state2_post, sd_r2, sd_re2, sd_rp2)
+             hydro_mass1_pre_temp(num_pair) = hydro_mass1_pre
+             hydro_mass2_pre_temp(num_pair) = hydro_mass2_pre
+             hydro_mass1_post_temp(num_pair) = sdm_cold_hydro_mass(phase_state1_post, sd_r1, sd_re1, sd_rp1, sd_rho1)
+             hydro_mass2_post_temp(num_pair) = sdm_cold_hydro_mass(phase_state2_post, sd_r2, sd_re2, sd_rp2, sd_rho2)
+             x1_temp(num_pair) = x1_pre
+             y1_temp(num_pair) = y1_pre
+             z1_temp(num_pair) = z1_pre
+             x2_temp(num_pair) = x2_pre
+             y2_temp(num_pair) = y2_pre
+             z2_temp(num_pair) = z2_pre
+             ice_re1_pre_temp(num_pair) = sd_re1_pre
+             ice_rp1_pre_temp(num_pair) = sd_rp1_pre
+             ice_rho1_pre_temp(num_pair) = sd_rho1_pre
+             ice_re1_post_temp(num_pair) = sd_re1
+             ice_rp1_post_temp(num_pair) = sd_rp1
+             ice_rho1_post_temp(num_pair) = sd_rho1
+             ice_re2_pre_temp(num_pair) = sd_re2_pre
+             ice_rp2_pre_temp(num_pair) = sd_rp2_pre
+             ice_rho2_pre_temp(num_pair) = sd_rho2_pre
+             ice_re2_post_temp(num_pair) = sd_re2
+             ice_rp2_post_temp(num_pair) = sd_rp2
+             ice_rho2_post_temp(num_pair) = sd_rho2
+             rime_mass1_pre_temp(num_pair) = sd_mrime1_pre
+             rime_mass1_post_temp(num_pair) = sd_mrime1
+             rime_mass2_pre_temp(num_pair) = sd_mrime2_pre
+             rime_mass2_post_temp(num_pair) = sd_mrime2
+             rime_frac1_pre_temp(num_pair) = sdm_cold_rime_fraction(sd_mrime1_pre, sd_re1_pre, sd_rp1_pre, sd_rho1_pre)
+             rime_frac1_post_temp(num_pair) = sdm_cold_rime_fraction(sd_mrime1, sd_re1, sd_rp1, sd_rho1)
+             rime_frac2_pre_temp(num_pair) = sdm_cold_rime_fraction(sd_mrime2_pre, sd_re2_pre, sd_rp2_pre, sd_rho2_pre)
+             rime_frac2_post_temp(num_pair) = sdm_cold_rime_fraction(sd_mrime2, sd_re2, sd_rp2, sd_rho2)
+             aspect_ratio1_pre_temp(num_pair) = sdm_cold_aspect_ratio(sd_re1_pre, sd_rp1_pre)
+             aspect_ratio1_post_temp(num_pair) = sdm_cold_aspect_ratio(sd_re1, sd_rp1)
+             aspect_ratio2_pre_temp(num_pair) = sdm_cold_aspect_ratio(sd_re2_pre, sd_rp2_pre)
+             aspect_ratio2_post_temp(num_pair) = sdm_cold_aspect_ratio(sd_re2, sd_rp2)
+          end if
+
           !! This never happens
 !!$            !! check muliplicity
 !!$
@@ -1310,15 +1696,404 @@ contains
 
     end do
 
+    if( write_coal .and. num_pair > 0 ) then
+        call compact_collision_event_records()
+    end if
+
+    if( write_coal .and. num_pair > 0 ) then
+        if( write_tracking_ids ) then
+           allocate(dm_id1( num_pair ))
+           allocate(dm_id2( num_pair ))
+           allocate(sd_id1( num_pair ))
+           allocate(sd_id2( num_pair ))
+           dm_id1 = dm_id1_temp( :num_pair )
+           dm_id2 = dm_id2_temp( :num_pair )
+           sd_id1 = sd_id1_temp( :num_pair )
+           sd_id2 = sd_id2_temp( :num_pair )
+        end if
+        allocate(num_col( num_pair ))
+        allocate(sdr1_out( num_pair ))
+        allocate(sdr2_out( num_pair ))
+        allocate(sdn1_out( num_pair ))
+        allocate(sdn2_out( num_pair ))
+        allocate(trigger_code_out( num_pair ))
+        allocate(trigger_level_out( num_pair ))
+        allocate(phase_state1_pre_out( num_pair ))
+        allocate(phase_state2_pre_out( num_pair ))
+        allocate(phase_state1_post_out( num_pair ))
+        allocate(phase_state2_post_out( num_pair ))
+        allocate(event_x_out( num_pair ))
+        allocate(event_y_out( num_pair ))
+        allocate(event_z_out( num_pair ))
+        allocate(sdn1_post_out( num_pair ))
+        allocate(sdn2_post_out( num_pair ))
+        allocate(hydro_radius1_pre_out( num_pair ))
+        allocate(hydro_radius2_pre_out( num_pair ))
+        allocate(hydro_radius1_post_out( num_pair ))
+        allocate(hydro_radius2_post_out( num_pair ))
+        allocate(hydro_mass1_pre_out( num_pair ))
+        allocate(hydro_mass2_pre_out( num_pair ))
+        allocate(hydro_mass1_post_out( num_pair ))
+        allocate(hydro_mass2_post_out( num_pair ))
+        allocate(x1_out( num_pair ))
+        allocate(y1_out( num_pair ))
+        allocate(z1_out( num_pair ))
+        allocate(x2_out( num_pair ))
+        allocate(y2_out( num_pair ))
+        allocate(z2_out( num_pair ))
+        allocate(ice_re1_pre_out( num_pair ))
+        allocate(ice_rp1_pre_out( num_pair ))
+        allocate(ice_rho1_pre_out( num_pair ))
+        allocate(ice_re1_post_out( num_pair ))
+        allocate(ice_rp1_post_out( num_pair ))
+        allocate(ice_rho1_post_out( num_pair ))
+        allocate(ice_re2_pre_out( num_pair ))
+        allocate(ice_rp2_pre_out( num_pair ))
+        allocate(ice_rho2_pre_out( num_pair ))
+        allocate(ice_re2_post_out( num_pair ))
+        allocate(ice_rp2_post_out( num_pair ))
+        allocate(ice_rho2_post_out( num_pair ))
+        allocate(rime_mass1_pre_out( num_pair ))
+        allocate(rime_mass1_post_out( num_pair ))
+        allocate(rime_mass2_pre_out( num_pair ))
+        allocate(rime_mass2_post_out( num_pair ))
+        allocate(rime_frac1_pre_out( num_pair ))
+        allocate(rime_frac1_post_out( num_pair ))
+        allocate(rime_frac2_pre_out( num_pair ))
+        allocate(rime_frac2_post_out( num_pair ))
+        allocate(aspect_ratio1_pre_out( num_pair ))
+        allocate(aspect_ratio1_post_out( num_pair ))
+        allocate(aspect_ratio2_pre_out( num_pair ))
+        allocate(aspect_ratio2_post_out( num_pair ))
+        num_col = num_col_temp( :num_pair )
+        sdr1_out = sdr1_temp( :num_pair )
+        sdr2_out = sdr2_temp( :num_pair )
+        sdn1_out = sdn1_temp( :num_pair )
+        sdn2_out = sdn2_temp( :num_pair )
+        trigger_code_out = trigger_code_temp( :num_pair )
+        trigger_level_out = trigger_level_temp( :num_pair )
+        phase_state1_pre_out = phase_state1_pre_temp( :num_pair )
+        phase_state2_pre_out = phase_state2_pre_temp( :num_pair )
+        phase_state1_post_out = phase_state1_post_temp( :num_pair )
+        phase_state2_post_out = phase_state2_post_temp( :num_pair )
+        event_x_out = event_x_temp( :num_pair )
+        event_y_out = event_y_temp( :num_pair )
+        event_z_out = event_z_temp( :num_pair )
+        sdn1_post_out = sdn1_post_temp( :num_pair )
+        sdn2_post_out = sdn2_post_temp( :num_pair )
+        hydro_radius1_pre_out = hydro_radius1_pre_temp( :num_pair )
+        hydro_radius2_pre_out = hydro_radius2_pre_temp( :num_pair )
+        hydro_radius1_post_out = hydro_radius1_post_temp( :num_pair )
+        hydro_radius2_post_out = hydro_radius2_post_temp( :num_pair )
+        hydro_mass1_pre_out = hydro_mass1_pre_temp( :num_pair )
+        hydro_mass2_pre_out = hydro_mass2_pre_temp( :num_pair )
+        hydro_mass1_post_out = hydro_mass1_post_temp( :num_pair )
+        hydro_mass2_post_out = hydro_mass2_post_temp( :num_pair )
+        x1_out = x1_temp( :num_pair )
+        y1_out = y1_temp( :num_pair )
+        z1_out = z1_temp( :num_pair )
+        x2_out = x2_temp( :num_pair )
+        y2_out = y2_temp( :num_pair )
+        z2_out = z2_temp( :num_pair )
+        ice_re1_pre_out = ice_re1_pre_temp( :num_pair )
+        ice_rp1_pre_out = ice_rp1_pre_temp( :num_pair )
+        ice_rho1_pre_out = ice_rho1_pre_temp( :num_pair )
+        ice_re1_post_out = ice_re1_post_temp( :num_pair )
+        ice_rp1_post_out = ice_rp1_post_temp( :num_pair )
+        ice_rho1_post_out = ice_rho1_post_temp( :num_pair )
+        ice_re2_pre_out = ice_re2_pre_temp( :num_pair )
+        ice_rp2_pre_out = ice_rp2_pre_temp( :num_pair )
+        ice_rho2_pre_out = ice_rho2_pre_temp( :num_pair )
+        ice_re2_post_out = ice_re2_post_temp( :num_pair )
+        ice_rp2_post_out = ice_rp2_post_temp( :num_pair )
+        ice_rho2_post_out = ice_rho2_post_temp( :num_pair )
+        rime_mass1_pre_out = rime_mass1_pre_temp( :num_pair )
+        rime_mass1_post_out = rime_mass1_post_temp( :num_pair )
+        rime_mass2_pre_out = rime_mass2_pre_temp( :num_pair )
+        rime_mass2_post_out = rime_mass2_post_temp( :num_pair )
+        rime_frac1_pre_out = rime_frac1_pre_temp( :num_pair )
+        rime_frac1_post_out = rime_frac1_post_temp( :num_pair )
+        rime_frac2_pre_out = rime_frac2_pre_temp( :num_pair )
+        rime_frac2_post_out = rime_frac2_post_temp( :num_pair )
+        aspect_ratio1_pre_out = aspect_ratio1_pre_temp( :num_pair )
+        aspect_ratio1_post_out = aspect_ratio1_post_temp( :num_pair )
+        aspect_ratio2_pre_out = aspect_ratio2_pre_temp( :num_pair )
+        aspect_ratio2_post_out = aspect_ratio2_post_temp( :num_pair )
+    end if
+
     ! Deallocate
     deallocate( fsort_tag  )
     deallocate( fsort_freq )
+    if( write_coal ) then
+       if( write_tracking_ids ) then
+          deallocate( dm_id1_temp )
+          deallocate( dm_id2_temp )
+          deallocate( sd_id1_temp )
+          deallocate( sd_id2_temp )
+       end if
+       deallocate( num_col_temp )
+       deallocate( sdr1_temp )
+       deallocate( sdr2_temp )
+       deallocate( sdn1_temp )
+       deallocate( sdn2_temp )
+       deallocate( trigger_code_temp )
+       deallocate( trigger_level_temp )
+       deallocate( phase_state1_pre_temp )
+       deallocate( phase_state2_pre_temp )
+       deallocate( phase_state1_post_temp )
+       deallocate( phase_state2_post_temp )
+       deallocate( event_x_temp )
+       deallocate( event_y_temp )
+       deallocate( event_z_temp )
+       deallocate( sdn1_post_temp )
+       deallocate( sdn2_post_temp )
+       deallocate( hydro_radius1_pre_temp )
+       deallocate( hydro_radius2_pre_temp )
+       deallocate( hydro_radius1_post_temp )
+       deallocate( hydro_radius2_post_temp )
+       deallocate( hydro_mass1_pre_temp )
+       deallocate( hydro_mass2_pre_temp )
+       deallocate( hydro_mass1_post_temp )
+       deallocate( hydro_mass2_post_temp )
+       deallocate( x1_temp )
+       deallocate( y1_temp )
+       deallocate( z1_temp )
+       deallocate( x2_temp )
+       deallocate( y2_temp )
+       deallocate( z2_temp )
+       deallocate( ice_re1_pre_temp )
+       deallocate( ice_rp1_pre_temp )
+       deallocate( ice_rho1_pre_temp )
+       deallocate( ice_re1_post_temp )
+       deallocate( ice_rp1_post_temp )
+       deallocate( ice_rho1_post_temp )
+       deallocate( ice_re2_pre_temp )
+       deallocate( ice_rp2_pre_temp )
+       deallocate( ice_rho2_pre_temp )
+       deallocate( ice_re2_post_temp )
+       deallocate( ice_rp2_post_temp )
+       deallocate( ice_rho2_post_temp )
+       deallocate( rime_mass1_pre_temp )
+       deallocate( rime_mass1_post_temp )
+       deallocate( rime_mass2_pre_temp )
+       deallocate( rime_mass2_post_temp )
+       deallocate( rime_frac1_pre_temp )
+       deallocate( rime_frac1_post_temp )
+       deallocate( rime_frac2_pre_temp )
+       deallocate( rime_frac2_post_temp )
+       deallocate( aspect_ratio1_pre_temp )
+       deallocate( aspect_ratio1_post_temp )
+       deallocate( aspect_ratio2_pre_temp )
+       deallocate( aspect_ratio2_post_temp )
+       deallocate( sd_z_event )
+    end if
 
 #ifdef _FAPP_
     ! Section specification for fapp profiler
     call fapp_stop("sdm_coales_cold",1,1)
 #endif
     return
+
+  contains
+    logical function collision_occurrence_enabled(trigger_code)
+      integer, intent(in) :: trigger_code
+
+      select case(trigger_code)
+      case(TRIG_PROC_COALESCENCE)
+         collision_occurrence_enabled = tracking_evt_coalescence_enable .or. tracking_evt_liq_liq_coal_enable
+      case(TRIG_PROC_RIMING)
+         collision_occurrence_enabled = tracking_evt_riming_enable
+      case(TRIG_PROC_AGGREGATION)
+         collision_occurrence_enabled = tracking_evt_aggregation_enable
+      case default
+         collision_occurrence_enabled = .false.
+      end select
+    end function collision_occurrence_enabled
+
+    logical function collision_significant_hit(trigger_code) result(is_hit)
+      integer, intent(in) :: trigger_code
+
+      is_hit = .false.
+      sig_added_mass = 0.0_RP
+      sig_reference_mass = 0.0_RP
+      select case(trigger_code)
+      case(TRIG_PROC_RIMING)
+         if( phase_state1_pre == PHASE_LIQUID .and. phase_state2_pre == PHASE_ICE ) then
+            sig_added_mass = hydro_mass1_pre
+            sig_reference_mass = hydro_mass2_pre
+         else if( phase_state2_pre == PHASE_LIQUID .and. phase_state1_pre == PHASE_ICE ) then
+            sig_added_mass = hydro_mass2_pre
+            sig_reference_mass = hydro_mass1_pre
+         end if
+         sig_rel_mass_change = sig_added_mass / max(sig_reference_mass, tiny(1.0_RP))
+         is_hit = tracking_sig_riming_enable .and. &
+              sig_rel_mass_change >= tracking_sig_riming_relmass_threshold
+      case(TRIG_PROC_AGGREGATION)
+         sig_added_mass = min(hydro_mass1_pre, hydro_mass2_pre)
+         sig_reference_mass = max(hydro_mass1_pre, hydro_mass2_pre)
+         sig_rel_mass_change = sig_added_mass / max(sig_reference_mass, tiny(1.0_RP))
+         is_hit = tracking_sig_aggregation_enable .and. &
+              sig_rel_mass_change >= tracking_sig_aggregation_relmass_threshold
+      case(TRIG_PROC_COALESCENCE)
+         sig_added_mass = min(hydro_mass1_pre, hydro_mass2_pre)
+         sig_reference_mass = max(hydro_mass1_pre, hydro_mass2_pre)
+         sig_rel_mass_change = sig_added_mass / max(sig_reference_mass, tiny(1.0_RP))
+         if( tracking_sig_coalescence_enable ) then
+            is_hit = sig_rel_mass_change >= tracking_sig_coalescence_relmass_threshold
+         else
+            is_hit = tracking_sig_liq_liq_coal_enable .and. &
+                 sig_rel_mass_change >= tracking_sig_liq_liq_coal_relmass_threshold
+         end if
+      end select
+    end function collision_significant_hit
+
+    subroutine compact_collision_event_records()
+      integer :: src_pair, dst_pair
+
+      dst_pair = 0
+      do src_pair = 1, num_pair
+         if( trigger_code_temp(src_pair) <= 0 ) cycle
+         dst_pair = dst_pair + 1
+         if( dst_pair /= src_pair ) call copy_collision_event_record(src_pair, dst_pair)
+      end do
+      num_pair = dst_pair
+    end subroutine compact_collision_event_records
+
+    subroutine copy_collision_event_record(src_pair, dst_pair)
+      integer, intent(in) :: src_pair, dst_pair
+
+      if( write_tracking_ids ) then
+         sd_id1_temp(dst_pair) = sd_id1_temp(src_pair)
+         sd_id2_temp(dst_pair) = sd_id2_temp(src_pair)
+         dm_id1_temp(dst_pair) = dm_id1_temp(src_pair)
+         dm_id2_temp(dst_pair) = dm_id2_temp(src_pair)
+      end if
+      num_col_temp(dst_pair) = num_col_temp(src_pair)
+      sdr1_temp(dst_pair) = sdr1_temp(src_pair)
+      sdr2_temp(dst_pair) = sdr2_temp(src_pair)
+      sdn1_temp(dst_pair) = sdn1_temp(src_pair)
+      sdn2_temp(dst_pair) = sdn2_temp(src_pair)
+      trigger_code_temp(dst_pair) = trigger_code_temp(src_pair)
+      trigger_level_temp(dst_pair) = trigger_level_temp(src_pair)
+      phase_state1_pre_temp(dst_pair) = phase_state1_pre_temp(src_pair)
+      phase_state2_pre_temp(dst_pair) = phase_state2_pre_temp(src_pair)
+      phase_state1_post_temp(dst_pair) = phase_state1_post_temp(src_pair)
+      phase_state2_post_temp(dst_pair) = phase_state2_post_temp(src_pair)
+      event_x_temp(dst_pair) = event_x_temp(src_pair)
+      event_y_temp(dst_pair) = event_y_temp(src_pair)
+      event_z_temp(dst_pair) = event_z_temp(src_pair)
+      sdn1_post_temp(dst_pair) = sdn1_post_temp(src_pair)
+      sdn2_post_temp(dst_pair) = sdn2_post_temp(src_pair)
+      hydro_radius1_pre_temp(dst_pair) = hydro_radius1_pre_temp(src_pair)
+      hydro_radius2_pre_temp(dst_pair) = hydro_radius2_pre_temp(src_pair)
+      hydro_radius1_post_temp(dst_pair) = hydro_radius1_post_temp(src_pair)
+      hydro_radius2_post_temp(dst_pair) = hydro_radius2_post_temp(src_pair)
+      hydro_mass1_pre_temp(dst_pair) = hydro_mass1_pre_temp(src_pair)
+      hydro_mass2_pre_temp(dst_pair) = hydro_mass2_pre_temp(src_pair)
+      hydro_mass1_post_temp(dst_pair) = hydro_mass1_post_temp(src_pair)
+      hydro_mass2_post_temp(dst_pair) = hydro_mass2_post_temp(src_pair)
+      x1_temp(dst_pair) = x1_temp(src_pair)
+      y1_temp(dst_pair) = y1_temp(src_pair)
+      z1_temp(dst_pair) = z1_temp(src_pair)
+      x2_temp(dst_pair) = x2_temp(src_pair)
+      y2_temp(dst_pair) = y2_temp(src_pair)
+      z2_temp(dst_pair) = z2_temp(src_pair)
+      ice_re1_pre_temp(dst_pair) = ice_re1_pre_temp(src_pair)
+      ice_rp1_pre_temp(dst_pair) = ice_rp1_pre_temp(src_pair)
+      ice_rho1_pre_temp(dst_pair) = ice_rho1_pre_temp(src_pair)
+      ice_re1_post_temp(dst_pair) = ice_re1_post_temp(src_pair)
+      ice_rp1_post_temp(dst_pair) = ice_rp1_post_temp(src_pair)
+      ice_rho1_post_temp(dst_pair) = ice_rho1_post_temp(src_pair)
+      ice_re2_pre_temp(dst_pair) = ice_re2_pre_temp(src_pair)
+      ice_rp2_pre_temp(dst_pair) = ice_rp2_pre_temp(src_pair)
+      ice_rho2_pre_temp(dst_pair) = ice_rho2_pre_temp(src_pair)
+      ice_re2_post_temp(dst_pair) = ice_re2_post_temp(src_pair)
+      ice_rp2_post_temp(dst_pair) = ice_rp2_post_temp(src_pair)
+      ice_rho2_post_temp(dst_pair) = ice_rho2_post_temp(src_pair)
+      rime_mass1_pre_temp(dst_pair) = rime_mass1_pre_temp(src_pair)
+      rime_mass1_post_temp(dst_pair) = rime_mass1_post_temp(src_pair)
+      rime_mass2_pre_temp(dst_pair) = rime_mass2_pre_temp(src_pair)
+      rime_mass2_post_temp(dst_pair) = rime_mass2_post_temp(src_pair)
+      rime_frac1_pre_temp(dst_pair) = rime_frac1_pre_temp(src_pair)
+      rime_frac1_post_temp(dst_pair) = rime_frac1_post_temp(src_pair)
+      rime_frac2_pre_temp(dst_pair) = rime_frac2_pre_temp(src_pair)
+      rime_frac2_post_temp(dst_pair) = rime_frac2_post_temp(src_pair)
+      aspect_ratio1_pre_temp(dst_pair) = aspect_ratio1_pre_temp(src_pair)
+      aspect_ratio1_post_temp(dst_pair) = aspect_ratio1_post_temp(src_pair)
+      aspect_ratio2_pre_temp(dst_pair) = aspect_ratio2_pre_temp(src_pair)
+      aspect_ratio2_post_temp(dst_pair) = aspect_ratio2_post_temp(src_pair)
+    end subroutine copy_collision_event_record
+
+    subroutine append_collision_event_record(src_pair, new_trigger_code)
+      integer, intent(in) :: src_pair
+      integer, intent(in) :: new_trigger_code
+      integer :: dst_pair
+
+      if( src_pair <= 0 ) return
+      if( num_pair >= size(trigger_code_temp) ) return
+
+      dst_pair = num_pair + 1
+      if( write_tracking_ids ) then
+         sd_id1_temp(dst_pair) = sd_id1_temp(src_pair)
+         sd_id2_temp(dst_pair) = sd_id2_temp(src_pair)
+         dm_id1_temp(dst_pair) = dm_id1_temp(src_pair)
+         dm_id2_temp(dst_pair) = dm_id2_temp(src_pair)
+      end if
+      num_col_temp(dst_pair) = num_col_temp(src_pair)
+      sdr1_temp(dst_pair) = sdr1_temp(src_pair)
+      sdr2_temp(dst_pair) = sdr2_temp(src_pair)
+      sdn1_temp(dst_pair) = sdn1_temp(src_pair)
+      sdn2_temp(dst_pair) = sdn2_temp(src_pair)
+      trigger_code_temp(dst_pair) = new_trigger_code
+      phase_state1_pre_temp(dst_pair) = phase_state1_pre_temp(src_pair)
+      phase_state2_pre_temp(dst_pair) = phase_state2_pre_temp(src_pair)
+      phase_state1_post_temp(dst_pair) = phase_state1_post_temp(src_pair)
+      phase_state2_post_temp(dst_pair) = phase_state2_post_temp(src_pair)
+      event_x_temp(dst_pair) = event_x_temp(src_pair)
+      event_y_temp(dst_pair) = event_y_temp(src_pair)
+      event_z_temp(dst_pair) = event_z_temp(src_pair)
+      sdn1_post_temp(dst_pair) = sdn1_post_temp(src_pair)
+      sdn2_post_temp(dst_pair) = sdn2_post_temp(src_pair)
+      hydro_radius1_pre_temp(dst_pair) = hydro_radius1_pre_temp(src_pair)
+      hydro_radius2_pre_temp(dst_pair) = hydro_radius2_pre_temp(src_pair)
+      hydro_radius1_post_temp(dst_pair) = hydro_radius1_post_temp(src_pair)
+      hydro_radius2_post_temp(dst_pair) = hydro_radius2_post_temp(src_pair)
+      hydro_mass1_pre_temp(dst_pair) = hydro_mass1_pre_temp(src_pair)
+      hydro_mass2_pre_temp(dst_pair) = hydro_mass2_pre_temp(src_pair)
+      hydro_mass1_post_temp(dst_pair) = hydro_mass1_post_temp(src_pair)
+      hydro_mass2_post_temp(dst_pair) = hydro_mass2_post_temp(src_pair)
+      x1_temp(dst_pair) = x1_temp(src_pair)
+      y1_temp(dst_pair) = y1_temp(src_pair)
+      z1_temp(dst_pair) = z1_temp(src_pair)
+      x2_temp(dst_pair) = x2_temp(src_pair)
+      y2_temp(dst_pair) = y2_temp(src_pair)
+      z2_temp(dst_pair) = z2_temp(src_pair)
+      ice_re1_pre_temp(dst_pair) = ice_re1_pre_temp(src_pair)
+      ice_rp1_pre_temp(dst_pair) = ice_rp1_pre_temp(src_pair)
+      ice_rho1_pre_temp(dst_pair) = ice_rho1_pre_temp(src_pair)
+      ice_re1_post_temp(dst_pair) = ice_re1_post_temp(src_pair)
+      ice_rp1_post_temp(dst_pair) = ice_rp1_post_temp(src_pair)
+      ice_rho1_post_temp(dst_pair) = ice_rho1_post_temp(src_pair)
+      ice_re2_pre_temp(dst_pair) = ice_re2_pre_temp(src_pair)
+      ice_rp2_pre_temp(dst_pair) = ice_rp2_pre_temp(src_pair)
+      ice_rho2_pre_temp(dst_pair) = ice_rho2_pre_temp(src_pair)
+      ice_re2_post_temp(dst_pair) = ice_re2_post_temp(src_pair)
+      ice_rp2_post_temp(dst_pair) = ice_rp2_post_temp(src_pair)
+      ice_rho2_post_temp(dst_pair) = ice_rho2_post_temp(src_pair)
+      rime_mass1_pre_temp(dst_pair) = rime_mass1_pre_temp(src_pair)
+      rime_mass1_post_temp(dst_pair) = rime_mass1_post_temp(src_pair)
+      rime_mass2_pre_temp(dst_pair) = rime_mass2_pre_temp(src_pair)
+      rime_mass2_post_temp(dst_pair) = rime_mass2_post_temp(src_pair)
+      rime_frac1_pre_temp(dst_pair) = rime_frac1_pre_temp(src_pair)
+      rime_frac1_post_temp(dst_pair) = rime_frac1_post_temp(src_pair)
+      rime_frac2_pre_temp(dst_pair) = rime_frac2_pre_temp(src_pair)
+      rime_frac2_post_temp(dst_pair) = rime_frac2_post_temp(src_pair)
+      aspect_ratio1_pre_temp(dst_pair) = aspect_ratio1_pre_temp(src_pair)
+      aspect_ratio1_post_temp(dst_pair) = aspect_ratio1_post_temp(src_pair)
+      aspect_ratio2_pre_temp(dst_pair) = aspect_ratio2_pre_temp(src_pair)
+      aspect_ratio2_post_temp(dst_pair) = aspect_ratio2_post_temp(src_pair)
+      num_pair = dst_pair
+    end subroutine append_collision_event_record
   end subroutine sdm_coales_cold
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine sdm_outcome_drolet_coalescence(sd_ncol,sd_r1,sd_r2)

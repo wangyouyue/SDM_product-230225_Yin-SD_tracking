@@ -16,9 +16,9 @@
 !! @li      2013-09-30 (Y.Sato)  [new] Implement from Original version of SDM
 !! @li      2014-01-22 (Y.Sato)  [rev] Update for scale-0.0.0
 !! @li      2014-05-04 (Y.Sato)  [rev] Update for scale-0.0.1
-!! @li      2014-06-06 (S.Shima) [rev] Modify several bug 
+!! @li      2014-06-06 (S.Shima) [rev] Modify several bug
 !! @li      2014-06-07 (Y.Sato)  [rev] Remove dt=max(dt_sdm) and some other changes
-!! @li      2014-06-09 (S.Shima) [rev] Check whether dt is the least common multiple of sdm_dtcmph(i) 
+!! @li      2014-06-09 (S.Shima) [rev] Check whether dt is the least common multiple of sdm_dtcmph(i)
 !!                                     that satisfies sdm_dtcmph(i)<= dt. Fixed a hidden bug: "/=" to "==".
 !! @li      2014-06-13 (S.Shima) [rev] Common variables are separated into sdm_common.f90
 !! @li      2014-06-14 (S.Shima) [rev] Check the initialization of the random number generator.
@@ -33,7 +33,7 @@
 !! @li      2014-07-11 (S.Shima) [rev] Subroutines related to sdm_getvz are revised. Many bug fixes.
 !! @li      2014-07-11 (S.Shima) [rev] Subroutines for conversion between fluid variables are separated into module m_sdm_fluidconv
 !! @li      2014-07-11 (S.Shima) [rev] Subroutines to impose boundary conditions are separated into module m_sdm_boundary
-!! @li      2014-07-11 (S.Shima) [rev] Motion (advection/sedimentation/precipitation) related subroutines are separated into the 
+!! @li      2014-07-11 (S.Shima) [rev] Motion (advection/sedimentation/precipitation) related subroutines are separated into the
 !!                                     module m_sdm_motion
 !! @li      2014-07-12 (S.Shima) [rev] Add comments concerning when to diagnose QC and QR
 !! @li      2014-07-12 (S.Shima) [rev] BUG of random number initialization removed
@@ -64,11 +64,11 @@
 !! @li      2014-07-24 (Y.Sato)  [mod] Modify a bug for restart
 !! @li      2014-07-25 (Y.Sato)  [rev] Move sdm_getrklu from sdm_iniset to ATMOS_PHY_MP_sdm_setup
 !! @li      2014-07-25 (Y.Sato)  [rev] Add COMM_var, and COMM_wait for filling u_scale, v_scale, and w_scale
-!! @li      2014-12-12 (Y.Sato)  [mod] Modify for using QTRC_sdm in sdm_sd2qcqr in sdm_iniset 
+!! @li      2014-12-12 (Y.Sato)  [mod] Modify for using QTRC_sdm in sdm_sd2qcqr in sdm_iniset
 !! @li      2014-12-17 (Y.Sato)  [mod] Add initialization of prr_crs for Restart
 !! @li      2015-06-22 (S.Shima) [add] Add section specification call for profiling (fipp and fapp)
 !! @li      2015-06-27 (S.Shima) [add] Add more section specification call for profiling (fapp)
-!! @li      2015-06-27 (S.Shima) [add] Store environmental variable PARALELL to num_threads 
+!! @li      2015-06-27 (S.Shima) [add] Store environmental variable PARALELL to num_threads
 !! @li      2015-07-30 (Y.Sato)  [add] Add "ifdef" for fapp and fipp module
 !! @li      2015-09-08 (Y.Sato)  [mod] update for version SCALE 0.4.2
 !! @li      2015-09-15 (Y.Sato)  [mod] update for version SCALE 0.4.3
@@ -94,11 +94,11 @@
 !! @li      2017-02-15 (S.Shima) [mod] for new sdm_subldep subroutine
 !! @li      2017-02-15 (S.Shima) [mod] for the list vector of sdm_subldep subroutine
 !! @li      2017-02-19 (S.Shima) [add] sdm_coales_cold
-!! @li      2017-08-24 (S.Shima) [mod] argument of sdm_meltfreeze 
+!! @li      2017-08-24 (S.Shima) [mod] argument of sdm_meltfreeze
 !! @li      2017-08-28 (S.Shima) [add] INAS density of Niemand et al. (2012) is implemented
 !! @li      2017-09-27 (S.Shima) [mod] argument of sdm_coalescence_cold
 !! @li      2017-10-01 (S.Shima) [mod] argument of sdm_subldep
-!! @li      2017-11-30 (S.Shima) [mod] multiplicity of IN to sample rare events 
+!! @li      2017-11-30 (S.Shima) [mod] multiplicity of IN to sample rare events
 !! @li      2018-02-28 (S.Shima) [mod] predictor-corrector is used for SD motion eq
 !! @li      2018-04-03 (S.Shima) [mod] argument of sdm_coales_cold
 !! @li      2018-05-13 (S.Shima) [fix] latent heat release through riming
@@ -117,13 +117,13 @@
 !! @li      2020-07-23 (S.Shima) [add] sdm_dmpvar == 1?? and sdm_dmpvar == 2??
 !! @li      2020-07-27 (S.Shima) [mod] History output of SNC (SD number density). Data is updated only at the time it will be saved
 !! @li      2020-07-28 (S.Shima) [add] History output of the density of droplet moments
-!<  
+!<
 !-------------------------------------------------------------------------------
 #include "macro_thermodyn.h"
 module scale_atmos_phy_mp_sdm
   !-----------------------------------------------------------------------------
   !
-  !++ used modules ! For encapsulation, reduce the use of modules here as far as possible. 
+  !++ used modules ! For encapsulation, reduce the use of modules here as far as possible.
   !   Modules should be called inside the subroutine here.
   !
   use mpi
@@ -152,7 +152,7 @@ module scale_atmos_phy_mp_sdm
     I_HI,  &
     I_HS,  &
     I_HG
-  
+
   use gadg_algorithm, only: &
      gadg_count_sort
   use rng_uniform_mt, only: &
@@ -203,11 +203,11 @@ module scale_atmos_phy_mp_sdm
   character(len=H_MID)  , public, target :: ATMOS_PHY_MP_sdm_DESC(QA_MP_MAX)
   character(len=H_SHORT), public, target :: ATMOS_PHY_MP_sdm_UNIT(QA_MP_MAX)
   logical               , public :: ADVC(QA_MP_MAX)
-  
+
   real(RP), public, target :: ATMOS_PHY_MP_sdm_DENS(N_HYD) ! hydrometeor density [kg/m3]=[g/L]
 
   logical,  public, save   :: sd_rest_flg_out = .false. ! restart flg of Super Droplet
-  
+
   data ATMOS_PHY_MP_sdm_NAME / &
                  'QV', &
                  'QC', &
@@ -239,7 +239,7 @@ module scale_atmos_phy_mp_sdm
                  .false., &
                  .false., &
                  .false.  /
-  
+
   !-----------------------------------------------------------------------------
   !
   !++ Private parameters & variables
@@ -249,10 +249,10 @@ module scale_atmos_phy_mp_sdm
   integer, private, parameter :: I_mp_QI = 3
   integer, private, parameter :: I_mp_QS = 4
   integer, private, parameter :: I_mp_QG = 5
-  
+
   integer,  private              :: QS_MP
   integer,  private              :: QE_MP
-  
+
   !-----------------------------------------------------------------------------
 contains
   !-----------------------------------------------------------------------------
@@ -264,10 +264,19 @@ contains
        PRC_MPIstop
     use scale_atmos_hydrometeor, only: &
        ATMOS_HYDROMETEOR_regist
-    use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM, &
+    use m_sdm_common, only: PARAM_ATMOS_PHY_MP_SDM, PARAM_ATMOS_PHY_MP_SDM_TRACKING, &
          tracking_mode, &
          tracking_sample_initialized, coalescence_output_enable, coal_output, &
-         random_perturbation_enable, random_perturbation_amp, sdm_noise_amp
+         random_perturbation_enable, random_perturbation_amp, sdm_noise_amp, &
+         TRACK_COLD_EVENT_EXTENDED_GEOMETRY, TRACK_COLD_OUTPUT_ICE_GEOMETRY, &
+         TRACK_COLD_OUTPUT_RIME_MORPHOLOGY, &
+       tracking_spatial_visit_enable, tracking_spatial_active_rank, &
+         tracking_spatial_x_min, tracking_spatial_x_max, &
+         tracking_spatial_y_min, tracking_spatial_y_max, &
+         tracking_spatial_z_min, tracking_spatial_z_max, &
+         tracking_cleanup_debug_enable, &
+         tracking_cleanup_terminal_smoke_enable, &
+         tracking_cleanup_vertical_smoke_enable
 
     implicit none
 
@@ -299,6 +308,36 @@ contains
        call PRC_MPIstop
     endif
     if( IO_L ) write(IO_FID_LOG,nml=PARAM_ATMOS_PHY_MP_SDM)
+
+    rewind(IO_FID_CONF)
+    read(IO_FID_CONF,nml=PARAM_ATMOS_PHY_MP_SDM_TRACKING,iostat=ierr)
+
+    if( ierr < 0 ) then
+       if( IO_L ) write(IO_FID_LOG,*) '*** Not found namelist PARAM_ATMOS_PHY_MP_SDM_TRACKING. Default used.'
+    elseif( ierr > 0 ) then
+       write(*,*) 'xxx Not appropriate names in namelist PARAM_ATMOS_PHY_MP_SDM_TRACKING. Check!'
+       call PRC_MPIstop
+    endif
+    if( IO_L ) write(IO_FID_LOG,nml=PARAM_ATMOS_PHY_MP_SDM_TRACKING)
+
+    if( TRACK_COLD_EVENT_EXTENDED_GEOMETRY ) then
+       TRACK_COLD_OUTPUT_ICE_GEOMETRY = .true.
+       TRACK_COLD_OUTPUT_RIME_MORPHOLOGY = .true.
+    end if
+
+    if( tracking_spatial_visit_enable ) then
+       if( tracking_spatial_x_min > tracking_spatial_x_max .or. &
+           tracking_spatial_y_min > tracking_spatial_y_max .or. &
+           tracking_spatial_z_min > tracking_spatial_z_max ) then
+          write(*,*) 'xxx tracking_spatial_* bounds are invalid. Check PARAM_ATMOS_PHY_MP_SDM_TRACKING!'
+          call PRC_MPIstop
+       end if
+       ! Conservative default: every enabled rank checks visits. Setup may
+       ! replace this with rank-local pruning after grid coordinates exist.
+       tracking_spatial_active_rank = .true.
+    else
+       tracking_spatial_active_rank = .false.
+    end if
 
     tracking_sample_initialized = .false.
     ! NOTE:
@@ -357,7 +396,7 @@ contains
     I_QI = QS + I_mp_QI
     I_QS = QS + I_mp_QS
     I_QG = QS + I_mp_QG
-    
+
     return
   end subroutine ATMOS_PHY_MP_sdm_config
   !-----------------------------------------------------------------------------
@@ -399,7 +438,7 @@ contains
 !!$       FZ  => GRID_FZ,    &
 !!$       FDX => GRID_FDX,   &
 !!$       FDY => GRID_FDY,   &
-!!$       FDZ => GRID_FDZ,   & 
+!!$       FDZ => GRID_FDZ,   &
 !!       CBFZ => GRID_CBFZ, &
 !!       CBFX => GRID_CBFX, &
 !!       CBFY => GRID_CBFY, &
@@ -419,6 +458,10 @@ contains
 !    real(RP) :: n0, dry_r
 !    real(RP) :: delta1, delta2 !, sdn_tmp
     real(RP) :: buffact
+    real(RP) :: spatial_margin
+    real(RP) :: rank_x_min, rank_x_max
+    real(RP) :: rank_y_min, rank_y_max
+    real(RP) :: rank_z_min, rank_z_max
     integer :: ierr
     integer :: i, j, ip, k, n, s
     integer :: bndsdmdim, bufsiz
@@ -438,7 +481,7 @@ contains
     ATMOS_PHY_MP_sdm_DENS(I_HI) = dens_i
     ATMOS_PHY_MP_sdm_DENS(I_HS) = dens_i
     ATMOS_PHY_MP_sdm_DENS(I_HG) = dens_i
-    
+
     ! Get the number of threads of Auto Parallelization on K/FX10
     call get_environment_variable('PARALLEL', status = status, length = len)
     if (status /= 0) then
@@ -451,7 +494,7 @@ contains
     end if
 
     ! [Bug] Stretched coordinate is not supported yet, but the check below is not working any more
-    ! [Bug] Must be fixed in the future when introducing generalized coordinate 
+    ! [Bug] Must be fixed in the future when introducing generalized coordinate
     buffact = 0.0_RP
     do k = KS, KE
       buffact = max( buffact,GRID_CDZ(k)/DZ )
@@ -527,7 +570,7 @@ contains
 
     !--- namelist PARAM_ATMOS_PHY_MP_SDM has already been read in ATMOS_PHY_MP_sdm_config
 
-    if( .not. sdm_cold ) then 
+    if( .not. sdm_cold ) then
        if( IO_L ) write(IO_FID_LOG,*) 'Warm SDM is used'
     else if ( sdm_cold ) then
        if( IO_L ) write(IO_FID_LOG,*) 'Cold SDM is used'
@@ -587,7 +630,7 @@ contains
 !!$      if( mype == PRC_master )  write(*,*) "sdm_zlower was set to CZ(KS) because zlower < CZ(KS)"
 !!$      sdm_zlower = CZ(KS)
 !!$     endif
-! 
+!
 
 !     if( sdm_zupper > CZ(KE) ) then
 !      if( mype == PRC_master )  write(*,*) "sdm_zupper was set to CZ(KE) because zupper > CZ(KE)"
@@ -701,16 +744,16 @@ contains
        end if
     end do iterate_2
 
-    ! check whether dt is the least common multiple of sdm_dtcmph(i) that satisfies sdm_dtcmph(i)<= dt 
-    !! find the smallest nclstp(1:3) that satisfies sdm_dtcmph(i)<= dt 
+    ! check whether dt is the least common multiple of sdm_dtcmph(i) that satisfies sdm_dtcmph(i)<= dt
+    !! find the smallest nclstp(1:3) that satisfies sdm_dtcmph(i)<= dt
     igcd=maxval(nclstp(1:5))
     if((sdm_dtcmph(1)<= dt).and.docondensation)   igcd=min(nclstp(1),igcd)
     if((sdm_dtcmph(2)<= dt).and.doautoconversion) igcd=min(nclstp(2),igcd)
     if((sdm_dtcmph(3)<= dt).and.domovement)       igcd=min(nclstp(3),igcd)
     if((sdm_dtcmph(4)<= dt).and.domeltfreeze)     igcd=min(nclstp(4),igcd)
     if((sdm_dtcmph(5)<= dt).and.dosublimation)    igcd=min(nclstp(5),igcd)
-    !! find the greatest common divisor of nclstp(1:5) that satisfies sdm_dtcmph(i)<= dt 
-    do 
+    !! find the greatest common divisor of nclstp(1:5) that satisfies sdm_dtcmph(i)<= dt
+    do
        if( igcd == 1) exit
        if( mod(nclstp(1),igcd) == 0 .and.           &
            mod(nclstp(2),igcd) == 0 .and.           &
@@ -737,6 +780,34 @@ contains
     xmax_sdm = GRID_FX(IE)-GRID_FX(IS-1)
     ymax_sdm = GRID_FY(JE)-GRID_FY(JS-1)
 
+    if( tracking_spatial_visit_enable ) then
+       if( tracking_spatial_rank_pruning_enable ) then
+          spatial_margin = max(0.0_RP, tracking_spatial_rank_margin)
+          rank_x_min = min(GRID_FX(IS-1), GRID_FX(IE))
+          rank_x_max = max(GRID_FX(IS-1), GRID_FX(IE))
+          rank_y_min = min(GRID_FY(JS-1), GRID_FY(JE))
+          rank_y_max = max(GRID_FY(JS-1), GRID_FY(JE))
+          rank_z_min = minval(REAL_FZ(KS-1:KE,IS:IE,JS:JE))
+          rank_z_max = maxval(REAL_FZ(KS-1:KE,IS:IE,JS:JE))
+          tracking_spatial_active_rank = &
+               rank_x_max >= tracking_spatial_x_min - spatial_margin .and. &
+               rank_x_min <= tracking_spatial_x_max + spatial_margin .and. &
+               rank_y_max >= tracking_spatial_y_min - spatial_margin .and. &
+               rank_y_min <= tracking_spatial_y_max + spatial_margin .and. &
+               rank_z_max >= tracking_spatial_z_min - spatial_margin .and. &
+               rank_z_min <= tracking_spatial_z_max + spatial_margin
+       else
+          tracking_spatial_active_rank = .true.
+       end if
+       if( IO_L ) write(IO_FID_LOG,*) 'tracking_spatial_active_rank = ', &
+            tracking_spatial_active_rank, ' pruning = ', tracking_spatial_rank_pruning_enable
+       if( tracking_spatial_rank_pruning_enable ) write(*,*) &
+            'tracking_spatial_rank_pruning mype active margin = ', &
+            mype, tracking_spatial_active_rank, tracking_spatial_rank_margin
+    else
+       tracking_spatial_active_rank = .false.
+    end if
+
     allocate( zph_crs(KA,IA,JA) )
 
     !--- set number of super droplet etc...
@@ -760,7 +831,7 @@ contains
     dy_sdm(1:JA) = GRID_CDY(1:JA)
     dxiv_sdm(1:IA) = GRID_RCDX(1:IA)
     dyiv_sdm(1:JA) = GRID_RCDY(1:JA)
-    
+
     return
   end subroutine ATMOS_PHY_MP_sdm_setup
   !-----------------------------------------------------------------------------
@@ -790,7 +861,7 @@ contains
        MP_negative_fixer        => ATMOS_PHY_MP_negative_fixer,       &
        MP_precipitation         => ATMOS_PHY_MP_precipitation,        &
        MP_saturation_adjustment => ATMOS_PHY_MP_saturation_adjustment
-    use scale_atmos_thermodyn, only: &       
+    use scale_atmos_thermodyn, only: &
        THERMODYN_rhoe        => ATMOS_THERMODYN_rhoe,       &
        THERMODYN_rhot        => ATMOS_THERMODYN_rhot,       &
        THERMODYN_temp_pres_E => ATMOS_THERMODYN_temp_pres_E
@@ -807,8 +878,10 @@ contains
        Rvap  => CONST_Rvap, &
        P00   => CONST_PRE00
 
-    use m_sdm_io, only: &
-       sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_interest_id_outnetcdf
+            use m_sdm_io, only: &
+               sdm_outasci,sdm_outnetcdf,sdm_outnetcdf_hist,sdm_interest_id_outnetcdf, &
+               sdm_coal_outnetcdf,sdm_event_collision_outnetcdf, &
+               sdm_event_diag_outnetcdf
     use m_sdm_coordtrans, only: &
        sdm_rk2z
     use m_sdm_fluidconv, only: &
@@ -817,10 +890,16 @@ contains
        sdm_getvz_liq, sdm_getvz_ice
     use m_sdm_sd2fluid, only: &
          sdm_sd2qcqr,sdm_sd2qiqsqg,sdm_sd2rhosd,sdm_sd2rhodropmom
-    use m_sdm_idutil, only: &
-         sdm_copy_selected_sd
+            use m_sdm_idutil, only: &
+                 sdm_copy_selected_sd
+            use m_sdm_tracking_cold, only: &
+                 sdm_cold_tracking_update_interval, &
+                 sdm_cold_tracking_update_spatial_visit, &
+                 sdm_cold_tracking_evaluate_diag_masks, &
+                 sdm_cold_tracking_reset_interval, &
+                 sdm_tracking_count_valid_id_pairs
 
-    implicit none
+            implicit none
     real(RP), intent(inout) :: DENS(KA,IA,JA)        !! Density [kg/m3]
     real(RP), intent(inout) :: MOMZ(KA,IA,JA)        !! Momentum [kg/s/m2]
     real(RP), intent(inout) :: MOMX(KA,IA,JA)
@@ -870,8 +949,9 @@ contains
     type(sdicedef), pointer :: sdice_tmp
     integer :: sdnum_tmp, sdnumasl_tmp
     integer :: histitemid
-    logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3, did_sdm_dump
-    logical :: did_coal_flag_dump
+            logical :: do_puthist, do_puthist_0, do_puthist_1, do_puthist_2, do_puthist_3, did_sdm_dump
+            logical :: did_coal_flag_dump
+            logical :: did_event_diag_dump
     logical :: output_selected_as_all
     integer :: tracking_chain_count
     integer :: tracking_chain_count_sum, tracking_chain_count_max
@@ -899,10 +979,17 @@ contains
 
     gmd_tpht_id_records_written = 0
     if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
-         ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
+         ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable .or. &
+           tracking_interest_ice_radius_enable .or. tracking_interest_ice_phase_enable .or. &
+           tracking_interest_rime_mass_enable ) ) then
        if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
-       call sdm_interest_id_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c, &
-            gmd_tpht_id_records_written)
+              if( sdm_cold ) then
+                  call sdm_interest_id_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c, &
+                       gmd_tpht_id_records_written, sdliqice_s2c, sdice_s2c, sd_event_mask_s2c)
+       else
+          call sdm_interest_id_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdr_s2c, sdid_s2c, dmid_s2c, ifcoal_s2c, &
+               gmd_tpht_id_records_written)
+       end if
        if( gmd_benchmark_diag_enable .and. gmd_tpht_id_records_written > 0 ) then
           gmd_time_end = mpi_wtime()
           gmd_tpht_id_write_time_last_s = gmd_time_end - gmd_time_start
@@ -921,7 +1008,7 @@ contains
     ! Section specification for fapp profiler
     call fapp_start("sdm_all",0,0)
 #endif
-    
+
     ! QTRC except QV (and QDRY) are diagnosed from super-droplets
     ! To make this doubly sure, reset QTRC to zero
     do iq = QS_MP, QE_MP
@@ -984,6 +1071,18 @@ contains
        rng_s2c_restart = rng_s2c
        sdliqice_s2c_restart(:) = sdliqice_s2c(:)
        if( sdm_cold ) then
+          sd_event_mask_s2c_restart(:) = sd_event_mask_s2c(:)
+          sd_event_sig_mask_s2c_restart(:) = sd_event_sig_mask_s2c(:)
+          sd_diag_mask_s2c_restart(:) = sd_diag_mask_s2c(:)
+          sd_phase_change_flag_s2c_restart(:) = sd_phase_change_flag_s2c(:)
+          sd_spatial_visit_flag_s2c_restart(:) = sd_spatial_visit_flag_s2c(:)
+          sd_liq_radius_max_interval_s2c_restart(:) = sd_liq_radius_max_interval_s2c(:)
+          sd_ice_rvol_max_interval_s2c_restart(:) = sd_ice_rvol_max_interval_s2c(:)
+          sd_mixed_rvol_max_interval_s2c_restart(:) = sd_mixed_rvol_max_interval_s2c(:)
+          sd_rime_mass_max_interval_s2c_restart(:) = sd_rime_mass_max_interval_s2c(:)
+          sd_rime_frac_max_interval_s2c_restart(:) = sd_rime_frac_max_interval_s2c(:)
+          sd_nmono_max_interval_s2c_restart(:) = sd_nmono_max_interval_s2c(:)
+          sd_aspect_ratio_max_interval_s2c_restart(:) = sd_aspect_ratio_max_interval_s2c(:)
           sdice_s2c_restart%re(:) = sdice_s2c%re(:)
           sdice_s2c_restart%rp(:) = sdice_s2c%rp(:)
           sdice_s2c_restart%rho(:) = sdice_s2c%rho(:)
@@ -1013,8 +1112,9 @@ contains
     ! Section specification for fapp profiler
     call fapp_start("sdm_out",0,0)
 #endif
-    did_sdm_dump = .false.
-    did_coal_flag_dump = .false.
+            did_sdm_dump = .false.
+            did_coal_flag_dump = .false.
+            did_event_diag_dump = .false.
 
     if( (mod(sdm_dmpvar,10)==1) .and. sdm_dmpitva>0.0_RP .and. &
          mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
@@ -1028,12 +1128,36 @@ contains
        call sdm_getvz_liq(pres_scale,DENS,t_scale,            &
                            sdnum_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdr_s2c,sdvz_s2c,  &
                            sd_itmp1,sd_itmp2,sd_itmp3,'no_interpolation' )
-       if( sdm_cold )then
-          call sdm_getvz_ice(DENS,t_scale,            &
-                           sdnum_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdice_s2c,sdvz_s2c,  &
-                           sd_itmp1,'no_interpolation' )
-       end if
-       !! Output
+               if( sdm_cold )then
+                  call sdm_getvz_ice(DENS,t_scale,            &
+                                   sdnum_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdice_s2c,sdvz_s2c,  &
+                                   sd_itmp1,'no_interpolation' )
+                  call sdm_cold_tracking_update_interval( &
+                       sdnum_s2c, sdliqice_s2c, sdr_s2c, sdice_s2c, &
+                       sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                       sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                       sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                       sd_aspect_ratio_max_interval_s2c)
+                          call sdm_rk2z(sdnum_s2c,sdx_s2c,sdy_s2c,sdrk_s2c,sdz_s2c,sdri_s2c,sdrj_s2c)
+                          call sdm_cold_tracking_update_spatial_visit( &
+                               sdnum_s2c, sdx_s2c, sdy_s2c, sdz_s2c, sdrk_s2c, sd_spatial_visit_flag_s2c)
+                          call sdm_cold_tracking_evaluate_diag_masks( &
+                               sdnum_s2c, sd_diag_mask_s2c, &
+                               sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                               sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                               sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                               sd_aspect_ratio_max_interval_s2c)
+                          if( coal_output == 1_i2 .and. (.not. did_event_diag_dump) ) then
+                             call sdm_event_diag_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdid_s2c, dmid_s2c, &
+                                  sdx_s2c, sdy_s2c, sdz_s2c, sd_event_mask_s2c, sd_event_sig_mask_s2c, sd_diag_mask_s2c, &
+                                  sd_phase_change_flag_s2c, sd_liq_radius_max_interval_s2c, &
+                                  sd_ice_rvol_max_interval_s2c, sd_mixed_rvol_max_interval_s2c, &
+                                  sd_rime_mass_max_interval_s2c, sd_rime_frac_max_interval_s2c, &
+                                  sd_nmono_max_interval_s2c, sd_aspect_ratio_max_interval_s2c)
+                             did_event_diag_dump = .true.
+                          end if
+                       end if
+                       !! Output
        call sdm_outasci(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
@@ -1050,24 +1174,60 @@ contains
        !!! z
        call sdm_rk2z(sdnum_s2c,sdx_s2c,sdy_s2c,sdrk_s2c,sdz_s2c,sdri_s2c,sdrj_s2c)
        !!! terminal velocity vz
-       ! sdvz_s2c(:)=0.0_RP ! temporary for debug 
+       ! sdvz_s2c(:)=0.0_RP ! temporary for debug
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_getvz_liq(pres_scale,DENS,t_scale,            &
                            sdnum_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdr_s2c,sdvz_s2c,  &
                            sd_itmp1,sd_itmp2,sd_itmp3,'no_interpolation' )
-       if( sdm_cold )then
-          call sdm_getvz_ice(DENS,t_scale,            &
-                           sdnum_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdice_s2c,sdvz_s2c,  &
-                           sd_itmp1,'no_interpolation' )
-       end if
-       !! Output
+               if( sdm_cold )then
+                  call sdm_getvz_ice(DENS,t_scale,            &
+                                   sdnum_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdice_s2c,sdvz_s2c,  &
+                                   sd_itmp1,'no_interpolation' )
+                  call sdm_cold_tracking_update_interval( &
+                       sdnum_s2c, sdliqice_s2c, sdr_s2c, sdice_s2c, &
+                       sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                       sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                       sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                       sd_aspect_ratio_max_interval_s2c)
+                          call sdm_rk2z(sdnum_s2c,sdx_s2c,sdy_s2c,sdrk_s2c,sdz_s2c,sdri_s2c,sdrj_s2c)
+                          call sdm_cold_tracking_update_spatial_visit( &
+                               sdnum_s2c, sdx_s2c, sdy_s2c, sdz_s2c, sdrk_s2c, sd_spatial_visit_flag_s2c)
+                          call sdm_cold_tracking_evaluate_diag_masks( &
+                               sdnum_s2c, sd_diag_mask_s2c, &
+                               sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                               sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                               sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                               sd_aspect_ratio_max_interval_s2c)
+                          if( coal_output == 1_i2 .and. (.not. did_event_diag_dump) ) then
+                             call sdm_event_diag_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdid_s2c, dmid_s2c, &
+                                  sdx_s2c, sdy_s2c, sdz_s2c, sd_event_mask_s2c, sd_event_sig_mask_s2c, sd_diag_mask_s2c, &
+                                  sd_phase_change_flag_s2c, sd_liq_radius_max_interval_s2c, &
+                                  sd_ice_rvol_max_interval_s2c, sd_mixed_rvol_max_interval_s2c, &
+                                  sd_rime_mass_max_interval_s2c, sd_rime_frac_max_interval_s2c, &
+                                  sd_nmono_max_interval_s2c, sd_aspect_ratio_max_interval_s2c)
+                             did_event_diag_dump = .true.
+                          end if
+                       end if
+                       !! Output
        if( (mod(sdm_dmpvar,100))/10==1) then
           if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
           call sdm_outnetcdf(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
-                        sdm_dmpnskip,filetag='all')
+                                sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
+                                sdm_dmpnskip,filetag='all', &
+                                sd_event_mask=sd_event_mask_s2c, &
+                                sd_event_sig_mask=sd_event_sig_mask_s2c, &
+                                sd_diag_mask=sd_diag_mask_s2c, &
+                                sd_phase_change_flag=sd_phase_change_flag_s2c, &
+                                sd_spatial_visit_flag=sd_spatial_visit_flag_s2c, &
+                                sd_liq_radius_max_interval=sd_liq_radius_max_interval_s2c, &
+                                sd_ice_rvol_max_interval=sd_ice_rvol_max_interval_s2c, &
+                                sd_mixed_rvol_max_interval=sd_mixed_rvol_max_interval_s2c, &
+                                sd_rime_mass_max_interval=sd_rime_mass_max_interval_s2c, &
+                                sd_rime_frac_max_interval=sd_rime_frac_max_interval_s2c, &
+                                sd_nmono_max_interval=sd_nmono_max_interval_s2c, &
+                                sd_aspect_ratio_max_interval=sd_aspect_ratio_max_interval_s2c)
           if( gmd_benchmark_diag_enable ) then
              gmd_time_end = mpi_wtime()
              gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
@@ -1080,8 +1240,20 @@ contains
           call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                         sdnum_s2c,sdnumasl_s2c,                    &
                         sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdr_s2c,sdasl_s2c,sdvz_s2c, &
-                        sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
-                        sdm_dmpnskip,filetag='all')
+                                sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c, &
+                                sdm_dmpnskip,filetag='all', &
+                                sd_event_mask=sd_event_mask_s2c, &
+                                sd_event_sig_mask=sd_event_sig_mask_s2c, &
+                                sd_diag_mask=sd_diag_mask_s2c, &
+                                sd_phase_change_flag=sd_phase_change_flag_s2c, &
+                                sd_spatial_visit_flag=sd_spatial_visit_flag_s2c, &
+                                sd_liq_radius_max_interval=sd_liq_radius_max_interval_s2c, &
+                                sd_ice_rvol_max_interval=sd_ice_rvol_max_interval_s2c, &
+                                sd_mixed_rvol_max_interval=sd_mixed_rvol_max_interval_s2c, &
+                                sd_rime_mass_max_interval=sd_rime_mass_max_interval_s2c, &
+                                sd_rime_frac_max_interval=sd_rime_frac_max_interval_s2c, &
+                                sd_nmono_max_interval=sd_nmono_max_interval_s2c, &
+                                sd_aspect_ratio_max_interval=sd_aspect_ratio_max_interval_s2c)
           if( gmd_benchmark_diag_enable ) then
              gmd_time_end = mpi_wtime()
              gmd_sd_output_write_time_last_s = gmd_time_end - gmd_time_start
@@ -1126,26 +1298,69 @@ contains
        sdid_tmp => sd_i4tmp1
        dmid_tmp => sd_i4tmp2
 
-       call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
-       if( output_selected_as_all ) then
-          call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-               &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
-               &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-               &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
-               &                    t_scale,sd_itmp1,sdtype='all') ! options: 'all', 'large', 'activated','selected'
-       else
-          call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-               &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
-               &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-               &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
-               &                    t_scale,sd_itmp1,sdtype='selected') ! options: 'all', 'large', 'activated','selected'
+               call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
+               if( sdm_cold ) then
+                  call sdm_cold_tracking_update_interval( &
+                       sdnum_s2c, sdliqice_s2c, sdr_s2c, sdice_s2c, &
+                       sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                       sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                       sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                       sd_aspect_ratio_max_interval_s2c)
+                          call sdm_rk2z(sdnum_s2c,sdx_s2c,sdy_s2c,sdrk_s2c,sdz_s2c,sdri_s2c,sdrj_s2c)
+                          call sdm_cold_tracking_update_spatial_visit( &
+                               sdnum_s2c, sdx_s2c, sdy_s2c, sdz_s2c, sdrk_s2c, sd_spatial_visit_flag_s2c)
+                          call sdm_cold_tracking_evaluate_diag_masks( &
+                               sdnum_s2c, sd_diag_mask_s2c, &
+                               sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                               sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                               sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                               sd_aspect_ratio_max_interval_s2c)
+                          if( coal_output == 1_i2 .and. (.not. did_event_diag_dump) ) then
+                             call sdm_rk2z(sdnum_s2c,sdx_s2c,sdy_s2c,sdrk_s2c,sdz_s2c,sdri_s2c,sdrj_s2c)
+                             call sdm_event_diag_outnetcdf(TIME_NOWSEC, sdnum_s2c, sdid_s2c, dmid_s2c, &
+                                  sdx_s2c, sdy_s2c, sdz_s2c, sd_event_mask_s2c, sd_event_sig_mask_s2c, sd_diag_mask_s2c, &
+                                  sd_phase_change_flag_s2c, sd_liq_radius_max_interval_s2c, &
+                                  sd_ice_rvol_max_interval_s2c, sd_mixed_rvol_max_interval_s2c, &
+                                  sd_rime_mass_max_interval_s2c, sd_rime_frac_max_interval_s2c, &
+                                  sd_nmono_max_interval_s2c, sd_aspect_ratio_max_interval_s2c)
+                             did_event_diag_dump = .true.
+                          end if
+                       end if
+               if( output_selected_as_all ) then
+                  call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
+                       &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+                       &                    sd_event_mask_s2c,sd_event_sig_mask_s2c,sd_diag_mask_s2c,sd_phase_change_flag_s2c,sd_spatial_visit_flag_s2c, &
+                       &                    sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c,               &
+                       &                    sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c,              &
+                       &                    sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c,sd_aspect_ratio_max_interval_s2c, &
+                       &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
+                       &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+                       &                    sd_event_mask_tmp,sd_event_sig_mask_tmp,sd_diag_mask_tmp,sd_phase_change_flag_tmp,sd_spatial_visit_flag_tmp, &
+                       &                    sd_liq_radius_max_interval_tmp,sd_ice_rvol_max_interval_tmp,               &
+                       &                    sd_mixed_rvol_max_interval_tmp,sd_rime_mass_max_interval_tmp,              &
+                       &                    sd_rime_frac_max_interval_tmp,sd_nmono_max_interval_tmp,sd_aspect_ratio_max_interval_tmp, &
+                       &                    t_scale,sd_itmp1,sdtype='all') ! options: 'all', 'large', 'activated','selected'
+               else
+                  call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
+                       &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+                       &                    sd_event_mask_s2c,sd_event_sig_mask_s2c,sd_diag_mask_s2c,sd_phase_change_flag_s2c,sd_spatial_visit_flag_s2c, &
+                       &                    sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c,               &
+                       &                    sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c,              &
+                       &                    sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c,sd_aspect_ratio_max_interval_s2c, &
+                       &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
+                       &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+                       &                    sd_event_mask_tmp,sd_event_sig_mask_tmp,sd_diag_mask_tmp,sd_phase_change_flag_tmp,sd_spatial_visit_flag_tmp, &
+                       &                    sd_liq_radius_max_interval_tmp,sd_ice_rvol_max_interval_tmp,               &
+                       &                    sd_mixed_rvol_max_interval_tmp,sd_rime_mass_max_interval_tmp,              &
+                       &                    sd_rime_frac_max_interval_tmp,sd_nmono_max_interval_tmp,sd_aspect_ratio_max_interval_tmp, &
+                       &                    t_scale,sd_itmp1,sdtype='selected') ! options: 'all', 'large', 'activated','selected'
        end if
 
        !! Evaluate diagnostic variables
        !!! z
        call sdm_rk2z(sdnum_tmp,sdx_tmp,sdy_tmp,sdrk_tmp,sdz_tmp,sdri_tmp,sdrj_tmp)
        !!! terminal velocity vz
-       ! sdvz_tmp(:)=0.0_RP ! temporary for debug 
+       ! sdvz_tmp(:)=0.0_RP ! temporary for debug
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
        call sdm_getvz_liq(pres_scale,DENS,t_scale,            &
                            sdnum_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp,sdr_tmp,sdvz_tmp,  &
@@ -1163,14 +1378,38 @@ contains
              call sdm_outnetcdf(TIME_NOWSEC,                               &
                            sdnum_tmp,sdnumasl_tmp,                    &
                            sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                           sdm_dmpnskip,filetag='all')
+                                   sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                                   sdm_dmpnskip,filetag='all', &
+                                   sd_event_mask=sd_event_mask_tmp, &
+                                   sd_event_sig_mask=sd_event_sig_mask_tmp, &
+                                   sd_diag_mask=sd_diag_mask_tmp, &
+                                   sd_phase_change_flag=sd_phase_change_flag_tmp, &
+                                   sd_spatial_visit_flag=sd_spatial_visit_flag_tmp, &
+                                   sd_liq_radius_max_interval=sd_liq_radius_max_interval_tmp, &
+                                   sd_ice_rvol_max_interval=sd_ice_rvol_max_interval_tmp, &
+                                   sd_mixed_rvol_max_interval=sd_mixed_rvol_max_interval_tmp, &
+                                   sd_rime_mass_max_interval=sd_rime_mass_max_interval_tmp, &
+                                   sd_rime_frac_max_interval=sd_rime_frac_max_interval_tmp, &
+                                   sd_nmono_max_interval=sd_nmono_max_interval_tmp, &
+                                   sd_aspect_ratio_max_interval=sd_aspect_ratio_max_interval_tmp)
           else
              call sdm_outnetcdf(TIME_NOWSEC,                               &
                            sdnum_tmp,sdnumasl_tmp,                    &
                            sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                           sdm_dmpnskip,filetag='selected')
+                                   sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                                   sdm_dmpnskip,filetag='selected', &
+                                   sd_event_mask=sd_event_mask_tmp, &
+                                   sd_event_sig_mask=sd_event_sig_mask_tmp, &
+                                   sd_diag_mask=sd_diag_mask_tmp, &
+                                   sd_phase_change_flag=sd_phase_change_flag_tmp, &
+                                   sd_spatial_visit_flag=sd_spatial_visit_flag_tmp, &
+                                   sd_liq_radius_max_interval=sd_liq_radius_max_interval_tmp, &
+                                   sd_ice_rvol_max_interval=sd_ice_rvol_max_interval_tmp, &
+                                   sd_mixed_rvol_max_interval=sd_mixed_rvol_max_interval_tmp, &
+                                   sd_rime_mass_max_interval=sd_rime_mass_max_interval_tmp, &
+                                   sd_rime_frac_max_interval=sd_rime_frac_max_interval_tmp, &
+                                   sd_nmono_max_interval=sd_nmono_max_interval_tmp, &
+                                   sd_aspect_ratio_max_interval=sd_aspect_ratio_max_interval_tmp)
           end if
           if( gmd_benchmark_diag_enable ) then
              gmd_time_end = mpi_wtime()
@@ -1185,14 +1424,38 @@ contains
              call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                            sdnum_tmp,sdnumasl_tmp,                    &
                            sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                           sdm_dmpnskip,filetag='all')
+                                   sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                                   sdm_dmpnskip,filetag='all', &
+                                   sd_event_mask=sd_event_mask_tmp, &
+                                   sd_event_sig_mask=sd_event_sig_mask_tmp, &
+                                   sd_diag_mask=sd_diag_mask_tmp, &
+                                   sd_phase_change_flag=sd_phase_change_flag_tmp, &
+                                   sd_spatial_visit_flag=sd_spatial_visit_flag_tmp, &
+                                   sd_liq_radius_max_interval=sd_liq_radius_max_interval_tmp, &
+                                   sd_ice_rvol_max_interval=sd_ice_rvol_max_interval_tmp, &
+                                   sd_mixed_rvol_max_interval=sd_mixed_rvol_max_interval_tmp, &
+                                   sd_rime_mass_max_interval=sd_rime_mass_max_interval_tmp, &
+                                   sd_rime_frac_max_interval=sd_rime_frac_max_interval_tmp, &
+                                   sd_nmono_max_interval=sd_nmono_max_interval_tmp, &
+                                   sd_aspect_ratio_max_interval=sd_aspect_ratio_max_interval_tmp)
           else
              call sdm_outnetcdf_hist(TIME_NOWSEC,                               &
                            sdnum_tmp,sdnumasl_tmp,                    &
                            sdn_tmp,sdliqice_tmp,sdx_tmp,sdy_tmp,sdz_tmp,sdr_tmp,sdasl_tmp,sdvz_tmp, &
-                           sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
-                           sdm_dmpnskip,filetag='selected')
+                                   sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp, &
+                                   sdm_dmpnskip,filetag='selected', &
+                                   sd_event_mask=sd_event_mask_tmp, &
+                                   sd_event_sig_mask=sd_event_sig_mask_tmp, &
+                                   sd_diag_mask=sd_diag_mask_tmp, &
+                                   sd_phase_change_flag=sd_phase_change_flag_tmp, &
+                                   sd_spatial_visit_flag=sd_spatial_visit_flag_tmp, &
+                                   sd_liq_radius_max_interval=sd_liq_radius_max_interval_tmp, &
+                                   sd_ice_rvol_max_interval=sd_ice_rvol_max_interval_tmp, &
+                                   sd_mixed_rvol_max_interval=sd_mixed_rvol_max_interval_tmp, &
+                                   sd_rime_mass_max_interval=sd_rime_mass_max_interval_tmp, &
+                                   sd_rime_frac_max_interval=sd_rime_frac_max_interval_tmp, &
+                                   sd_nmono_max_interval=sd_nmono_max_interval_tmp, &
+                                   sd_aspect_ratio_max_interval=sd_aspect_ratio_max_interval_tmp)
           end if
           if( gmd_benchmark_diag_enable ) then
              gmd_time_end = mpi_wtime()
@@ -1223,11 +1486,20 @@ contains
 
     end if
 
-    if( did_coal_flag_dump ) then
-       ifcoal_s2c(1:sdnum_s2c) = 0_i2
-    end if
+            if( did_coal_flag_dump .and. (.not. sdm_cold) ) then
+               ifcoal_s2c(1:sdnum_s2c) = 0_i2
+            end if
+            if( sdm_cold .and. did_sdm_dump ) then
+               call sdm_cold_tracking_reset_interval( &
+                    sdnum_s2c, sdliqice_s2c, sdr_s2c, sdice_s2c, &
+                    sd_event_mask_s2c,sd_event_sig_mask_s2c,sd_diag_mask_s2c,sd_phase_change_flag_s2c,sd_spatial_visit_flag_s2c, &
+                    sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                    sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                    sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                    sd_aspect_ratio_max_interval_s2c)
+            end if
 
-    tracking_chain_count = count( (sdid_s2c(1:sdnum_s2c) > INVALID_i4) .and. (dmid_s2c(1:sdnum_s2c) > INVALID_i4) )
+    tracking_chain_count = sdm_tracking_count_valid_id_pairs(sdnum_s2c, sdid_s2c, dmid_s2c)
     tracking_id_memory_bytes_local = real(sdnum_s2c,kind=DP) * 8.0_DP
     if_coal_memory_bytes_local = real(sdnum_s2c,kind=DP) * 2.0_DP
 
@@ -1333,16 +1605,20 @@ contains
     call fapp_stop("sdm_out",0,0)
 #endif
     !== run SDM at future ==!
-     call sdm_calc(MOMX,MOMY,MOMZ,DENS,RHOT,QTRC,                 & 
+     call sdm_calc(MOMX,MOMY,MOMZ,DENS,RHOT,QTRC,                 &
                    sdm_calvar,sdm_mvexchg,sdm_dtcmph, sdm_aslset,  &
                    prr_crs,zph_crs,                      &
                    lsdmup,ni_s2c,nj_s2c,nk_s2c,                   &
                    sdnum_s2c,sdnumasl_s2c,                        &
-                   sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,    &
-                   sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdice_s2c,sdid_s2c,dmid_s2c,&
-                   ifcoal_s2c,sdrkl_s2c,sdrku_s2c,                           &
-                   rng_s2c,rand_s2c,sortid_s2c,sortkey_s2c,       &
-                   sortfreq_s2c,sorttag_s2c,                      &
+                           sdn_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,    &
+                           sdu_s2c,sdv_s2c,sdvz_s2c,sdr_s2c,sdasl_s2c,sdice_s2c,sdid_s2c,dmid_s2c,&
+                           ifcoal_s2c,sd_event_mask_s2c,sd_event_sig_mask_s2c,sd_diag_mask_s2c,sd_phase_change_flag_s2c,sd_spatial_visit_flag_s2c, &
+                           sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c, &
+                           sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c, &
+                           sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c, &
+                           sd_aspect_ratio_max_interval_s2c,sdrkl_s2c,sdrku_s2c, &
+                           rng_s2c,rand_s2c,sortid_s2c,sortkey_s2c,       &
+                           sortfreq_s2c,sorttag_s2c,                      &
                    bufsiz1,                                       &
                    bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,   &
                    sdm_itmp1,sdm_itmp2,           &
@@ -1398,7 +1674,7 @@ contains
         call fapp_stop("sdm_sd2qiqsqg",0,0)
 #endif
      end if
-     
+
 ! not supported yet. S.Shima
 !!$     ! Aerosol formation process of super-droplets
 !!$
@@ -1406,7 +1682,7 @@ contains
 !!$         mod(10*int(1.E+2_RP*(TIME_NOWSEC+0.0010_RP)), &
 !!$             int(1.E+3_RP*(sdm_aslfmdt+0.00010_RP))) == 0 ) then
 !!$
-!!$        call sdm_aslform(DENS,RHOT,QTRC,                             &   
+!!$        call sdm_aslform(DENS,RHOT,QTRC,                             &
 !!$                         sdm_calvar,sdm_aslset,                      &
 !!$                         sdm_aslfmsdnc,sdm_sdnmlvol,                 &
 !!$                         sdm_zupper,sdm_zlower,dtcl,                 &
@@ -1487,7 +1763,7 @@ contains
     call HIST_in( QHYD_sdm(:,:,:),      'QHYD_sd', 'mixing ratio of liquid water and ice in SDM', 'kg/kg')
 
     !!!!!!!!!!!!!!!!!!!!!
-    !!!! History output of SNC (SD number density). 
+    !!!! History output of SNC (SD number density).
     !!!! Data is updated only at the time of output
     ! Check whether the item has been already registered
     call HIST_reg( histitemid, 'SNC', 'SD number density', 'num/m3', 3)
@@ -1557,11 +1833,19 @@ contains
        dmid_tmp => sd_i4tmp2
 
        call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
-       call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
-            &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
-            &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
-            &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
-            &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
+               call sdm_copy_selected_sd(sdnum_s2c,sdnumasl_s2c,sdn_s2c,sdx_s2c,sdy_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c, &
+                    &                    sdliqice_s2c,sdasl_s2c,sdr_s2c,sdice_s2c,sdid_s2c,dmid_s2c,ifcoal_s2c,     &
+                    &                    sd_event_mask_s2c,sd_event_sig_mask_s2c,sd_diag_mask_s2c,sd_phase_change_flag_s2c,sd_spatial_visit_flag_s2c, &
+                    &                    sd_liq_radius_max_interval_s2c,sd_ice_rvol_max_interval_s2c,               &
+                    &                    sd_mixed_rvol_max_interval_s2c,sd_rime_mass_max_interval_s2c,              &
+                    &                    sd_rime_frac_max_interval_s2c,sd_nmono_max_interval_s2c,sd_aspect_ratio_max_interval_s2c, &
+                    &                    sdnum_tmp,sdnumasl_tmp,sdn_tmp,sdx_tmp,sdy_tmp,sdri_tmp,sdrj_tmp,sdrk_tmp, &
+                    &                    sdliqice_tmp,sdasl_tmp,sdr_tmp,sdice_tmp,sdid_tmp,dmid_tmp,ifcoal_tmp,     &
+                    &                    sd_event_mask_tmp,sd_event_sig_mask_tmp,sd_diag_mask_tmp,sd_phase_change_flag_tmp,sd_spatial_visit_flag_tmp, &
+                    &                    sd_liq_radius_max_interval_tmp,sd_ice_rvol_max_interval_tmp,               &
+                    &                    sd_mixed_rvol_max_interval_tmp,sd_rime_mass_max_interval_tmp,              &
+                    &                    sd_rime_frac_max_interval_tmp,sd_nmono_max_interval_tmp,sd_aspect_ratio_max_interval_tmp, &
+                    &                    t_scale,sd_itmp1,sdtype='activated') ! options: 'all', 'large', 'activated'
 
        if( do_puthist_0 )then
           order_n = 0
@@ -1623,6 +1907,135 @@ contains
 #endif
     return
   end subroutine ATMOS_PHY_MP_sdm
+  !-----------------------------------------------------------------------------
+  subroutine sdm_seed_event_type_smoke(sd_num, sd_numasl, xmax_sdm, ymax_sdm, &
+                                       sdm_zlower, sdm_zupper, sd_n, sd_liqice, &
+                                       sd_x, sd_y, sd_z, sd_r, sd_asl, sdi)
+    use scale_grid, only: &
+       GRID_FX, GRID_FY
+    implicit none
+
+    integer, intent(in) :: sd_num
+    integer, intent(in) :: sd_numasl
+    real(RP), intent(in) :: xmax_sdm
+    real(RP), intent(in) :: ymax_sdm
+    real(RP), intent(in) :: sdm_zlower
+    real(RP), intent(in) :: sdm_zupper
+    integer(DP), intent(inout) :: sd_n(1:sd_num)
+    integer(i2), intent(inout) :: sd_liqice(1:sd_num)
+    real(RP), intent(inout) :: sd_x(1:sd_num)
+    real(RP), intent(inout) :: sd_y(1:sd_num)
+    real(RP), intent(inout) :: sd_z(1:sd_num)
+    real(RP), intent(inout) :: sd_r(1:sd_num)
+    real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)
+    type(sdicedef), intent(inout) :: sdi
+
+    integer :: repetitions
+    integer :: needed
+    integer :: rep
+    integer :: base
+    real(RP) :: x0
+    real(RP) :: y0
+    real(RP) :: z0
+    real(RP) :: z_span
+    real(RP) :: z_step
+
+    repetitions = max(1, tracking_event_type_smoke_repetitions)
+    if( tracking_event_type_smoke_liq_liq_only ) then
+       needed = 2 * repetitions
+    else
+       needed = 4 * repetitions
+    end if
+    if( needed > sd_num ) then
+       write(*,*) 'sdm_seed_event_type_smoke: not enough SD slots', needed, sd_num
+       call PRC_MPIstop
+    end if
+
+    sd_n(1:sd_num) = 0_DP
+    sd_liqice(1:sd_num) = STAT_LIQ
+    sd_x(1:sd_num) = GRID_FX(IS-1) + 0.5_RP * xmax_sdm
+    sd_y(1:sd_num) = GRID_FY(JS-1) + 0.5_RP * ymax_sdm
+    sd_z(1:sd_num) = INVALID
+    sd_r(1:sd_num) = 1.0E-15_RP
+    sd_asl(1:sd_num,1:sd_numasl) = 0.0_RP
+
+    sdi%re(1:sd_num) = 0.0_RP
+    sdi%rp(1:sd_num) = 0.0_RP
+    sdi%rho(1:sd_num) = 0.0_RP
+    sdi%tf(1:sd_num) = -38.0_RP
+    sdi%mrime(1:sd_num) = 0.0_RP
+    sdi%nmono(1:sd_num) = 0
+
+    x0 = GRID_FX(IS-1) + 0.5_RP * xmax_sdm
+    y0 = GRID_FY(JS-1) + 0.5_RP * ymax_sdm
+    z_span = max(1.0_RP, sdm_zupper - sdm_zlower)
+    z_step = max(1.0_RP, z_span / real(repetitions + 1, kind=RP))
+    if( sdm_zupper > sdm_zlower + 2.0_RP ) then
+       z0 = min(max(tracking_event_type_smoke_z, sdm_zlower + 1.0_RP), sdm_zupper - 1.0_RP)
+    else
+       z0 = 0.5_RP * (sdm_zlower + sdm_zupper)
+    end if
+
+    do rep = 1, repetitions
+       if( tracking_event_type_smoke_liq_liq_only ) then
+          base = 2 * (rep - 1)
+          call seed_liquid(base + 1, x0, y0, min(sdm_zupper - 0.5_RP, z0 + real(rep - 1, kind=RP) * z_step), &
+                           8.0E-4_RP)
+          call seed_liquid(base + 2, x0, y0, min(sdm_zupper - 0.5_RP, z0 + real(rep - 1, kind=RP) * z_step), &
+                           5.0E-4_RP)
+       else
+          base = 4 * (rep - 1)
+          call seed_liquid(base + 1, x0, y0, min(sdm_zupper - 0.5_RP, z0 + real(rep - 1, kind=RP) * z_step), &
+                           8.0E-4_RP)
+          call seed_ice(base + 2, x0, y0, min(sdm_zupper - 0.5_RP, z0 + real(rep - 1, kind=RP) * z_step), &
+                        1.5E-3_RP, 1.0E-3_RP)
+          call seed_ice(base + 3, x0, y0, min(sdm_zupper - 0.5_RP, z0 + real(rep - 1, kind=RP) * z_step), &
+                        1.0E-3_RP, 1.0E-3_RP)
+          call seed_ice(base + 4, x0, y0, min(sdm_zupper - 0.5_RP, z0 + real(rep - 1, kind=RP) * z_step), &
+                        2.5E-3_RP, 1.5E-3_RP)
+       end if
+    end do
+
+  contains
+
+    subroutine seed_liquid(idx, x, y, z, radius)
+      integer, intent(in) :: idx
+      real(RP), intent(in) :: x
+      real(RP), intent(in) :: y
+      real(RP), intent(in) :: z
+      real(RP), intent(in) :: radius
+
+      sd_n(idx) = tracking_event_type_smoke_multiplicity
+      sd_liqice(idx) = STAT_LIQ
+      sd_x(idx) = x
+      sd_y(idx) = y
+      sd_z(idx) = z
+      sd_r(idx) = radius
+    end subroutine seed_liquid
+
+    subroutine seed_ice(idx, x, y, z, equatorial_radius, polar_radius)
+      integer, intent(in) :: idx
+      real(RP), intent(in) :: x
+      real(RP), intent(in) :: y
+      real(RP), intent(in) :: z
+      real(RP), intent(in) :: equatorial_radius
+      real(RP), intent(in) :: polar_radius
+
+      sd_n(idx) = tracking_event_type_smoke_multiplicity
+      sd_liqice(idx) = STAT_ICE
+      sd_x(idx) = x
+      sd_y(idx) = y
+      sd_z(idx) = z
+      sd_r(idx) = 1.0E-15_RP
+      sdi%re(idx) = equatorial_radius
+      sdi%rp(idx) = polar_radius
+      sdi%rho(idx) = 917.0_RP
+      sdi%tf(idx) = -38.0_RP
+      sdi%mrime(idx) = 0.0_RP
+      sdi%nmono(idx) = 1
+    end subroutine seed_ice
+
+  end subroutine sdm_seed_event_type_smoke
   !-----------------------------------------------------------------------------
   subroutine sdm_iniset(DENS, RHOT, QTRC,                   &
                          RANDOM_IN_BASENAME, fid_random_i,   &
@@ -1967,8 +2380,8 @@ contains
                           / real(sdm_inisdnc,kind=RP)
                end if
 
-	       !! Multiply the initial number density of soluble aerosol particles by sdm_fctr2multi
-	       !! This only for soluble particles, not for insoluble particles
+               !! Multiply the initial number density of soluble aerosol particles by sdm_fctr2multi
+               !! This only for soluble particles, not for insoluble particles
                sdn_tmp = sdn_tmp * sdm_fctr2multi
 
                !! check muliplicity
@@ -1988,7 +2401,7 @@ contains
 
          !###### soluble aerosol ######!
          do n=1,nint(sdininum_s2c*sdnumratio_soluble)
-            sdice_s2c%tf(n) = -38.d0  ! homogeneous freezing limit [degC] 
+            sdice_s2c%tf(n) = -38.d0  ! homogeneous freezing limit [degC]
             sdn_s2c(n) =  nint( real(sdn_s2c(n))/sdnumratio_soluble, kind=DP ) ! adjust multiplicity
          end do
 
@@ -2068,13 +2481,13 @@ contains
                area = ONE_PI*mdust_dia**2
                if(sd_dtmp1(n) < INIAsd_ratio) then
                   !! IN inactive mineral dust
-                  INAS_max = a0_N12*exp(-a1_N12*tfmin+a2_N12) ! INAS of Niemand et al. (2012) 
+                  INAS_max = a0_N12*exp(-a1_N12*tfmin+a2_N12) ! INAS of Niemand et al. (2012)
                   prob_INIA = exp(-area*INAS_max)
                   sdn_tmp = sdn_tmp * prob_INIA / INIAsd_ratio
                   sdice_s2c%tf(n) = -38.0_RP  ! homogeneous freezing limit
                else
                   !! IN active mineral dust
-                  INAS_tf = a0_N12*exp(-a1_N12*sdice_s2c%tf(n)+a2_N12)  ! INAS of Niemand et al. (2012) 
+                  INAS_tf = a0_N12*exp(-a1_N12*sdice_s2c%tf(n)+a2_N12)  ! INAS of Niemand et al. (2012)
                   probdens_tf = area*a1_N12*INAS_tf*exp(-area*INAS_tf)
                   delta1 = tfmax-tfmin
                   sdn_tmp = sdn_tmp * probdens_tf * delta1 / (1.0_RP - INIAsd_ratio)
@@ -2085,7 +2498,7 @@ contains
                   if(sdn_tmp>1.0_RP)then
                      sdn_s2c(n) = nint( sdn_tmp, kind=DP )
                   else ! to sample rare event
-                     sdn_s2c(n) = 0 
+                     sdn_s2c(n) = 0
                      if( sd_dtmp2(n) < sdn_tmp )then
                         sdn_s2c(n) = 1
                      end if
@@ -2127,7 +2540,7 @@ contains
       do n=nint(sdininum_s2c)+1,sdnum_s2c
          sdz_s2c(n) = INVALID
       end do
-      
+
 !!$      sdnum_tmp1 = int( nint(sdininum_s2c)/nomp )
 !!$      sdnum_tmp2 = mod( nint(sdininum_s2c),nomp )
 !!$
@@ -2175,7 +2588,7 @@ contains
 ! temporary for test
 !         sdr_s2c(n) = 3.0E-3_RP*sdr_s2c(n)
 !         sdr_s2c(n) = exp((log(3.0E-3_RP)-log(1.0E-7_RP))*sdr_s2c(n)+log(1.0E-7_RP))
-         
+
       end do
 
       !### ( at only condensation/evaporation process ) ###!
@@ -2201,6 +2614,18 @@ contains
               sdnum_s2c,sdliqice_s2c,sdx_s2c,sdy_s2c,      &
               sdr_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c,sdice_s2c )
 
+      end if
+
+      if( tracking_event_type_smoke_enable ) then
+         if( .not. sdm_cold ) then
+            write(*,*) 'tracking_event_type_smoke_enable requires sdm_cold=.true.'
+            call PRC_MPIstop
+         end if
+         call sdm_seed_event_type_smoke(sdnum_s2c, sdnumasl_s2c, xmax_sdm, ymax_sdm, &
+              sdm_zlower, sdm_zupper, sdn_s2c, sdliqice_s2c, &
+              sdx_s2c, sdy_s2c, sdz_s2c, sdr_s2c, sdasl_s2c, sdice_s2c)
+         call sdm_z2rk(sdm_zlower,sdm_zupper,            &
+              sdnum_s2c,sdx_s2c,sdy_s2c,sdz_s2c,sdri_s2c,sdrj_s2c,sdrk_s2c )
       end if
 
       !### diagnose terminal velocity (no need evaluate them here) ###!
@@ -2248,18 +2673,36 @@ contains
             call PRC_MPIstop
          end if
       else if( forward_tracking_enable .and. len_trim(tracking_id_output_basename) > 0 .and. &
-           ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable ) ) then
-         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
-              tracking_selection_mode, 1.0_RP, &
-              0, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
-              tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
-              dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+           ( tracking_interest_radius_enable .or. tracking_interest_coalescence_enable .or. &
+             tracking_interest_ice_radius_enable .or. tracking_interest_ice_phase_enable .or. &
+             tracking_interest_rime_mass_enable ) ) then
+         if( sdm_cold ) then
+            call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+                 tracking_selection_mode, 1.0_RP, &
+                 0, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+                 tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+                 dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm, sdliqice_s2c, sdice_s2c)
+         else
+            call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+                 tracking_selection_mode, 1.0_RP, &
+                 0, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+                 tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+                 dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+         end if
       else
-         call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
-              tracking_selection_mode, tracking_fraction, &
-              max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
-              tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
-              dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+         if( sdm_cold ) then
+            call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+                 tracking_selection_mode, tracking_fraction, &
+                 max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+                 tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+                 dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm, sdliqice_s2c, sdice_s2c)
+         else
+            call sdm_select_stratified_random_particles(sdnum_s2c, sdrk_s2c, sdr_s2c, rng_tracking_s2c, &
+                 tracking_selection_mode, tracking_fraction, &
+                 max_tracked_sds, tracking_height_min, tracking_height_max, tracking_radius_min, tracking_radius_max, &
+                 tracking_nz_bin, tracking_nr_bin, tracking_min_per_bin, tracking_fallback_to_random, tracking_sample_initialized, &
+                 dmid_s2c, sdid_s2c, ifcoal_s2c, status_rdm)
+         end if
       end if
       time_id_end = mpi_wtime()
       tracking_time_id_assign = tracking_time_id_assign + ( time_id_end - time_id_start )
@@ -2287,15 +2730,20 @@ contains
 
   end subroutine sdm_iniset
   !-----------------------------------------------------------------------------
-  subroutine sdm_calc(MOMX,MOMY,MOMZ,DENS,RHOT,QTRC,              & 
+  subroutine sdm_calc(MOMX,MOMY,MOMZ,DENS,RHOT,QTRC,              &
                       sdm_calvar,sdm_mvexchg,dtcl, sdm_aslset,    &
                       prec_crs,zph_crs,   &
                       lsdmup,ni_sdm,nj_sdm,nk_sdm,                &
                       sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_ri,sd_rj,sd_rk,      &
-                      sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,if_coal,sd_rkl,sd_rku,  &
+                              sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,if_coal, &
+                              sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag,sd_spatial_visit_flag, &
+                              sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                              sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                              sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                              sd_aspect_ratio_max_interval,sd_rkl,sd_rku,  &
                       sd_rng,sd_rand,sort_id,sort_key,sort_freq,  &
                       sort_tag,                                   &
-                      bufsiz1,                                    & 
+                      bufsiz1,                                    &
                       bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
                       sdm_itmp1,sdm_itmp2,        &
                       sd_itmp1,sd_itmp2,sd_itmp3,sd_dtmp1,sd_dtmp2,sd_dtmp3,sd_dtmp4,   &
@@ -2331,10 +2779,23 @@ contains
         sdm_meltfreeze, sdm_meltfreeze_updatefluid
     use m_sdm_subldep, only: &
         sdm_subldep, sdm_subldep_updatefluid
-    use m_sdm_io, only: &
-        sdm_coal_outnetcdf
-    use scale_grid, only: &
-        DZ
+                    use m_sdm_io, only: &
+                        sdm_coal_outnetcdf, sdm_event_collision_outnetcdf, &
+                        sdm_event_singleproc_outnetcdf
+                    use m_sdm_tracking_cold, only: &
+                        sdm_cold_tracking_update_interval, sdm_cold_tracking_update_spatial_visit, &
+                        sdm_cold_tracking_update_spatial_visit_segment, &
+                        sdm_cold_phase_state, sdm_cold_liq_mass, sdm_cold_ice_mass, &
+                        sdm_cold_hydro_radius, sdm_kohler_solute_params, &
+                        sdm_kohler_critical_radius, sdm_kohler_activated_state, &
+                        EVENT_DEPOSITION, EVENT_SUBLIMATION, &
+                        EVENT_CONDENSATION, EVENT_EVAPORATION, &
+                        EVENT_FREEZING, EVENT_MELTING, &
+                        EVENT_ACTIVATION, EVENT_DEACTIVATION
+                    use m_sdm_coordtrans, only: &
+                        sdm_rk2z
+                    use scale_grid, only: &
+                        DZ
 
    real(RP), intent(inout) :: DENS(KA,IA,JA)        !! Density [kg/m3]
    real(RP), intent(inout) :: MOMZ(KA,IA,JA)        !! Momentum [kg/s/m2]
@@ -2367,11 +2828,16 @@ contains
    integer(DP), intent(inout) :: sd_n(1:sd_num)    ! multiplicity of super-droplets
    integer, intent(inout) :: sd_id(1:sd_num)   ! save index of super-droplets
    integer, intent(inout) :: dm_id(1:sd_num)   ! domain id of super-droplets
-   integer(i2), intent(inout) :: if_coal(1:sd_num)
-                       ! flag of coalescence
-                       ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
-                       ! 1 = Super Droplet has undergone coalescence during the previous output interval
-   integer(i2), intent(inout) :: sd_liqice(1:sd_num)
+           integer(i2), intent(inout) :: if_coal(1:sd_num)
+                               ! flag of coalescence
+                               ! 0 = Super Droplet hasn't undergone coalescence during the previous output interval
+                               ! 1 = Super Droplet has undergone coalescence during the previous output interval
+           integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+           integer, intent(inout) :: sd_diag_mask(1:sd_num)
+           integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+           integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
+           integer(i2), intent(inout) :: sd_liqice(1:sd_num)
                        ! status of super-droplets (liquid/ice)
                        ! 01 = all liquid, 10 = all ice
                        ! 11 = mixture of ice and liquid
@@ -2383,9 +2849,16 @@ contains
    real(RP), intent(inout) :: sd_u(1:sd_num)  ! x-components velocity of super-droplets
    real(RP), intent(inout) :: sd_v(1:sd_num)  ! y-components velocity of super-droplets
    real(RP), intent(inout) :: sd_vz(1:sd_num) ! terminal velocity of super-droplets /z velocity of super-droplets
-   real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
-   real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
-   type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplets
+           real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
+           real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
+           type(sdicedef), intent(inout) :: sdi   ! ice phase super-droplets
+           real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+           real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+           real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+           real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+           real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+           real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+           real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
    type(c_rng_uniform_mt), intent(inout) :: sd_rng ! random number generator
    real(RP), intent(inout) :: sd_rand(1:sd_num) ! random numbers
    integer, intent(inout) :: sort_id(1:sd_num)  ! id that super-droplets sorted by grids
@@ -2467,19 +2940,21 @@ contains
    integer :: istep_mlt        ! step number of {melt/freeze of super-droplets} process
    integer :: istep_sbl        ! step number of {sublimation/deposition of super-droplets} process
    ! Work variables
-   integer :: t, n     ! index
+   integer :: t, n, s  ! index
    integer :: k,i,j     ! index
    real(RP) :: u_scale(KA,IA,JA)   ! u components of velocity
    real(RP) :: v_scale(KA,IA,JA)   ! v components of velocity
    real(RP) :: w_scale(KA,IA,JA)   ! w components of velocity
    real(RP) :: pres_scale(KA,IA,JA)  ! Pressure
-   real(RP) :: t_scale(KA,IA,JA)    ! Temperature 
+   real(RP) :: t_scale(KA,IA,JA)    ! Temperature
    real(RP) :: sdm_dtevl  ! time step of {condensation/evaporation} process
    real(RP) :: sdm_dtcol  ! time step of {stochastic coalescence} process
    real(RP) :: sdm_dtadv  ! time step of {motion of super-droplets} process
    real(RP) :: sdm_dtmlt  ! time step of {melt/freeze of super-droplets} process
    real(RP) :: sdm_dtsbl  ! time step of {sublimation/deposition of super-droplets} process
    real(RP) :: tmp_mink
+   real(RP) :: liq_mass_post, ice_mass_post
+   real(RP) :: delta_liq_mass, delta_ice_mass, rel_mass_change
    integer, allocatable :: sd_id1(:)   ! SD ID of super-droplets with large multiplicity
    integer, allocatable :: sd_id2(:)   ! SD ID of super-droplets  with small multiplicity
    integer, allocatable :: dm_id1(:)   ! domain ID of super-droplets with large multiplicity
@@ -2489,9 +2964,62 @@ contains
    real(RP), allocatable :: sdr2_out(:)
    integer(DP), allocatable :: sdn1_out(:)
    integer(DP), allocatable :: sdn2_out(:)
+   integer, allocatable :: trigger_code_out(:)
+   integer, allocatable :: trigger_level_out(:)
+   integer, allocatable :: phase_state1_pre_out(:)
+   integer, allocatable :: phase_state2_pre_out(:)
+   integer, allocatable :: phase_state1_post_out(:)
+   integer, allocatable :: phase_state2_post_out(:)
+   real(RP), allocatable :: event_x_out(:)
+   real(RP), allocatable :: event_y_out(:)
+   real(RP), allocatable :: event_z_out(:)
+   integer(DP), allocatable :: sdn1_post_out(:)
+   integer(DP), allocatable :: sdn2_post_out(:)
+   real(RP), allocatable :: hydro_radius1_pre_out(:)
+   real(RP), allocatable :: hydro_radius2_pre_out(:)
+   real(RP), allocatable :: hydro_radius1_post_out(:)
+   real(RP), allocatable :: hydro_radius2_post_out(:)
+   real(RP), allocatable :: hydro_mass1_pre_out(:)
+   real(RP), allocatable :: hydro_mass2_pre_out(:)
+   real(RP), allocatable :: hydro_mass1_post_out(:)
+   real(RP), allocatable :: hydro_mass2_post_out(:)
+   real(RP), allocatable :: x1_out(:)
+   real(RP), allocatable :: y1_out(:)
+   real(RP), allocatable :: z1_out(:)
+   real(RP), allocatable :: x2_out(:)
+   real(RP), allocatable :: y2_out(:)
+   real(RP), allocatable :: z2_out(:)
+   real(RP), allocatable :: ice_re1_pre_out(:), ice_rp1_pre_out(:), ice_rho1_pre_out(:)
+   real(RP), allocatable :: ice_re1_post_out(:), ice_rp1_post_out(:), ice_rho1_post_out(:)
+   real(RP), allocatable :: ice_re2_pre_out(:), ice_rp2_pre_out(:), ice_rho2_pre_out(:)
+   real(RP), allocatable :: ice_re2_post_out(:), ice_rp2_post_out(:), ice_rho2_post_out(:)
+   real(RP), allocatable :: rime_mass1_pre_out(:), rime_mass1_post_out(:)
+   real(RP), allocatable :: rime_mass2_pre_out(:), rime_mass2_post_out(:)
+   real(RP), allocatable :: rime_frac1_pre_out(:), rime_frac1_post_out(:)
+   real(RP), allocatable :: rime_frac2_pre_out(:), rime_frac2_post_out(:)
+   real(RP), allocatable :: aspect_ratio1_pre_out(:), aspect_ratio1_post_out(:)
+   real(RP), allocatable :: aspect_ratio2_pre_out(:), aspect_ratio2_post_out(:)
    integer :: num_pair    ! number of super-droplet pairs
    real(RP) :: dz_inv
    real(DP) :: gmd_time_start, gmd_time_end
+   logical :: track_meltfreeze_events
+   logical :: track_liq_vapor_events
+   logical :: track_ice_vapor_events
+   logical :: track_kohler_activation_events
+   logical :: track_spatial_segments
+   real(RP), allocatable :: spatial_prev_x(:)
+   real(RP), allocatable :: spatial_prev_y(:)
+   real(RP), allocatable :: spatial_prev_z(:)
+   real(RP), allocatable :: sd_kohler_rcrit_pre(:), sd_kohler_rcrit_post(:)
+   real(RP), allocatable :: sd_kohler_margin_pre(:), sd_kohler_margin_post(:)
+   integer, allocatable :: sd_kohler_active_pre(:), sd_kohler_active_post(:)
+   real(RP), allocatable :: sd_aerosol_total_mass_pre(:), sd_aerosol_total_mass_post(:)
+   real(RP), allocatable :: sd_aerosol_kohler_solute_pre(:), sd_aerosol_kohler_solute_post(:)
+   real(RP), allocatable :: sd_air_temperature_context(:), sd_air_pressure_context(:), sd_qv_context(:)
+   real(RP) :: sd_kohler_aslmw(1:22), sd_kohler_aslion(1:22)
+   real(RP) :: kohler_smoke_rcrit
+   real(RP) :: kohler_smoke_margin
+   integer :: kohler_smoke_activation_idx, kohler_smoke_deactivation_idx
   !---------------------------------------------------------------------
 
       ! Initialize and rename variables
@@ -2509,6 +3037,38 @@ contains
       istep_sbl = nclstp(5)                !! motion of super-droplets
 
       lsdmup = .false.
+      track_meltfreeze_events = coal_output == 1_i2 .and. ( &
+           tracking_evt_freezing_enable .or. tracking_evt_melting_enable .or. &
+           tracking_sig_freezing_enable .or. tracking_sig_melting_enable )
+      track_liq_vapor_events = coal_output == 1_i2 .and. ( &
+           tracking_evt_condensation_enable .or. tracking_evt_evaporation_enable .or. &
+           tracking_sig_condensation_enable .or. tracking_sig_evaporation_enable )
+      track_kohler_activation_events = coal_output == 1_i2 .and. ( &
+           tracking_evt_activation_enable .or. tracking_evt_deactivation_enable .or. &
+           tracking_sig_activation_enable .or. tracking_sig_deactivation_enable )
+      track_ice_vapor_events = coal_output == 1_i2 .and. ( &
+           tracking_evt_deposition_enable .or. tracking_evt_sublimation_enable .or. &
+           tracking_sig_deposition_enable .or. tracking_sig_sublimation_enable )
+      track_spatial_segments = sdm_cold .and. tracking_spatial_visit_enable
+      if( track_spatial_segments ) then
+         allocate(spatial_prev_x(1:sd_num))
+         allocate(spatial_prev_y(1:sd_num))
+         allocate(spatial_prev_z(1:sd_num))
+      end if
+      if( track_kohler_activation_events .or. TRACK_COLD_OUTPUT_AEROSOL_CONTEXT ) then
+         call sdm_kohler_solute_params(sdm_aslset, sdm_aslmw, sdm_aslion, &
+              sd_kohler_aslmw, sd_kohler_aslion)
+      end if
+      if( track_kohler_activation_events ) then
+         allocate(sd_kohler_rcrit_pre(1:sd_num), sd_kohler_rcrit_post(1:sd_num))
+         allocate(sd_kohler_margin_pre(1:sd_num), sd_kohler_margin_post(1:sd_num))
+         allocate(sd_kohler_active_pre(1:sd_num), sd_kohler_active_post(1:sd_num))
+      end if
+      if( TRACK_COLD_OUTPUT_AEROSOL_CONTEXT .or. TRACK_COLD_OUTPUT_THERMO_CONTEXT ) then
+         allocate(sd_aerosol_total_mass_pre(1:sd_num), sd_aerosol_total_mass_post(1:sd_num))
+         allocate(sd_aerosol_kohler_solute_pre(1:sd_num), sd_aerosol_kohler_solute_post(1:sd_num))
+         allocate(sd_air_temperature_context(1:sd_num), sd_air_pressure_context(1:sd_num), sd_qv_context(1:sd_num))
+      end if
 
       ! Calculate super-droplets process.
       !   1 : motion of super-droplets (advection, terminal velocity)
@@ -2547,7 +3107,12 @@ contains
             sd_dtmp1(:) = sd_x(:)
             sd_dtmp2(:) = sd_y(:)
             sd_dtmp3(:) = sd_rk(:)
-            sd_dtmp6(:) = sd_vz(:) 
+            sd_dtmp6(:) = sd_vz(:)
+            if( track_spatial_segments ) then
+               spatial_prev_x(:) = sd_x(:)
+               spatial_prev_y(:) = sd_y(:)
+               call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, spatial_prev_z, sd_ri, sd_rj)
+            end if
 
             ! get the moving velocity of super-droplets
             !! diagnose necessary fluid variables
@@ -2645,19 +3210,69 @@ contains
                 end do
             end if
 
+            if( track_spatial_segments ) then
+               if( tracking_spatial_level3_smoke_enable ) then
+                  do n = 1, sd_num
+                     if( sd_rk(n) >= VALID2INVALID ) then
+                        sd_x(n) = sd_x(n) + tracking_spatial_level3_smoke_dx
+                        sd_y(n) = sd_y(n) + tracking_spatial_level3_smoke_dy
+                     end if
+                  end do
+               end if
+               call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_dtmp8, sd_ri, sd_rj)
+               call sdm_cold_tracking_update_spatial_visit_segment( &
+                    sd_num, spatial_prev_x, spatial_prev_y, spatial_prev_z, &
+                    sd_x, sd_y, sd_dtmp8, sd_rk, sd_spatial_visit_flag)
+            end if
+
             ! lateral boundary routine in SDM
             !! judge super-droplets as invalid or valid in horizontal
             !! do MPI communication to send/receiv SDs
-            call sdm_boundary(wbc,ebc,sbc,nbc,                           &
-                             sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,     &
-                             sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,         &
-                             if_coal,bufsiz1,                                    &
-                             bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
-                             sd_itmp1,                              &
-                             rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4) 
+                    call sdm_boundary(wbc,ebc,sbc,nbc,                           &
+                                     sd_num,sd_numasl,sd_n,sd_liqice,sd_x,sd_y,sd_rk,     &
+                                     sd_u,sd_v,sd_vz,sd_r,sd_asl,sdi,sd_id,dm_id,         &
+                                     if_coal,sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag, &
+                                     sd_spatial_visit_flag, &
+                                     sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                                     sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                                     sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                                     sd_aspect_ratio_max_interval,bufsiz1, &
+                                     bufsiz2_r8,bufsiz2_i8,bufsiz2_i2,bufsiz2_i4,      &
+                                     sd_itmp1,                              &
+                             rbuf_r8,sbuf_r8,rbuf_i8,sbuf_i8,rbuf_i2,sbuf_i2,rbuf_i4,sbuf_i4)
+
+                    if( sdm_cold ) then
+                       sd_itmp3(:) = 0
+                       do n = 1, sd_num
+                          if( sd_rk(n) >= VALID2INVALID ) sd_itmp3(n) = 1
+                       end do
+                       call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_dtmp8, sd_ri, sd_rj)
+                       if( tracking_cleanup_vertical_smoke_enable ) then
+                          do n = 1, sd_num
+                             if( sd_rk(n) >= VALID2INVALID ) then
+                                sd_rk(n) = 1.0e6_RP
+                                exit
+                             end if
+                          end do
+                       end if
+                    end if
 
             ! judge super-droplets as invalid or valid in vartical
             call sdm_jdginvdv(sd_rkl,sd_rku,sd_num,sd_x,sd_y,sd_ri,sd_rj,sd_rk)
+
+                    if( sdm_cold ) then
+                       call sdm_tracking_cleanup_invalidated_slots( &
+                            'vertical_outflow', &
+                            sd_num, sd_itmp3, sd_x, sd_y, sd_dtmp8, sd_rk, sd_id, dm_id, &
+                            sd_event_mask, sd_event_sig_mask, sd_diag_mask, sd_phase_change_flag, sd_spatial_visit_flag, &
+                    sd_liq_radius_max_interval, sd_ice_rvol_max_interval, &
+                    sd_mixed_rvol_max_interval, sd_rime_mass_max_interval, &
+                    sd_rime_frac_max_interval, sd_nmono_max_interval, &
+                    sd_aspect_ratio_max_interval)
+               call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_dtmp3, sd_ri, sd_rj)
+               call sdm_cold_tracking_update_spatial_visit( &
+                    sd_num, sd_x, sd_y, sd_dtmp3, sd_rk, sd_spatial_visit_flag)
+            end if
 
             !! save the SDM momentum field at new position (b)
             !!(not supported yet)
@@ -2688,28 +3303,107 @@ contains
                              sd_num,sd_n,sd_liqice,sd_x,sd_y,sdi,sd_ri,sd_rj,sd_rk,        &
                              sd_rkl,sd_rku,crs_val2p,sd_itmp1)
 
-            ! { melting/freezing } in SDM
-            !! diagnose necessary fluid variables
-            call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
-            !! update the phase of SDs
-            call sdm_meltfreeze(                              &
-              t_scale,pres_scale,QTRC(:,:,:,I_QV),         &
-              sd_num,sd_liqice,sd_x,sd_y,      &
-              sd_r,sd_ri,sd_rj,sd_rk,sdi )
+                    ! { melting/freezing } in SDM
+                    !! diagnose necessary fluid variables
+                    call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
+                    if( track_meltfreeze_events ) then
+                       do n = 1, sd_num
+                          sd_itmp3(n) = sdm_cold_phase_state(sd_liqice(n), sd_r(n), sdi%re(n), sdi%rp(n))
+                          sd_dtmp1(n) = sdm_cold_liq_mass(sd_r(n))
+                          sd_dtmp2(n) = sdm_cold_ice_mass(sdi%re(n), sdi%rp(n), sdi%rho(n))
+                          sd_dtmp4(n) = sdm_cold_hydro_radius(sd_itmp3(n), sd_r(n), sdi%re(n), sdi%rp(n))
+                          sd_dtmp5(n) = sdi%re(n)
+                          sd_dtmp6(n) = sdi%rp(n)
+                          sd_dtmp7(n) = sdi%rho(n)
+                          if( TRACK_COLD_OUTPUT_AEROSOL_CONTEXT ) then
+                             sd_aerosol_total_mass_pre(n) = 0.0_RP
+                             sd_aerosol_kohler_solute_pre(n) = 0.0_RP
+                             do s = 1, sd_numasl
+                                sd_aerosol_total_mass_pre(n) = sd_aerosol_total_mass_pre(n) + sd_asl(n,s)
+                                sd_aerosol_kohler_solute_pre(n) = sd_aerosol_kohler_solute_pre(n) + &
+                                     sd_asl(n,s) * sd_kohler_aslion(s) / sd_kohler_aslmw(s)
+                             end do
+                             sd_aerosol_total_mass_post(n) = sd_aerosol_total_mass_pre(n)
+                             sd_aerosol_kohler_solute_post(n) = sd_aerosol_kohler_solute_pre(n)
+                          end if
+                          if( TRACK_COLD_OUTPUT_THERMO_CONTEXT ) then
+                             sd_air_temperature_context(n) = -huge(1.0_RP)
+                             sd_air_pressure_context(n) = -huge(1.0_RP)
+                             sd_qv_context(n) = -huge(1.0_RP)
+                             if( sd_rk(n) >= VALID2INVALID ) then
+                                i = floor(sd_ri(n))+1
+                                j = floor(sd_rj(n))+1
+                                k = floor(sd_rk(n))+1
+                                sd_air_temperature_context(n) = t_scale(k,i,j)
+                                sd_air_pressure_context(n) = pres_scale(k,i,j)
+                                sd_qv_context(n) = QTRC(k,i,j,I_QV)
+                             end if
+                          end if
+                       end do
+                    end if
+                    !! update the phase of SDs
+                            call sdm_meltfreeze(                              &
+                              t_scale,pres_scale,QTRC(:,:,:,I_QV),         &
+                              sd_num,sd_liqice,sd_x,sd_y,      &
+                              sd_r,sd_ri,sd_rj,sd_rk,sdi,    &
+                              sd_event_mask,sd_phase_change_flag )
+                    if( track_meltfreeze_events ) then
+                       do n = 1, sd_num
+                          liq_mass_post = sdm_cold_liq_mass(sd_r(n))
+                          ice_mass_post = sdm_cold_ice_mass(sdi%re(n), sdi%rp(n), sdi%rho(n))
+                          delta_liq_mass = liq_mass_post - sd_dtmp1(n)
+                          delta_ice_mass = ice_mass_post - sd_dtmp2(n)
+                          rel_mass_change = max(delta_ice_mass, -delta_liq_mass, 0.0_RP) / &
+                               max(sd_dtmp1(n), tiny(1.0_RP))
+                          if( max(delta_ice_mass, -delta_liq_mass, 0.0_RP) > 0.0_RP .and. &
+                               tracking_sig_freezing_enable .and. &
+                               rel_mass_change >= tracking_sig_freezing_relmass_threshold ) then
+                             sd_event_mask(n) = ior(sd_event_mask(n), EVENT_FREEZING)
+                             sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_FREEZING)
+                          else if( max(delta_ice_mass, -delta_liq_mass, 0.0_RP) > 0.0_RP .and. &
+                               tracking_evt_freezing_enable ) then
+                             sd_event_mask(n) = ior(sd_event_mask(n), EVENT_FREEZING)
+                          end if
+                          rel_mass_change = max(delta_liq_mass, -delta_ice_mass, 0.0_RP) / &
+                               max(sd_dtmp2(n), tiny(1.0_RP))
+                          if( max(delta_liq_mass, -delta_ice_mass, 0.0_RP) > 0.0_RP .and. &
+                               tracking_sig_melting_enable .and. &
+                               rel_mass_change >= tracking_sig_melting_relmass_threshold ) then
+                             sd_event_mask(n) = ior(sd_event_mask(n), EVENT_MELTING)
+                             sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_MELTING)
+                          else if( max(delta_liq_mass, -delta_ice_mass, 0.0_RP) > 0.0_RP .and. &
+                               tracking_evt_melting_enable ) then
+                             sd_event_mask(n) = ior(sd_event_mask(n), EVENT_MELTING)
+                          end if
+                       end do
+                    end if
+                    if( track_meltfreeze_events ) then
+                       call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_dtmp3, sd_ri, sd_rj)
+                       call sdm_event_singleproc_outnetcdf( &
+                            TIME_NOWSEC, sd_num, sd_id, dm_id, sd_x, sd_y, sd_dtmp3, &
+                            sd_r, sd_liqice, sdi, sd_itmp3, sd_dtmp1, sd_dtmp2, sd_dtmp4, &
+                            sd_dtmp5, sd_dtmp6, sd_dtmp7, track_meltfreeze_events, .false., .false., .false.)
+                    end if
 
-            ! get density of solid-water after melt/freeze
+                    ! get density of solid-water after melt/freeze
             !! here cres_val1c is the rhosol after meltfreeze
             call sdm_sd2rhosol(zph_crs,crs_val1c,                       &
                              sd_num,sd_n,sd_liqice,sd_x,sd_y,sdi,sd_ri,sd_rj,sd_rk,        &
                              sd_rkl,sd_rku,crs_val2c,sd_itmp1)
 
             ! exchange the heat to fluid variables
-            call sdm_meltfreeze_updatefluid(RHOT,QTRC,DENS,crs_val1p,crs_val1c)
-            !! update the HALO region of the fluid variables
-            call COMM_vars8( RHOT(:,:,:), 1 )
-            call COMM_wait ( RHOT(:,:,:), 1 )
+                    call sdm_meltfreeze_updatefluid(RHOT,QTRC,DENS,crs_val1p,crs_val1c)
+                    !! update the HALO region of the fluid variables
+                    call COMM_vars8( RHOT(:,:,:), 1 )
+                    call COMM_wait ( RHOT(:,:,:), 1 )
+                    call sdm_cold_tracking_update_interval( &
+                         sd_num, sd_liqice, sd_r, sdi, &
+                         sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                         sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                         sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                         sd_aspect_ratio_max_interval)
 
-         end if
+                 end if
 
 #ifdef _FAPP_
          ! Section specification for fapp profiler
@@ -2735,12 +3429,220 @@ contains
             ! { condensation/evaporation } in SDM
             !! diagnose necessary fluid variables
             call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
+                    if( sdm_cold .and. track_kohler_activation_events .and. &
+                         (tracking_kohler_activation_smoke_enable .or. &
+                         tracking_kohler_deactivation_smoke_enable) ) then
+                       kohler_smoke_activation_idx = 0
+                       kohler_smoke_deactivation_idx = 0
+                       kohler_smoke_margin = min(0.25_RP, max(1.0E-10_RP, &
+                            tracking_kohler_smoke_margin_fraction))
+                       do n = 1, sd_num
+                          if( sd_rk(n) < VALID2INVALID ) cycle
+                          if( sd_liqice(n) /= STAT_LIQ ) cycle
+                          if( sd_numasl < 1 ) cycle
+                          if( sd_kohler_aslmw(1) <= 0.0_RP .or. sd_kohler_aslion(1) <= 0.0_RP ) cycle
+                          if( tracking_kohler_activation_smoke_enable .and. &
+                               kohler_smoke_activation_idx /= 0 .and. &
+                               tracking_kohler_deactivation_smoke_enable .and. &
+                               kohler_smoke_deactivation_idx /= 0 ) exit
+                          if( tracking_kohler_activation_smoke_enable .and. &
+                               kohler_smoke_activation_idx /= 0 .and. &
+                               .not. tracking_kohler_deactivation_smoke_enable ) exit
+                          if( tracking_kohler_deactivation_smoke_enable .and. &
+                               kohler_smoke_deactivation_idx /= 0 .and. &
+                               .not. tracking_kohler_activation_smoke_enable ) exit
+
+                          i = floor(sd_ri(n))+1
+                          j = floor(sd_rj(n))+1
+                          k = floor(sd_rk(n))+1
+                          sd_asl(n,1) = max(tracking_kohler_smoke_asl_mass, tiny(1.0_RP))
+                          if( sd_numasl > 1 ) sd_asl(n,2:sd_numasl) = 0.0_RP
+                          kohler_smoke_rcrit = sdm_kohler_critical_radius( &
+                               sd_numasl, sd_asl(n,:), sd_kohler_aslmw, sd_kohler_aslion, t_scale(k,i,j))
+                          if( kohler_smoke_rcrit >= 0.5_RP * huge(1.0_RP) ) cycle
+
+                          if( tracking_kohler_activation_smoke_enable .and. &
+                               kohler_smoke_activation_idx == 0 ) then
+                             sd_r(n) = kohler_smoke_rcrit * (1.0_RP - kohler_smoke_margin)
+                             QTRC(k,i,j,I_QV) = max(QTRC(k,i,j,I_QV), 1.0E-1_RP)
+                             kohler_smoke_activation_idx = n
+                          else if( tracking_kohler_deactivation_smoke_enable .and. &
+                               kohler_smoke_deactivation_idx == 0 ) then
+                             sd_r(n) = kohler_smoke_rcrit * (1.0_RP + kohler_smoke_margin)
+                             QTRC(k,i,j,I_QV) = 0.0_RP
+                             kohler_smoke_deactivation_idx = n
+                          end if
+                       end do
+                    end if
+                    if( sdm_cold .and. (track_liq_vapor_events .or. track_kohler_activation_events) ) then
+                       do n = 1, sd_num
+                          sd_itmp3(n) = sdm_cold_phase_state(sd_liqice(n), sd_r(n), sdi%re(n), sdi%rp(n))
+                          sd_dtmp1(n) = sdm_cold_liq_mass(sd_r(n))
+                          sd_dtmp2(n) = sdm_cold_ice_mass(sdi%re(n), sdi%rp(n), sdi%rho(n))
+                          sd_dtmp4(n) = sdm_cold_hydro_radius(sd_itmp3(n), sd_r(n), sdi%re(n), sdi%rp(n))
+                          sd_dtmp5(n) = sdi%re(n)
+                          sd_dtmp6(n) = sdi%rp(n)
+                          sd_dtmp7(n) = sdi%rho(n)
+                          if( TRACK_COLD_OUTPUT_AEROSOL_CONTEXT ) then
+                             sd_aerosol_total_mass_pre(n) = 0.0_RP
+                             sd_aerosol_kohler_solute_pre(n) = 0.0_RP
+                             do s = 1, sd_numasl
+                                sd_aerosol_total_mass_pre(n) = sd_aerosol_total_mass_pre(n) + sd_asl(n,s)
+                                sd_aerosol_kohler_solute_pre(n) = sd_aerosol_kohler_solute_pre(n) + &
+                                     sd_asl(n,s) * sd_kohler_aslion(s) / sd_kohler_aslmw(s)
+                             end do
+                          end if
+                          if( TRACK_COLD_OUTPUT_THERMO_CONTEXT ) then
+                             sd_air_temperature_context(n) = -huge(1.0_RP)
+                             sd_air_pressure_context(n) = -huge(1.0_RP)
+                             sd_qv_context(n) = -huge(1.0_RP)
+                             if( sd_rk(n) >= VALID2INVALID ) then
+                                i = floor(sd_ri(n))+1
+                                j = floor(sd_rj(n))+1
+                                k = floor(sd_rk(n))+1
+                                sd_air_temperature_context(n) = t_scale(k,i,j)
+                                sd_air_pressure_context(n) = pres_scale(k,i,j)
+                                sd_qv_context(n) = QTRC(k,i,j,I_QV)
+                             end if
+                          end if
+                          if( track_kohler_activation_events ) then
+                             sd_kohler_rcrit_pre(n) = huge(1.0_RP)
+                             sd_kohler_margin_pre(n) = -huge(1.0_RP)
+                             sd_kohler_active_pre(n) = 0
+                             if( sd_rk(n) >= VALID2INVALID ) then
+                                i = floor(sd_ri(n))+1
+                                j = floor(sd_rj(n))+1
+                                k = floor(sd_rk(n))+1
+                                sd_kohler_rcrit_pre(n) = sdm_kohler_critical_radius( &
+                                     sd_numasl, sd_asl(n,:), sd_kohler_aslmw, sd_kohler_aslion, t_scale(k,i,j))
+                                sd_kohler_margin_pre(n) = sd_r(n) - sd_kohler_rcrit_pre(n)
+                                if( sdm_kohler_activated_state(.true., sd_liqice(n), sd_r(n), &
+                                     sd_kohler_rcrit_pre(n), 0.0_RP) ) sd_kohler_active_pre(n) = 1
+                             end if
+                          end if
+                       end do
+                    end if
             !! update the equivalent radius of SDs
             call sdm_condevp(sdm_aslset,            &
                              sdm_aslmw,sdm_aslion,sdm_dtevl,      &
                              pres_scale,t_scale,QTRC(:,:,:,I_QV), &
                              sd_num,sd_numasl,sd_liqice,sd_x,sd_y,sd_r,sd_asl,&
                              sd_ri,sd_rj,sd_rk)
+                    if( sdm_cold .and. (track_liq_vapor_events .or. track_kohler_activation_events) ) then
+                       do n = 1, sd_num
+                          liq_mass_post = sdm_cold_liq_mass(sd_r(n))
+                          delta_liq_mass = liq_mass_post - sd_dtmp1(n)
+                          if( TRACK_COLD_OUTPUT_AEROSOL_CONTEXT ) then
+                             sd_aerosol_total_mass_post(n) = 0.0_RP
+                             sd_aerosol_kohler_solute_post(n) = 0.0_RP
+                             do s = 1, sd_numasl
+                                sd_aerosol_total_mass_post(n) = sd_aerosol_total_mass_post(n) + sd_asl(n,s)
+                                sd_aerosol_kohler_solute_post(n) = sd_aerosol_kohler_solute_post(n) + &
+                                     sd_asl(n,s) * sd_kohler_aslion(s) / sd_kohler_aslmw(s)
+                             end do
+                          end if
+                          if( track_liq_vapor_events ) then
+                             rel_mass_change = abs(delta_liq_mass) / max(sd_dtmp1(n), tiny(1.0_RP))
+                             if( delta_liq_mass > 0.0_RP .and. tracking_sig_condensation_enable .and. &
+                                  rel_mass_change >= tracking_sig_condensation_relmass_threshold ) then
+                                sd_event_mask(n) = ior(sd_event_mask(n), EVENT_CONDENSATION)
+                                sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_CONDENSATION)
+                             else if( delta_liq_mass > 0.0_RP .and. tracking_evt_condensation_enable ) then
+                                sd_event_mask(n) = ior(sd_event_mask(n), EVENT_CONDENSATION)
+                             end if
+                             if( delta_liq_mass < 0.0_RP .and. tracking_sig_evaporation_enable .and. &
+                                  rel_mass_change >= tracking_sig_evaporation_relmass_threshold ) then
+                                sd_event_mask(n) = ior(sd_event_mask(n), EVENT_EVAPORATION)
+                                sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_EVAPORATION)
+                             else if( delta_liq_mass < 0.0_RP .and. tracking_evt_evaporation_enable ) then
+                                sd_event_mask(n) = ior(sd_event_mask(n), EVENT_EVAPORATION)
+                             end if
+                          end if
+                          if( track_kohler_activation_events ) then
+                             sd_kohler_rcrit_post(n) = huge(1.0_RP)
+                             sd_kohler_margin_post(n) = -huge(1.0_RP)
+                             sd_kohler_active_post(n) = 0
+                             if( sd_rk(n) >= VALID2INVALID ) then
+                                i = floor(sd_ri(n))+1
+                                j = floor(sd_rj(n))+1
+                                k = floor(sd_rk(n))+1
+                                sd_kohler_rcrit_post(n) = sdm_kohler_critical_radius( &
+                                     sd_numasl, sd_asl(n,:), sd_kohler_aslmw, sd_kohler_aslion, t_scale(k,i,j))
+                                sd_kohler_margin_post(n) = sd_r(n) - sd_kohler_rcrit_post(n)
+                                if( sdm_kohler_activated_state(.true., sd_liqice(n), sd_r(n), &
+                                     sd_kohler_rcrit_post(n), 0.0_RP) ) sd_kohler_active_post(n) = 1
+                             end if
+                             if( sd_kohler_active_pre(n) == 0 .and. sd_kohler_active_post(n) == 1 ) then
+                                if( tracking_sig_activation_enable .and. &
+                                     sd_kohler_margin_post(n) >= tracking_sig_activation_radius_threshold ) then
+                                   sd_event_mask(n) = ior(sd_event_mask(n), EVENT_ACTIVATION)
+                                   sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_ACTIVATION)
+                                else if( tracking_evt_activation_enable ) then
+                                   sd_event_mask(n) = ior(sd_event_mask(n), EVENT_ACTIVATION)
+                                end if
+                             end if
+                             if( sd_kohler_active_pre(n) == 1 .and. sd_kohler_active_post(n) == 0 ) then
+                                if( tracking_sig_deactivation_enable .and. &
+                                     -sd_kohler_margin_post(n) >= tracking_sig_deactivation_radius_threshold ) then
+                                   sd_event_mask(n) = ior(sd_event_mask(n), EVENT_DEACTIVATION)
+                                   sd_event_sig_mask(n) = ior(sd_event_sig_mask(n), EVENT_DEACTIVATION)
+                                else if( tracking_evt_deactivation_enable ) then
+                                   sd_event_mask(n) = ior(sd_event_mask(n), EVENT_DEACTIVATION)
+                                end if
+                             end if
+                          end if
+                       end do
+                    end if
+                    if( sdm_cold .and. (track_liq_vapor_events .or. track_kohler_activation_events) ) then
+                       call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_dtmp3, sd_ri, sd_rj)
+                       if( TRACK_COLD_OUTPUT_AEROSOL_CONTEXT .or. TRACK_COLD_OUTPUT_THERMO_CONTEXT ) then
+                          if( track_kohler_activation_events ) then
+                             call sdm_event_singleproc_outnetcdf( &
+                                  TIME_NOWSEC, sd_num, sd_id, dm_id, sd_x, sd_y, sd_dtmp3, &
+                                  sd_r, sd_liqice, sdi, sd_itmp3, sd_dtmp1, sd_dtmp2, sd_dtmp4, &
+                                  sd_dtmp5, sd_dtmp6, sd_dtmp7, .false., track_liq_vapor_events, .false., &
+                                  track_kohler_activation_events, sd_kohler_rcrit_pre, sd_kohler_rcrit_post, &
+                                  sd_kohler_margin_pre, sd_kohler_margin_post, &
+                                  sd_kohler_active_pre, sd_kohler_active_post, &
+                                  aerosol_total_mass_pre=sd_aerosol_total_mass_pre, &
+                                  aerosol_total_mass_post=sd_aerosol_total_mass_post, &
+                                  aerosol_kohler_solute_pre=sd_aerosol_kohler_solute_pre, &
+                                  aerosol_kohler_solute_post=sd_aerosol_kohler_solute_post, &
+                                  air_temperature=sd_air_temperature_context, &
+                                  air_pressure=sd_air_pressure_context, &
+                                  water_vapor_mixing_ratio=sd_qv_context)
+                          else
+                             call sdm_event_singleproc_outnetcdf( &
+                                  TIME_NOWSEC, sd_num, sd_id, dm_id, sd_x, sd_y, sd_dtmp3, &
+                                  sd_r, sd_liqice, sdi, sd_itmp3, sd_dtmp1, sd_dtmp2, sd_dtmp4, &
+                                  sd_dtmp5, sd_dtmp6, sd_dtmp7, .false., track_liq_vapor_events, .false., &
+                                  .false., &
+                                  aerosol_total_mass_pre=sd_aerosol_total_mass_pre, &
+                                  aerosol_total_mass_post=sd_aerosol_total_mass_post, &
+                                  aerosol_kohler_solute_pre=sd_aerosol_kohler_solute_pre, &
+                                  aerosol_kohler_solute_post=sd_aerosol_kohler_solute_post, &
+                                  air_temperature=sd_air_temperature_context, &
+                                  air_pressure=sd_air_pressure_context, &
+                                  water_vapor_mixing_ratio=sd_qv_context)
+                          end if
+                       else
+                          if( track_kohler_activation_events ) then
+                             call sdm_event_singleproc_outnetcdf( &
+                                  TIME_NOWSEC, sd_num, sd_id, dm_id, sd_x, sd_y, sd_dtmp3, &
+                                  sd_r, sd_liqice, sdi, sd_itmp3, sd_dtmp1, sd_dtmp2, sd_dtmp4, &
+                                  sd_dtmp5, sd_dtmp6, sd_dtmp7, .false., track_liq_vapor_events, .false., &
+                                  track_kohler_activation_events, sd_kohler_rcrit_pre, sd_kohler_rcrit_post, &
+                                  sd_kohler_margin_pre, sd_kohler_margin_post, &
+                                  sd_kohler_active_pre, sd_kohler_active_post)
+                          else
+                             call sdm_event_singleproc_outnetcdf( &
+                                  TIME_NOWSEC, sd_num, sd_id, dm_id, sd_x, sd_y, sd_dtmp3, &
+                                  sd_r, sd_liqice, sdi, sd_itmp3, sd_dtmp1, sd_dtmp2, sd_dtmp4, &
+                                  sd_dtmp5, sd_dtmp6, sd_dtmp7, .false., track_liq_vapor_events, .false., &
+                                  .false.)
+                          end if
+                       end if
+                    end if
 
             ! get density of liquid-water(qw) after process-1
             !! here cres_val1c is the rhow after condevp
@@ -2754,11 +3656,19 @@ contains
             call COMM_vars8( RHOT(:,:,:), 1 )
             call COMM_vars8( QTRC(:,:,:,I_QV), 2 )
             call COMM_vars8( DENS(:,:,:), 3 )
-            call COMM_wait ( RHOT(:,:,:), 1 )
-            call COMM_wait ( QTRC(:,:,:,I_QV), 2 )
-            call COMM_wait ( DENS(:,:,:), 3 )
+                    call COMM_wait ( RHOT(:,:,:), 1 )
+                    call COMM_wait ( QTRC(:,:,:,I_QV), 2 )
+                    call COMM_wait ( DENS(:,:,:), 3 )
+                    if( sdm_cold ) then
+                       call sdm_cold_tracking_update_interval( &
+                            sd_num, sd_liqice, sd_r, sdi, &
+                            sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                            sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                            sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                            sd_aspect_ratio_max_interval)
+                    end if
 
-         end if
+                 end if
 
 #ifdef _FAPP_
          ! Section specification for fapp profiler
@@ -2782,20 +3692,59 @@ contains
                              sd_rkl,sd_rku,crs_val2p,sd_itmp1)
 
             ! { sublimation/deposition } in SDM
+            if( tracking_vapor_sublimation_smoke_enable ) then
+               ! Smoke-only preconditioner: lower the water-vapor field before
+               ! the real sdm_subldep call so the process computes sublimation
+               ! from its normal delta-mass equation. This does not write or
+               ! force event records directly.
+               QTRC(:,:,:,I_QV) = max(0.0_RP, tracking_vapor_sublimation_smoke_qv_factor) * QTRC(:,:,:,I_QV)
+            end if
             !! diagnose necessary fluid variables
             call sdm_rhot_qtrc2p_t(RHOT,QTRC,DENS,pres_scale,t_scale)
-            !! evaluate the terminal velocity
-            call sdm_getvz_ice(DENS,t_scale,            &
-                           sd_num,sd_liqice,sd_x,sd_y,sd_ri,sd_rj,sd_rk,sdi,sd_vz,  &
-                           sd_itmp1,'no_interpolation' )
-            !! update the equivalent radius of SDs
-            call sdm_subldep(            &
-                             sdm_dtsbl,      &
-                             pres_scale,t_scale,QTRC(:,:,:,I_QV),DENS,&
-                             sd_num,sd_liqice,sd_x,sd_y,sdi,sd_vz,&
-                             sd_ri,sd_rj,sd_rk,sd_itmp1)
+                    !! evaluate the terminal velocity
+                    call sdm_getvz_ice(DENS,t_scale,            &
+                                   sd_num,sd_liqice,sd_x,sd_y,sd_ri,sd_rj,sd_rk,sdi,sd_vz,  &
+                                   sd_itmp1,'no_interpolation' )
+                    if( track_ice_vapor_events ) then
+                       do n = 1, sd_num
+                          sd_itmp3(n) = sdm_cold_phase_state(sd_liqice(n), sd_r(n), sdi%re(n), sdi%rp(n))
+                          sd_dtmp1(n) = sdm_cold_liq_mass(sd_r(n))
+                          sd_dtmp2(n) = sdm_cold_ice_mass(sdi%re(n), sdi%rp(n), sdi%rho(n))
+                          sd_dtmp4(n) = sdm_cold_hydro_radius(sd_itmp3(n), sd_r(n), sdi%re(n), sdi%rp(n))
+                          sd_dtmp5(n) = sdi%re(n)
+                          sd_dtmp6(n) = sdi%rp(n)
+                          sd_dtmp7(n) = sdi%rho(n)
+                       end do
+                    end if
+                    !! update the equivalent radius of SDs
+                            call sdm_subldep(            &
+                                             sdm_dtsbl,      &
+                                             pres_scale,t_scale,QTRC(:,:,:,I_QV),DENS,&
+                                             sd_num,sd_liqice,sd_x,sd_y,sdi,sd_vz,&
+                                             sd_ri,sd_rj,sd_rk,sd_event_mask,sd_event_sig_mask,sd_itmp1)
+                    if( track_ice_vapor_events ) then
+                       call sdm_rk2z(sd_num, sd_x, sd_y, sd_rk, sd_dtmp3, sd_ri, sd_rj)
+                       if( TRACK_COLD_OUTPUT_AEROSOL_CONTEXT .or. TRACK_COLD_OUTPUT_THERMO_CONTEXT ) then
+                          call sdm_event_singleproc_outnetcdf( &
+                               TIME_NOWSEC, sd_num, sd_id, dm_id, sd_x, sd_y, sd_dtmp3, &
+                               sd_r, sd_liqice, sdi, sd_itmp3, sd_dtmp1, sd_dtmp2, sd_dtmp4, &
+                               sd_dtmp5, sd_dtmp6, sd_dtmp7, .false., .false., track_ice_vapor_events, .false., &
+                               aerosol_total_mass_pre=sd_aerosol_total_mass_pre, &
+                               aerosol_total_mass_post=sd_aerosol_total_mass_post, &
+                               aerosol_kohler_solute_pre=sd_aerosol_kohler_solute_pre, &
+                               aerosol_kohler_solute_post=sd_aerosol_kohler_solute_post, &
+                               air_temperature=sd_air_temperature_context, &
+                               air_pressure=sd_air_pressure_context, &
+                               water_vapor_mixing_ratio=sd_qv_context)
+                       else
+                          call sdm_event_singleproc_outnetcdf( &
+                               TIME_NOWSEC, sd_num, sd_id, dm_id, sd_x, sd_y, sd_dtmp3, &
+                               sd_r, sd_liqice, sdi, sd_itmp3, sd_dtmp1, sd_dtmp2, sd_dtmp4, &
+                               sd_dtmp5, sd_dtmp6, sd_dtmp7, .false., .false., track_ice_vapor_events, .false.)
+                       end if
+                    end if
 
-            ! get density of solid-water after sublimation/deposition
+                    ! get density of solid-water after sublimation/deposition
             !! here cres_val1c is the rhosol after sublimation/deposition
             call sdm_sd2rhosol(zph_crs,crs_val1c,                       &
                              sd_num,sd_n,sd_liqice,sd_x,sd_y,sdi,sd_ri,sd_rj,sd_rk,        &
@@ -2807,11 +3756,17 @@ contains
             call COMM_vars8( RHOT(:,:,:), 1 )
             call COMM_vars8( QTRC(:,:,:,I_QV), 2 )
             call COMM_vars8( DENS(:,:,:), 3 )
-            call COMM_wait ( RHOT(:,:,:), 1 )
-            call COMM_wait ( QTRC(:,:,:,I_QV), 2 )
-            call COMM_wait ( DENS(:,:,:), 3 )
+                    call COMM_wait ( RHOT(:,:,:), 1 )
+                    call COMM_wait ( QTRC(:,:,:,I_QV), 2 )
+                    call COMM_wait ( DENS(:,:,:), 3 )
+                    call sdm_cold_tracking_update_interval( &
+                         sd_num, sd_liqice, sd_r, sdi, &
+                         sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                         sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                         sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                         sd_aspect_ratio_max_interval)
 
-         end if
+                 end if
 
 #ifdef _FAPP_
          ! Section specification for fapp profiler
@@ -2856,8 +3811,30 @@ contains
                             zph_crs,                                    &
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
-                            sdi,                                        & 
-                            sort_id,sort_key,sort_freq,sort_tag,        &
+                            sdi,                                        &
+                                    sd_id, dm_id, sd_id1, sd_id2, dm_id1, dm_id2, num_col, num_pair,&
+                                    sdr1_out,sdr2_out,sdn1_out,sdn2_out, &
+                                    trigger_code_out,trigger_level_out,phase_state1_pre_out,phase_state2_pre_out, &
+                                    phase_state1_post_out,phase_state2_post_out, &
+                                    event_x_out,event_y_out,event_z_out, &
+                                    sdn1_post_out,sdn2_post_out, &
+                                    hydro_radius1_pre_out,hydro_radius2_pre_out, &
+                                    hydro_radius1_post_out,hydro_radius2_post_out, &
+                                    hydro_mass1_pre_out,hydro_mass2_pre_out, &
+                                    hydro_mass1_post_out,hydro_mass2_post_out, &
+                                    x1_out,y1_out,z1_out,x2_out,y2_out,z2_out, &
+                                    ice_re1_pre_out,ice_rp1_pre_out,ice_rho1_pre_out, &
+                                    ice_re1_post_out,ice_rp1_post_out,ice_rho1_post_out, &
+                                    ice_re2_pre_out,ice_rp2_pre_out,ice_rho2_pre_out, &
+                                    ice_re2_post_out,ice_rp2_post_out,ice_rho2_post_out, &
+                                    rime_mass1_pre_out,rime_mass1_post_out, &
+                                    rime_mass2_pre_out,rime_mass2_post_out, &
+                                    rime_frac1_pre_out,rime_frac1_post_out, &
+                                    rime_frac2_pre_out,rime_frac2_post_out, &
+                                    aspect_ratio1_pre_out,aspect_ratio1_post_out, &
+                                    aspect_ratio2_pre_out,aspect_ratio2_post_out, &
+                                    if_coal,sd_event_mask,sd_event_sig_mask,coal_output,&
+                                    sort_id,sort_key,sort_freq,sort_tag,        &
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
                             sd_itmp1(1:sd_num),sd_itmp2(1:sd_num),  &
@@ -2872,10 +3849,16 @@ contains
                ! exchange the heat to fluid variables
                call sdm_meltfreeze_updatefluid(RHOT,QTRC,DENS,crs_val1p,crs_val1c)
                !! update the HALO region of the fluid variables
-               call COMM_vars8( RHOT(:,:,:), 1 )
-               call COMM_wait ( RHOT(:,:,:), 1 )
+                       call COMM_vars8( RHOT(:,:,:), 1 )
+                       call COMM_wait ( RHOT(:,:,:), 1 )
+                       call sdm_cold_tracking_update_interval( &
+                            sd_num, sd_liqice, sd_r, sdi, &
+                            sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                            sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                            sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                            sd_aspect_ratio_max_interval)
 
-            else
+                    else
                call sdm_coales(sdm_colkrnl,sdm_colbrwn,sdm_aslset,         &
                             sdm_aslrho,sdm_dtcol,                       &
                             pres_scale, t_scale,                        &
@@ -2883,34 +3866,113 @@ contains
                             ni_sdm,nj_sdm,nk_sdm,sd_num,sd_numasl,      &
                             sd_n,sd_liqice,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,     &
                             sd_id, dm_id, sd_id1, sd_id2, dm_id1, dm_id2, num_col, num_pair,&
-                            sdr1_out,sdr2_out,sdn1_out,sdn2_out,if_coal,coal_output,sort_id,sort_key,sort_freq,sort_tag,&
+                            sdr1_out,sdr2_out,sdn1_out,sdn2_out, &
+                            event_x_out,event_y_out,event_z_out, &
+                            sdn1_post_out,sdn2_post_out, &
+                            hydro_radius1_pre_out,hydro_radius2_pre_out, &
+                            hydro_radius1_post_out,hydro_radius2_post_out, &
+                            hydro_mass1_pre_out,hydro_mass2_pre_out, &
+                            hydro_mass1_post_out,hydro_mass2_post_out, &
+                            if_coal,coal_output,sort_id,sort_key,sort_freq,sort_tag,&
                             sd_rng,sd_rand,                             &
                             sdm_itmp1,sdm_itmp2,                        &
                             sd_itmp1(1:sd_num),sd_itmp2(1:sd_num),  &
                             sd_dtmp1)
+            end if
 
-              if (allocated(num_col) .and. coal_output == 1) then
-                  if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+            if (allocated(num_col) .and. coal_output == 1) then
+               if( gmd_benchmark_diag_enable ) gmd_time_start = mpi_wtime()
+               if( sdm_cold ) then
+                  call sdm_event_collision_outnetcdf(TIME_NOWSEC, num_pair, sd_id1, sd_id2, dm_id1, dm_id2, num_col, &
+                                trigger_code_out, trigger_level_out, phase_state1_pre_out, phase_state2_pre_out, &
+                                phase_state1_post_out, phase_state2_post_out, event_x_out, event_y_out, event_z_out, &
+                                sdn1_out, sdn2_out, sdn1_post_out, sdn2_post_out, &
+                                hydro_radius1_pre_out, hydro_radius2_pre_out, hydro_radius1_post_out, hydro_radius2_post_out, &
+                                hydro_mass1_pre_out, hydro_mass2_pre_out, hydro_mass1_post_out, hydro_mass2_post_out, &
+                                x1_out, y1_out, z1_out, x2_out, y2_out, z2_out, &
+                                ice_re1_pre_out, ice_rp1_pre_out, ice_rho1_pre_out, &
+                                ice_re1_post_out, ice_rp1_post_out, ice_rho1_post_out, &
+                                ice_re2_pre_out, ice_rp2_pre_out, ice_rho2_pre_out, &
+                                ice_re2_post_out, ice_rp2_post_out, ice_rho2_post_out, &
+                                rime_mass1_pre_out, rime_mass1_post_out, rime_mass2_pre_out, rime_mass2_post_out, &
+                                rime_frac1_pre_out, rime_frac1_post_out, rime_frac2_pre_out, rime_frac2_post_out, &
+                                aspect_ratio1_pre_out, aspect_ratio1_post_out, aspect_ratio2_pre_out, aspect_ratio2_post_out)
+               else
                   call sdm_coal_outnetcdf(TIME_NOWSEC, num_pair,sd_id1, sd_id2, dm_id1, dm_id2,&
-                                num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out)
-                  if( gmd_benchmark_diag_enable ) then
-                     gmd_time_end = mpi_wtime()
-                     gmd_coalescence_output_write_time_last_s = gmd_time_end - gmd_time_start
-                     gmd_coalescence_output_write_time_total_s = &
-                          gmd_coalescence_output_write_time_total_s + &
-                          gmd_coalescence_output_write_time_last_s
-                     gmd_coalescence_output_write_count = gmd_coalescence_output_write_count + 1
-                  end if
-                  if (allocated(dm_id1)) deallocate(dm_id1)
-                  if (allocated(dm_id2)) deallocate(dm_id2)
-                  if (allocated(sd_id1)) deallocate(sd_id1)
-                  if (allocated(sd_id2)) deallocate(sd_id2)
-                  deallocate(num_col)
-                  deallocate(sdr1_out)
-                  deallocate(sdr2_out)
-                  deallocate(sdn1_out)
-                  deallocate(sdn2_out)
-              end if
+                                num_col, sdr1_out, sdr2_out, sdn1_out, sdn2_out, &
+                                event_x_out,event_y_out,event_z_out, &
+                                sdn1_post_out,sdn2_post_out, &
+                                hydro_radius1_pre_out,hydro_radius2_pre_out, &
+                                hydro_radius1_post_out,hydro_radius2_post_out, &
+                                hydro_mass1_pre_out,hydro_mass2_pre_out, &
+                                hydro_mass1_post_out,hydro_mass2_post_out)
+               end if
+               if( gmd_benchmark_diag_enable ) then
+                  gmd_time_end = mpi_wtime()
+                  gmd_coalescence_output_write_time_last_s = gmd_time_end - gmd_time_start
+                  gmd_coalescence_output_write_time_total_s = &
+                       gmd_coalescence_output_write_time_total_s + &
+                       gmd_coalescence_output_write_time_last_s
+                  gmd_coalescence_output_write_count = gmd_coalescence_output_write_count + 1
+               end if
+               if (allocated(dm_id1)) deallocate(dm_id1)
+               if (allocated(dm_id2)) deallocate(dm_id2)
+               if (allocated(sd_id1)) deallocate(sd_id1)
+               if (allocated(sd_id2)) deallocate(sd_id2)
+               deallocate(num_col)
+               deallocate(sdr1_out)
+               deallocate(sdr2_out)
+               deallocate(sdn1_out)
+               deallocate(sdn2_out)
+               if (allocated(trigger_code_out)) deallocate(trigger_code_out)
+               if (allocated(trigger_level_out)) deallocate(trigger_level_out)
+               if (allocated(phase_state1_pre_out)) deallocate(phase_state1_pre_out)
+               if (allocated(phase_state2_pre_out)) deallocate(phase_state2_pre_out)
+               if (allocated(phase_state1_post_out)) deallocate(phase_state1_post_out)
+               if (allocated(phase_state2_post_out)) deallocate(phase_state2_post_out)
+               if (allocated(event_x_out)) deallocate(event_x_out)
+               if (allocated(event_y_out)) deallocate(event_y_out)
+               if (allocated(event_z_out)) deallocate(event_z_out)
+               if (allocated(sdn1_post_out)) deallocate(sdn1_post_out)
+               if (allocated(sdn2_post_out)) deallocate(sdn2_post_out)
+               if (allocated(hydro_radius1_pre_out)) deallocate(hydro_radius1_pre_out)
+               if (allocated(hydro_radius2_pre_out)) deallocate(hydro_radius2_pre_out)
+               if (allocated(hydro_radius1_post_out)) deallocate(hydro_radius1_post_out)
+               if (allocated(hydro_radius2_post_out)) deallocate(hydro_radius2_post_out)
+               if (allocated(hydro_mass1_pre_out)) deallocate(hydro_mass1_pre_out)
+               if (allocated(hydro_mass2_pre_out)) deallocate(hydro_mass2_pre_out)
+               if (allocated(hydro_mass1_post_out)) deallocate(hydro_mass1_post_out)
+               if (allocated(hydro_mass2_post_out)) deallocate(hydro_mass2_post_out)
+               if (allocated(x1_out)) deallocate(x1_out)
+               if (allocated(y1_out)) deallocate(y1_out)
+               if (allocated(z1_out)) deallocate(z1_out)
+               if (allocated(x2_out)) deallocate(x2_out)
+               if (allocated(y2_out)) deallocate(y2_out)
+               if (allocated(z2_out)) deallocate(z2_out)
+               if (allocated(ice_re1_pre_out)) deallocate(ice_re1_pre_out)
+               if (allocated(ice_rp1_pre_out)) deallocate(ice_rp1_pre_out)
+               if (allocated(ice_rho1_pre_out)) deallocate(ice_rho1_pre_out)
+               if (allocated(ice_re1_post_out)) deallocate(ice_re1_post_out)
+               if (allocated(ice_rp1_post_out)) deallocate(ice_rp1_post_out)
+               if (allocated(ice_rho1_post_out)) deallocate(ice_rho1_post_out)
+               if (allocated(ice_re2_pre_out)) deallocate(ice_re2_pre_out)
+               if (allocated(ice_rp2_pre_out)) deallocate(ice_rp2_pre_out)
+               if (allocated(ice_rho2_pre_out)) deallocate(ice_rho2_pre_out)
+               if (allocated(ice_re2_post_out)) deallocate(ice_re2_post_out)
+               if (allocated(ice_rp2_post_out)) deallocate(ice_rp2_post_out)
+               if (allocated(ice_rho2_post_out)) deallocate(ice_rho2_post_out)
+               if (allocated(rime_mass1_pre_out)) deallocate(rime_mass1_pre_out)
+               if (allocated(rime_mass1_post_out)) deallocate(rime_mass1_post_out)
+               if (allocated(rime_mass2_pre_out)) deallocate(rime_mass2_pre_out)
+               if (allocated(rime_mass2_post_out)) deallocate(rime_mass2_post_out)
+               if (allocated(rime_frac1_pre_out)) deallocate(rime_frac1_pre_out)
+               if (allocated(rime_frac1_post_out)) deallocate(rime_frac1_post_out)
+               if (allocated(rime_frac2_pre_out)) deallocate(rime_frac2_pre_out)
+               if (allocated(rime_frac2_post_out)) deallocate(rime_frac2_post_out)
+               if (allocated(aspect_ratio1_pre_out)) deallocate(aspect_ratio1_pre_out)
+               if (allocated(aspect_ratio1_post_out)) deallocate(aspect_ratio1_post_out)
+               if (allocated(aspect_ratio2_pre_out)) deallocate(aspect_ratio2_pre_out)
+               if (allocated(aspect_ratio2_post_out)) deallocate(aspect_ratio2_post_out)
             end if
 
          end if
@@ -2928,18 +3990,140 @@ contains
       ! Section specification for fapp profiler
       call fapp_start("sdm_sd2prec",0,0)
 #endif
+              if( sdm_cold ) then
+                 if( tracking_cleanup_terminal_smoke_enable ) then
+                    do n = 1, sd_num
+                       if( sd_rk(n) >= VALID2INVALID .and. &
+                            ( sd_liqice(n) == STAT_LIQ .or. sd_liqice(n) == STAT_ICE ) ) then
+                          sd_rk(n) = PRECIPI
+                          exit
+                       end if
+                    end do
+                 end if
+                 sd_itmp3(:) = 0
+                 sd_dtmp3(:) = sdm_zlower
+         do n = 1, sd_num
+            if( sd_rk(n) < VALID2INVALID .and. sd_rk(n) > PREC2INVALID ) sd_itmp3(n) = 1
+         end do
+      end if
       call sdm_sd2prec(dt,                                &
                        prec_crs,                          &
                        sd_num,sd_n,sd_liqice,sd_x,sd_y,sd_r,sdi,sd_ri,sd_rj,sd_rk,  &
                        sd_itmp1,sd_itmp2,crs_val1c(1,1:IA,1:JA))
+              if( sdm_cold ) then
+                 call sdm_tracking_cleanup_invalidated_slots( &
+                      'terminal_precip', &
+                      sd_num, sd_itmp3, sd_x, sd_y, sd_dtmp3, sd_rk, sd_id, dm_id, &
+              sd_event_mask, sd_event_sig_mask, sd_diag_mask, sd_phase_change_flag, sd_spatial_visit_flag, &
+              sd_liq_radius_max_interval, sd_ice_rvol_max_interval, &
+              sd_mixed_rvol_max_interval, sd_rime_mass_max_interval, &
+              sd_rime_frac_max_interval, sd_nmono_max_interval, &
+              sd_aspect_ratio_max_interval)
+      end if
 
 #ifdef _FAPP_
       ! Section specification for fapp profiler
       call fapp_stop("sdm_sd2prec",0,0)
 #endif
 
+    if( allocated(spatial_prev_x) ) deallocate(spatial_prev_x)
+    if( allocated(spatial_prev_y) ) deallocate(spatial_prev_y)
+    if( allocated(spatial_prev_z) ) deallocate(spatial_prev_z)
+    if( allocated(sd_kohler_rcrit_pre) ) deallocate(sd_kohler_rcrit_pre, sd_kohler_rcrit_post)
+    if( allocated(sd_kohler_margin_pre) ) deallocate(sd_kohler_margin_pre, sd_kohler_margin_post)
+    if( allocated(sd_kohler_active_pre) ) deallocate(sd_kohler_active_pre, sd_kohler_active_post)
+    if( allocated(sd_aerosol_total_mass_pre) ) deallocate(sd_aerosol_total_mass_pre, sd_aerosol_total_mass_post)
+    if( allocated(sd_aerosol_kohler_solute_pre) ) deallocate(sd_aerosol_kohler_solute_pre, &
+         sd_aerosol_kohler_solute_post)
+    if( allocated(sd_air_temperature_context) ) deallocate(sd_air_temperature_context, sd_air_pressure_context, &
+         sd_qv_context)
+
     return
   end subroutine sdm_calc
+  !----------------------------------------------------------------------------
+  subroutine sdm_tracking_cleanup_invalidated_slots( &
+       cleanup_label, sd_num, cleanup_candidate, sd_x, sd_y, sd_z, sd_rk, sd_id, dm_id, &
+       sd_event_mask, sd_event_sig_mask, sd_diag_mask, sd_phase_change_flag, sd_spatial_visit_flag, &
+       sd_liq_radius_max_interval, sd_ice_rvol_max_interval, &
+       sd_mixed_rvol_max_interval, sd_rime_mass_max_interval, &
+       sd_rime_frac_max_interval, sd_nmono_max_interval, &
+       sd_aspect_ratio_max_interval)
+    use m_sdm_tracking_cold, only: &
+         LIFE_SDREMOVE_INVALIDATION, TRACK_ID_INVALID, &
+         sdm_tracking_reset_invalid_slot, sdm_tracking_valid_id_pair
+    use m_sdm_io, only: &
+         sdm_lifecycle_outnetcdf
+
+    character(len=*), intent(in) :: cleanup_label
+    integer, intent(in) :: sd_num
+    integer, intent(in) :: cleanup_candidate(1:sd_num)
+    real(RP), intent(in) :: sd_x(1:sd_num)
+    real(RP), intent(in) :: sd_y(1:sd_num)
+    real(RP), intent(in) :: sd_z(1:sd_num)
+    real(RP), intent(in) :: sd_rk(1:sd_num)
+    integer, intent(inout) :: sd_id(1:sd_num)
+    integer, intent(inout) :: dm_id(1:sd_num)
+    integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+    integer, intent(inout) :: sd_diag_mask(1:sd_num)
+    integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+    integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
+    real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+    real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
+
+    integer :: n
+    integer :: parent_sd(1), parent_dm(1), child_sd(1), child_dm(1)
+    integer :: candidate_count, invalid_after_count, newly_invalid_count
+    integer :: reset_count, lifecycle_count
+
+    if( .not. sdm_cold ) return
+
+    candidate_count = 0
+    invalid_after_count = 0
+    newly_invalid_count = 0
+    reset_count = 0
+    lifecycle_count = 0
+
+    do n = 1, sd_num
+       if( cleanup_candidate(n) /= 0 ) candidate_count = candidate_count + 1
+       if( sd_rk(n) == INVALID ) invalid_after_count = invalid_after_count + 1
+       if( cleanup_candidate(n) == 0 ) cycle
+       if( sd_rk(n) /= INVALID ) cycle
+
+       newly_invalid_count = newly_invalid_count + 1
+       parent_sd(1) = sd_id(n)
+       parent_dm(1) = dm_id(n)
+       child_sd(1) = TRACK_ID_INVALID
+       child_dm(1) = TRACK_ID_INVALID
+       if( tracking_mode /= 0 .and. sdm_tracking_valid_id_pair(parent_sd(1), parent_dm(1)) ) then
+          call sdm_lifecycle_outnetcdf(real(TIME_NOWSEC,kind=DP), &
+               LIFE_SDREMOVE_INVALIDATION, 1, 0, parent_sd, parent_dm, child_sd, child_dm, &
+               sd_x(n), sd_y(n), sd_z(n))
+          lifecycle_count = lifecycle_count + 1
+       end if
+
+       call sdm_tracking_reset_invalid_slot(n, sd_id, dm_id, &
+            sd_event_mask, sd_event_sig_mask, sd_diag_mask, sd_phase_change_flag, sd_spatial_visit_flag, &
+            sd_liq_radius_max_interval, sd_ice_rvol_max_interval, &
+            sd_mixed_rvol_max_interval, sd_rime_mass_max_interval, &
+            sd_rime_frac_max_interval, sd_nmono_max_interval, &
+            sd_aspect_ratio_max_interval)
+       reset_count = reset_count + 1
+    end do
+
+    if( tracking_cleanup_debug_enable ) then
+       write(*,'(a,1x,a,1x,a,i0,1x,a,i0,1x,a,i0,1x,a,i0,1x,a,i0,1x,a,i0)') &
+            'COLD_TPHT_CLEANUP', trim(cleanup_label), 'rank=', mype, &
+            'candidate=', candidate_count, 'invalid_after=', invalid_after_count, &
+            'newly_invalid=', newly_invalid_count, 'reset=', reset_count, &
+            'lifecycle=', lifecycle_count
+    end if
+  end subroutine sdm_tracking_cleanup_invalidated_slots
 !---------------------------------------------------------------------------------------
 !  subroutine sdm_sd2momnt(ni,nj,nk,zph_crs,mu_sdm,mv_sdm,mw_sdm,  &
 !                          sd_num,sd_n,sd_x,sd_y,sd_rk,            &
@@ -3127,7 +4311,7 @@ contains
   !-----------------------------------------------------------------------------
 
   !----------------------------------------------------------------------------
-  subroutine sdm_aslform(DENS,RHOT,QTRC,                          &   
+  subroutine sdm_aslform(DENS,RHOT,QTRC,                          &
                          sdm_calvar,sdm_aslset,                   &
                          sdm_aslfmsdnc,sdm_sdnmlvol,              &
                          sdm_zupper,sdm_zlower,sdm_dtcmph,        &
@@ -3231,7 +4415,7 @@ contains
       real(RP) :: sdm_dtcol  ! time step of {stochastic coalescence} process
       real(RP) :: sdm_dtadv  ! time step of {motion of super-droplets} process
       real(RP) :: sdm_dtmlt  ! time step of {melt/freeze of super-droplets} process
-      real(RP) :: sdm_dtsbl  ! time step of {sublimation/deposition of super-droplets} process 
+      real(RP) :: sdm_dtsbl  ! time step of {sublimation/deposition of super-droplets} process
     !--------------------------------------------------------------------- !---------------------------------------------------------------------
 
       ! Initialize and rename variables
@@ -3387,7 +4571,13 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_adjsdnum(sdm_nadjvar,ni_sdm,nj_sdm,nk_sdm,    &
                           sd_num,sd_numasl,sd_nc,                 &
-                          sd_n,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk, &
+                          sd_n,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk, &
+                          sd_id,dm_id,sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag, &
+                          sd_spatial_visit_flag, &
+                          sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                          sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                          sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                          sd_aspect_ratio_max_interval, &
                           sort_id,sort_key,sort_freq,sort_tag,    &
                           sd_rng,sd_rand,                         &
 !                          sd_rand,                                &
@@ -3411,6 +4601,7 @@ contains
       integer, intent(inout) :: sort_tag(1:ni_sdm*nj_sdm*nk_sdm+2)   ! accumulated number of super-droplets in each SD-grid
       real(RP), intent(inout) :: sd_x(1:sd_num)  ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)  ! y-coordinate of super-droplets
+      real(RP), intent(inout) :: sd_z(1:sd_num)  ! z-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)  ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl) ! aerosol mass of super-droplets
@@ -3418,6 +4609,20 @@ contains
       real(RP), intent(inout) :: sd_ri(1:sd_num) ! index[i/real] of super-droplets
       real(RP), intent(inout) :: sd_rj(1:sd_num) ! index[j/real] of super-droplets
       real(RP), intent(inout) :: sd_rk(1:sd_num) ! index[k/real] of super-droplets
+      integer, intent(inout) :: sd_id(1:sd_num)
+      integer, intent(inout) :: dm_id(1:sd_num)
+      integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+      integer, intent(inout) :: sd_diag_mask(1:sd_num)
+      integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+      integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
+      real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
       ! Output variables
       integer, intent(out) :: sdm_itmp1(1:ni_sdm*nj_sdm*nk_sdm+2)  ! temporary array of SDM dimension
       integer, intent(out) :: sdm_itmp2(1:ni_sdm*nj_sdm*nk_sdm+2)  ! temporary array of SDM dimension
@@ -3438,7 +4643,13 @@ contains
 
          sdnum_upr = floor( RATE4REMOVE * sd_nc )
          call sdm_sdremove(ni_sdm,nj_sdm,nk_sdm,                        &
-                           sdnum_upr,sd_num,sd_n,sd_x,sd_y,sd_ri,sd_rj,sd_rk,       &
+                           sdnum_upr,sd_num,sd_n,sd_x,sd_y,sd_z,sd_ri,sd_rj,sd_rk,       &
+                           sd_id,dm_id,sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag, &
+                           sd_spatial_visit_flag, &
+                           sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                           sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                           sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                           sd_aspect_ratio_max_interval, &
                            sort_id,sort_key,sort_freq,sort_tag,         &
                            sd_rng,sd_rand,                              &
 !                           sd_rand,                                     &
@@ -3454,7 +4665,13 @@ contains
 
          call sdm_sdadd(ni_sdm,nj_sdm,nk_sdm,                           &
                         sdnum_lwr,sd_num,sd_numasl,                     &
-                        sd_n,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,         &
+                        sd_n,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,         &
+                        sd_id,dm_id,sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag, &
+                        sd_spatial_visit_flag, &
+                        sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                        sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                        sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                        sd_aspect_ratio_max_interval, &
                         sort_id,sort_key,sort_freq,sort_tag,            &
                         sd_rng,sd_rand,                                 &
 !                        sd_rand,                                        &
@@ -3492,7 +4709,13 @@ contains
   end subroutine sdm_adjsdnum
   !----------------------------------------------------------------------------
   subroutine sdm_sdremove(ni_sdm,nj_sdm,nk_sdm,                   &
-                          sdnum_upr,sd_num,sd_n,sd_x,sd_y,sd_ri,sd_rj,sd_rk,  &
+                          sdnum_upr,sd_num,sd_n,sd_x,sd_y,sd_z,sd_ri,sd_rj,sd_rk,  &
+                          sd_id,dm_id,sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag, &
+                          sd_spatial_visit_flag, &
+                          sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                          sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                          sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                          sd_aspect_ratio_max_interval, &
                           sort_id,sort_key,sort_freq,sort_tag,    &
                           sd_rng,sd_rand,                         &
 !                          sd_rand,                                &
@@ -3504,6 +4727,11 @@ contains
          sdm_x2ri, sdm_y2rj
     use m_sdm_idutil, only: &
          sdm_sort,sdm_getperm
+    use m_sdm_tracking_cold, only: &
+         LIFE_SDREMOVE_INVALIDATION, sdm_tracking_reset_invalid_slot, &
+         sdm_tracking_valid_id_pair
+    use m_sdm_io, only: &
+         sdm_lifecycle_outnetcdf
       ! Input variables
       integer, intent(in) :: ni_sdm  ! SDM model dimension in x direction
       integer, intent(in) :: nj_sdm  ! SDM model dimension in y direction
@@ -3520,9 +4748,24 @@ contains
       integer(DP), intent(inout) :: sd_n(1:sd_num)  ! multiplicity of super-droplets
       real(RP), intent(inout) :: sd_x(1:sd_num)     ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)     ! y-coordinate of super-droplets
+      real(RP), intent(inout) :: sd_z(1:sd_num)     ! z-coordinate of super-droplets
       real(RP), intent(inout) :: sd_ri(1:sd_num)    ! index[i/real] of super-droplets
       real(RP), intent(inout) :: sd_rj(1:sd_num)    ! index[j/real] of super-droplets
       real(RP), intent(inout) :: sd_rk(1:sd_num)    ! index[k/real] of super-droplets
+      integer, intent(inout) :: sd_id(1:sd_num)
+      integer, intent(inout) :: dm_id(1:sd_num)
+      integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+      integer, intent(inout) :: sd_diag_mask(1:sd_num)
+      integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+      integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
+      real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
       ! Output variables
       integer, intent(out) :: sort_tag0(1:ni_sdm*nj_sdm*nk_sdm+2)  ! = sort_tag(n) - 1
       integer, intent(out) :: fsort_id(1:ni_sdm*nj_sdm*nk_sdm+2)
@@ -3538,6 +4781,7 @@ contains
       integer :: n_minus       ! number of reducing super-droplets
       integer :: sdnum_valid   ! number of valid super-droplets in each grid
       integer :: ip, m, n, s, t            ! index
+      integer :: parent_sd(1), parent_dm(1), child_sd(1), child_dm(1)
      !---------------------------------------------------------------------
 
       call sdm_x2ri(sd_num,sd_x,sd_ri,sd_rk)
@@ -3612,7 +4856,23 @@ contains
 
                !== convert valid droplets to invalid droplet ==!
 
+               parent_sd(1) = sd_id(id_vd)
+               parent_dm(1) = dm_id(id_vd)
+               child_sd(1) = TRACK_ID_INVALID
+               child_dm(1) = TRACK_ID_INVALID
+               if( sdm_cold .and. tracking_mode /= 0 .and. &
+                   sdm_tracking_valid_id_pair(parent_sd(1), parent_dm(1)) ) then
+                  call sdm_lifecycle_outnetcdf(real(TIME_NOWSEC,kind=DP), &
+                       LIFE_SDREMOVE_INVALIDATION, 1, 0, parent_sd, parent_dm, child_sd, child_dm, &
+                       sd_x(id_vd), sd_y(id_vd), sd_z(id_vd))
+               end if
                sd_rk(id_vd) = INVALID
+               call sdm_tracking_reset_invalid_slot(id_vd, sd_id, dm_id, &
+                    sd_event_mask, sd_event_sig_mask, sd_diag_mask, sd_phase_change_flag, sd_spatial_visit_flag, &
+                    sd_liq_radius_max_interval, sd_ice_rvol_max_interval, &
+                    sd_mixed_rvol_max_interval, sd_rime_mass_max_interval, &
+                    sd_rime_frac_max_interval, sd_nmono_max_interval, &
+                    sd_aspect_ratio_max_interval)
 
             else if( s>n_minus .and. s<=sdnum_valid ) then
 
@@ -3641,7 +4901,13 @@ contains
   !----------------------------------------------------------------------------
   subroutine sdm_sdadd(ni_sdm,nj_sdm,nk_sdm,                      &
                        sdnum_lwr,sd_num,sd_numasl,                &
-                       sd_n,sd_x,sd_y,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,    &
+                       sd_n,sd_x,sd_y,sd_z,sd_r,sd_asl,sd_vz,sd_ri,sd_rj,sd_rk,    &
+                       sd_id,dm_id,sd_event_mask,sd_event_sig_mask,sd_diag_mask,sd_phase_change_flag, &
+                       sd_spatial_visit_flag, &
+                       sd_liq_radius_max_interval,sd_ice_rvol_max_interval, &
+                       sd_mixed_rvol_max_interval,sd_rime_mass_max_interval, &
+                       sd_rime_frac_max_interval,sd_nmono_max_interval, &
+                       sd_aspect_ratio_max_interval, &
                        sort_id,sort_key,sort_freq,sort_tag,       &
                        sd_rng,sd_rand,                            &
 !                       sd_rand,                                   &
@@ -3652,6 +4918,11 @@ contains
          sdm_x2ri, sdm_y2rj
     use m_sdm_idutil, only: &
          sdm_sort,sdm_getperm
+    use m_sdm_tracking_cold, only: &
+         LIFE_SDADD_SPLIT, sdm_tracking_assign_dynamic_id, &
+         sdm_tracking_valid_id_pair, sdm_tracking_reset_invalid_slot
+    use m_sdm_io, only: &
+         sdm_lifecycle_outnetcdf
       ! Input variables
       integer, intent(in) :: ni_sdm ! SDM model dimension in x direction
       integer, intent(in) :: nj_sdm ! SDM model dimension in y direction
@@ -3668,6 +4939,7 @@ contains
       integer, intent(inout) :: sort_tag(1:ni_sdm*nj_sdm*nk_sdm+2)    ! accumulated number of super-droplets in each SD-grid
       real(RP), intent(inout) :: sd_x(1:sd_num)    ! x-coordinate of super-droplets
       real(RP), intent(inout) :: sd_y(1:sd_num)    ! y-coordinate of super-droplets
+      real(RP), intent(inout) :: sd_z(1:sd_num)    ! z-coordinate of super-droplets
       integer(DP), intent(inout) :: sd_n(1:sd_num) ! multiplicity of super-droplets
       real(RP), intent(inout) :: sd_r(1:sd_num)    ! equivalent radius of super-droplets
       real(RP), intent(inout) :: sd_asl(1:sd_num,1:sd_numasl)  ! aerosol mass of super-droplets
@@ -3675,6 +4947,20 @@ contains
       real(RP), intent(inout) :: sd_ri(1:sd_num)   ! index[i/real] of super-droplets
       real(RP), intent(inout) :: sd_rj(1:sd_num)   ! index[j/real] of super-droplets
       real(RP), intent(inout) :: sd_rk(1:sd_num)   ! index[k/real] of super-droplets
+      integer, intent(inout) :: sd_id(1:sd_num)
+      integer, intent(inout) :: dm_id(1:sd_num)
+      integer, intent(inout) :: sd_event_mask(1:sd_num)
+    integer, intent(inout) :: sd_event_sig_mask(1:sd_num)
+      integer, intent(inout) :: sd_diag_mask(1:sd_num)
+      integer, intent(inout) :: sd_phase_change_flag(1:sd_num)
+      integer, intent(inout) :: sd_spatial_visit_flag(1:sd_num)
+      real(RP), intent(inout) :: sd_liq_radius_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_ice_rvol_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_mixed_rvol_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_rime_mass_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_rime_frac_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_nmono_max_interval(1:sd_num)
+      real(RP), intent(inout) :: sd_aspect_ratio_max_interval(1:sd_num)
       ! Output variables
       integer, intent(out) :: sort_tag0(1:ni_sdm*nj_sdm*nk_sdm+2) ! = sort_tag(n) - 1
       integer, intent(out) :: fsort_id(1:ni_sdm*nj_sdm*nk_sdm+2)
@@ -3696,6 +4982,7 @@ contains
       integer :: sdnum_split   ! number of splitable valid super-droplets in each grid
       integer :: ip            ! index
       integer :: m, n, q, s, t ! index
+      integer :: parent_sd(1), parent_dm(1), child_sd(1), child_dm(1)
      !---------------------------------------------------------------------
 
       call sdm_x2ri(sd_num,sd_x,sd_ri,sd_rk)
@@ -3816,6 +5103,7 @@ contains
 
             sd_x(id_invd)  = sd_x(id_vd)
             sd_y(id_invd)  = sd_y(id_vd)
+            sd_z(id_invd)  = sd_z(id_vd)
             sd_r(id_invd)  = sd_r(id_vd)
             sd_vz(id_invd) = sd_vz(id_vd)
             sd_rk(id_invd) = sd_rk(id_vd)
@@ -3823,6 +5111,39 @@ contains
             do n=1,20
               sd_asl(id_invd,idx_nasl(n)) = sd_asl(id_vd,idx_nasl(n))
             end do
+
+            sd_event_mask(id_invd) = sd_event_mask(id_vd)
+            sd_event_sig_mask(id_invd) = sd_event_sig_mask(id_vd)
+            sd_diag_mask(id_invd) = sd_diag_mask(id_vd)
+            sd_phase_change_flag(id_invd) = sd_phase_change_flag(id_vd)
+            sd_spatial_visit_flag(id_invd) = sd_spatial_visit_flag(id_vd)
+            sd_liq_radius_max_interval(id_invd) = sd_liq_radius_max_interval(id_vd)
+            sd_ice_rvol_max_interval(id_invd) = sd_ice_rvol_max_interval(id_vd)
+            sd_mixed_rvol_max_interval(id_invd) = sd_mixed_rvol_max_interval(id_vd)
+            sd_rime_mass_max_interval(id_invd) = sd_rime_mass_max_interval(id_vd)
+            sd_rime_frac_max_interval(id_invd) = sd_rime_frac_max_interval(id_vd)
+            sd_nmono_max_interval(id_invd) = sd_nmono_max_interval(id_vd)
+            sd_aspect_ratio_max_interval(id_invd) = sd_aspect_ratio_max_interval(id_vd)
+
+            parent_sd(1) = sd_id(id_vd)
+            parent_dm(1) = dm_id(id_vd)
+            if( sdm_cold .and. tracking_mode /= 0 .and. &
+                sdm_tracking_valid_id_pair(parent_sd(1), parent_dm(1)) ) then
+               call sdm_tracking_assign_dynamic_id(id_invd, sd_id, dm_id, &
+                    tracking_next_dynamic_sd_id, mype)
+               child_sd(1) = sd_id(id_invd)
+               child_dm(1) = dm_id(id_invd)
+               call sdm_lifecycle_outnetcdf(real(TIME_NOWSEC,kind=DP), &
+                    LIFE_SDADD_SPLIT, 1, 1, parent_sd, parent_dm, child_sd, child_dm, &
+                    sd_x(id_vd), sd_y(id_vd), sd_z(id_vd))
+            else
+               call sdm_tracking_reset_invalid_slot(id_invd, sd_id, dm_id, &
+                    sd_event_mask, sd_event_sig_mask, sd_diag_mask, sd_phase_change_flag, sd_spatial_visit_flag, &
+                    sd_liq_radius_max_interval, sd_ice_rvol_max_interval, &
+                    sd_mixed_rvol_max_interval, sd_rime_mass_max_interval, &
+                    sd_rime_frac_max_interval, sd_nmono_max_interval, &
+                    sd_aspect_ratio_max_interval)
+            end if
 
             !### count and check number of invaid droplets ###!
 
@@ -3865,7 +5186,7 @@ contains
       real(RP), intent(in) :: sd_aslfmrate   ! formation rate of aerosol
       real(RP), intent(in) :: sd_aslfmdt     ! time interval to form aerosol
       integer,  intent(in) :: sd_num         ! number of super-droplets
-      integer,  intent(in) :: sd_numasl      ! number of kind of chemical material contained as 
+      integer,  intent(in) :: sd_numasl      ! number of kind of chemical material contained as
                                              ! water-soluble aerosol in super droplets
       real(RP), intent(in) :: sd_fmnc        ! number concentration of super-droplets at aerosol formation
       ! Input and output variables
@@ -4089,7 +5410,7 @@ contains
     real(RP), intent(out) :: cldfrac(KA,IA,JA)
     real(RP), intent(in)  :: QTRC   (KA,IA,JA,QAD)
     real(RP), intent(in) :: mask_criterion
-    
+
     real(RP) :: qhydro
     integer  :: k, i, j, iq
     !---------------------------------------------------------------------------
@@ -4116,7 +5437,7 @@ contains
     use scale_precision
     use scale_grid_index
     use scale_tracer, only: &
-       QAD => QA       
+       QAD => QA
     implicit none
 
     real(RP), intent(out) :: Qe   (KA,IA,JA,N_HYD) ! mixing ratio of each cateory [kg/kg]
@@ -4130,16 +5451,30 @@ contains
 !!    enddo
     Qe(:,:,:,I_HC) = QTRC_sdm(:,:,:,I_QC)+QTRC_sdm(:,:,:,I_QR)
     Qe(:,:,:,I_HC+1:) = 0.0_RP
-    
+
     return
   end subroutine ATMOS_PHY_MP_sdm_MixingRatio
   !-----------------------------------------------------------------------------
   subroutine ATMOS_PHY_MP_sdm_restart_read
+    use m_sdm_tracking_cold, only: &
+         EVENT_COALESCENCE, EVENT_RIMING, EVENT_AGGREGATION, EVENT_FREEZING, EVENT_MELTING, &
+         EVENT_DEPOSITION, EVENT_SUBLIMATION, EVENT_CONDENSATION, EVENT_EVAPORATION
     implicit none
 
+    character(len=32), parameter :: cold_tracking_restart_marker_v1 = 'SDM_COLD_TRACKING_RESTART_V1'
+    character(len=32), parameter :: cold_tracking_restart_marker_v2 = 'SDM_COLD_TRACKING_RESTART_V2'
+    character(len=32), parameter :: cold_tracking_restart_marker_v3 = 'SDM_COLD_TRACKING_RESTART_V3'
+    character(len=32), parameter :: cold_tracking_restart_marker_v4 = 'SDM_COLD_TRACKING_RESTART_V4'
+    integer, parameter :: cold_tracking_restart_version_v1 = 1
+    integer, parameter :: cold_tracking_restart_version_v2 = 2
+    integer, parameter :: cold_tracking_restart_version_v3 = 3
+    integer, parameter :: cold_tracking_restart_version_v4 = 4
     integer :: sdnum_dum, sdnumasl_dum, sdfmnum_dum
     integer :: dp_dum, rp_dum, n, m, ierr
+    integer :: cold_tracking_version
+    integer :: old_event_mask, new_event_mask, new_event_sig_mask
     real(DP) :: otime
+    character(len=32) :: cold_tracking_marker
 
     !### Get random generator seed ###!
     !! Random number generator has already been initialized in scale-les/src/preprocess/mod_mkinit.f90
@@ -4154,8 +5489,8 @@ contains
     if( ierr /= 0 ) then
       write(*,*) "sdm_restart_in", "read error"
       call PRC_MPIstop
-    endif 
-    
+    endif
+
     !--- read time and precision
     read(fid_sd_i) otime, rp_dum, dp_dum, sdnum_dum, sdnumasl_dum, sdfmnum_dum
     if( IO_L ) write(IO_FID_LOG,*) '*** Input restart file of Super Droplet  '
@@ -4195,6 +5530,214 @@ contains
        read(fid_sd_i) (sdice_s2c%tf(n),n=1,sdnum_s2c)
        read(fid_sd_i) (sdice_s2c%mrime(n),n=1,sdnum_s2c)
        read(fid_sd_i) (sdice_s2c%nmono(n),n=1,sdnum_s2c)
+       read(fid_sd_i, iostat=ierr) cold_tracking_marker
+       if( ierr < 0 ) then
+          sd_event_mask_s2c(:) = 0
+          sd_event_sig_mask_s2c(:) = 0
+          sd_diag_mask_s2c(:) = 0
+          sd_phase_change_flag_s2c(:) = 0
+          sd_spatial_visit_flag_s2c(:) = 0
+          sd_liq_radius_max_interval_s2c(:) = 0.0_RP
+          sd_ice_rvol_max_interval_s2c(:) = 0.0_RP
+          sd_mixed_rvol_max_interval_s2c(:) = 0.0_RP
+          sd_rime_mass_max_interval_s2c(:) = 0.0_RP
+          sd_rime_frac_max_interval_s2c(:) = 0.0_RP
+          sd_nmono_max_interval_s2c(:) = 0.0_RP
+          sd_aspect_ratio_max_interval_s2c(:) = 0.0_RP
+          sd_event_mask_s2c_restart(:) = 0
+          sd_event_sig_mask_s2c_restart(:) = 0
+          sd_diag_mask_s2c_restart(:) = 0
+          sd_phase_change_flag_s2c_restart(:) = 0
+          sd_spatial_visit_flag_s2c_restart(:) = 0
+          sd_liq_radius_max_interval_s2c_restart(:) = 0.0_RP
+          sd_ice_rvol_max_interval_s2c_restart(:) = 0.0_RP
+          sd_mixed_rvol_max_interval_s2c_restart(:) = 0.0_RP
+          sd_rime_mass_max_interval_s2c_restart(:) = 0.0_RP
+          sd_rime_frac_max_interval_s2c_restart(:) = 0.0_RP
+          sd_nmono_max_interval_s2c_restart(:) = 0.0_RP
+          sd_aspect_ratio_max_interval_s2c_restart(:) = 0.0_RP
+          tracking_next_dynamic_sd_id = TRACK_SD_ID_DYNAMIC_START
+          if( IO_L ) write(IO_FID_LOG,*) '*** Cold SD tracking restart block not found; interval state initialized'
+       else if( ierr /= 0 ) then
+          write(*,*) "sdm_restart_in", "cold tracking restart marker read error"
+          call PRC_MPIstop
+       else
+          if( trim(cold_tracking_marker) /= trim(cold_tracking_restart_marker_v1) .and. &
+              trim(cold_tracking_marker) /= trim(cold_tracking_restart_marker_v2) .and. &
+              trim(cold_tracking_marker) /= trim(cold_tracking_restart_marker_v3) .and. &
+              trim(cold_tracking_marker) /= trim(cold_tracking_restart_marker_v4) ) then
+             write(*,*) "sdm_restart_in", "cold tracking restart marker mismatch: ", trim(cold_tracking_marker)
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) cold_tracking_version
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking restart version read error"
+             call PRC_MPIstop
+          end if
+          if( trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v1) .and. &
+              cold_tracking_version /= cold_tracking_restart_version_v1 ) then
+             write(*,*) "sdm_restart_in", "unsupported cold tracking restart version: ", cold_tracking_version
+             call PRC_MPIstop
+          end if
+          if( trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v2) .and. &
+              cold_tracking_version /= cold_tracking_restart_version_v2 ) then
+             write(*,*) "sdm_restart_in", "unsupported cold tracking restart version: ", cold_tracking_version
+             call PRC_MPIstop
+          end if
+          if( trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v3) .and. &
+              cold_tracking_version /= cold_tracking_restart_version_v3 ) then
+             write(*,*) "sdm_restart_in", "unsupported cold tracking restart version: ", cold_tracking_version
+             call PRC_MPIstop
+          end if
+          if( trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v4) .and. &
+              cold_tracking_version /= cold_tracking_restart_version_v4 ) then
+             write(*,*) "sdm_restart_in", "unsupported cold tracking restart version: ", cold_tracking_version
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_event_mask_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking event mask read error"
+             call PRC_MPIstop
+          end if
+          if( trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v4) ) then
+             read(fid_sd_i, iostat=ierr) (sd_event_sig_mask_s2c_restart(n),n=1,sdnum_s2c)
+             if( ierr /= 0 ) then
+                write(*,*) "sdm_restart_in", "cold tracking significant-event mask read error"
+                call PRC_MPIstop
+             end if
+          else
+             do n = 1, sdnum_s2c
+                old_event_mask = sd_event_mask_s2c_restart(n)
+                new_event_mask = 0
+                new_event_sig_mask = 0
+                if( iand(old_event_mask, 1) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_COALESCENCE)
+                if( iand(old_event_mask, 2) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_RIMING)
+                if( iand(old_event_mask, 4) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_AGGREGATION)
+                if( iand(old_event_mask, 8) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_FREEZING)
+                if( iand(old_event_mask, 16) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_MELTING)
+                if( iand(old_event_mask, 32) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_DEPOSITION)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_DEPOSITION)
+                end if
+                if( iand(old_event_mask, 64) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_SUBLIMATION)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_SUBLIMATION)
+                end if
+                if( iand(old_event_mask, 128) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_CONDENSATION)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_CONDENSATION)
+                end if
+                if( iand(old_event_mask, 256) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_EVAPORATION)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_EVAPORATION)
+                end if
+                if( iand(old_event_mask, 512) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_FREEZING)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_FREEZING)
+                end if
+                if( iand(old_event_mask, 1024) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_MELTING)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_MELTING)
+                end if
+                if( iand(old_event_mask, 2048) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_RIMING)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_RIMING)
+                end if
+                if( iand(old_event_mask, 4096) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_AGGREGATION)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_AGGREGATION)
+                end if
+                if( iand(old_event_mask, 8192) /= 0 ) then
+                   new_event_mask = ior(new_event_mask, EVENT_COALESCENCE)
+                   new_event_sig_mask = ior(new_event_sig_mask, EVENT_COALESCENCE)
+                end if
+                if( iand(old_event_mask, 16384) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_DEPOSITION)
+                if( iand(old_event_mask, 32768) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_SUBLIMATION)
+                if( iand(old_event_mask, 65536) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_CONDENSATION)
+                if( iand(old_event_mask, 131072) /= 0 ) new_event_mask = ior(new_event_mask, EVENT_EVAPORATION)
+                sd_event_mask_s2c_restart(n) = new_event_mask
+                sd_event_sig_mask_s2c_restart(n) = new_event_sig_mask
+             end do
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_diag_mask_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking diagnostic mask read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_phase_change_flag_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking phase-state category-change flag read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_liq_radius_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking liquid-radius interval read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_ice_rvol_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking ice-radius interval read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_mixed_rvol_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking mixed-radius interval read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_rime_mass_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking rime-mass interval read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_rime_frac_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking rime-fraction interval read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_nmono_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking monomer-count interval read error"
+             call PRC_MPIstop
+          end if
+          read(fid_sd_i, iostat=ierr) (sd_aspect_ratio_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+          if( ierr /= 0 ) then
+             write(*,*) "sdm_restart_in", "cold tracking aspect-ratio interval read error"
+             call PRC_MPIstop
+          end if
+          if( trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v2) .or. &
+              trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v3) .or. &
+              trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v4) ) then
+             read(fid_sd_i, iostat=ierr) (sd_spatial_visit_flag_s2c_restart(n),n=1,sdnum_s2c)
+             if( ierr /= 0 ) then
+                write(*,*) "sdm_restart_in", "cold tracking spatial-visit flag read error"
+                call PRC_MPIstop
+             end if
+          else
+             sd_spatial_visit_flag_s2c_restart(:) = 0
+          end if
+          if( trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v3) .or. &
+              trim(cold_tracking_marker) == trim(cold_tracking_restart_marker_v4) ) then
+             read(fid_sd_i, iostat=ierr) tracking_next_dynamic_sd_id
+             if( ierr /= 0 ) then
+                write(*,*) "sdm_restart_in", "cold tracking dynamic ID counter read error"
+                call PRC_MPIstop
+             end if
+          else
+             tracking_next_dynamic_sd_id = TRACK_SD_ID_DYNAMIC_START
+          end if
+          sd_event_mask_s2c(:) = sd_event_mask_s2c_restart(:)
+          sd_event_sig_mask_s2c(:) = sd_event_sig_mask_s2c_restart(:)
+          sd_diag_mask_s2c(:) = sd_diag_mask_s2c_restart(:)
+          sd_phase_change_flag_s2c(:) = sd_phase_change_flag_s2c_restart(:)
+          sd_spatial_visit_flag_s2c(:) = sd_spatial_visit_flag_s2c_restart(:)
+          sd_liq_radius_max_interval_s2c(:) = sd_liq_radius_max_interval_s2c_restart(:)
+          sd_ice_rvol_max_interval_s2c(:) = sd_ice_rvol_max_interval_s2c_restart(:)
+          sd_mixed_rvol_max_interval_s2c(:) = sd_mixed_rvol_max_interval_s2c_restart(:)
+          sd_rime_mass_max_interval_s2c(:) = sd_rime_mass_max_interval_s2c_restart(:)
+          sd_rime_frac_max_interval_s2c(:) = sd_rime_frac_max_interval_s2c_restart(:)
+          sd_nmono_max_interval_s2c(:) = sd_nmono_max_interval_s2c_restart(:)
+          sd_aspect_ratio_max_interval_s2c(:) = sd_aspect_ratio_max_interval_s2c_restart(:)
+       end if
     end if
     !--- read formation S.D.
     close(fid_sd_i)
@@ -4207,6 +5750,8 @@ contains
     use scale_time
     implicit none
 
+    character(len=32), parameter :: cold_tracking_restart_marker = 'SDM_COLD_TRACKING_RESTART_V4'
+    integer, parameter :: cold_tracking_restart_version = 4
     real(DP), intent(in) :: otime
     character(len=17) :: fmt2="(A, '.', A, I*.*)"
     character(len=17) :: fmt3="(3A)"
@@ -4244,7 +5789,7 @@ contains
     if( ierr /= 0 ) then
       write(*,*) "sdm_restart_out", "Write error"
       call PRC_MPIstop
-    endif 
+    endif
 
     !--- write time and precision
     write(fid_sd_o) otime, RP, DP, sdnum_s2c, sdnumasl_s2c, sdfmnum_s2c
@@ -4270,6 +5815,21 @@ contains
        write(fid_sd_o) (sdice_s2c_restart%tf(n),n=1,sdnum_s2c)
        write(fid_sd_o) (sdice_s2c_restart%mrime(n),n=1,sdnum_s2c)
        write(fid_sd_o) (sdice_s2c_restart%nmono(n),n=1,sdnum_s2c)
+       write(fid_sd_o) cold_tracking_restart_marker
+       write(fid_sd_o) cold_tracking_restart_version
+       write(fid_sd_o) (sd_event_mask_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_event_sig_mask_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_diag_mask_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_phase_change_flag_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_liq_radius_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_ice_rvol_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_mixed_rvol_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_rime_mass_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_rime_frac_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_nmono_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_aspect_ratio_max_interval_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) (sd_spatial_visit_flag_s2c_restart(n),n=1,sdnum_s2c)
+       write(fid_sd_o) tracking_next_dynamic_sd_id
     end if
 
     close(fid_sd_o)
