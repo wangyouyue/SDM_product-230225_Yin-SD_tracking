@@ -22,7 +22,7 @@ This repository integrates SDM into SCALE version 5.2.6, leveraging both SDM’s
 - [9. Random Perturbations in SD Motion](#9-random-perturbations-in-sd-motion)
 - [10. Installation and Usage](#10-installation-and-usage)
 - [11. Representativeness Tests](#11-representativeness-tests)
-- [12. Cold TPHT Current Base and Future Porting Plan](#12-cold-tpht-current-base-and-future-porting-plan)
+- [12. Cold TPHT Current Base, SCALE 5.5.5 Port, and Future Plan](#12-cold-tpht-current-base-scale-555-port-and-future-plan)
 
 ## 1. Overview of New Features (vs. SCALE-SDM)
 Compared with the original SCALE-SDM branch, this merged branch introduces a unified, sampling-aware tracking framework with the following characteristics:
@@ -114,8 +114,8 @@ variables:
   `trigger_code` values are `4` freezing, `5` melting, `6` deposition, `7`
   sublimation, `8` condensation, `9` evaporation, `10` activation, and `11`
   deactivation. Activation/deactivation are derived from pre/post Kohler
-  activated-state crossing and are written only as occurrence-level records in
-  the current implementation. Significant deposition/sublimation
+  activated-state crossing. Their occurrence controls write `trigger_level=1`
+  records. Significant deposition/sublimation
   are relative ice-mass-change process hits; significant
   condensation/evaporation are relative liquid-mass-change process hits;
   significant freezing/melting are relative component-mass-transfer hits.
@@ -172,7 +172,6 @@ variables:
   timestep. v1.3+ adds default-off rank-subdomain pruning through
   `tracking_spatial_rank_pruning_enable`; when disabled, spatial tracking keeps
   the conservative all-rank-active behavior.
-  timestep.
 - Cold TPHT tracking IDs use a lifecycle-safe namespace. `sd_id = -999` and
   `dm_id = -999` are the invalid / missing sentinels. Non-negative `sd_id`
   values remain valid initial/static IDs, and `sd_id <= -1000` is reserved for
@@ -256,10 +255,12 @@ variables:
 | Variable or setting | Current type / NetCDF convention | Meaning |
 |---|---|---|
 | `sd_event_mask` | Fortran default `integer`; NetCDF `NF90_INT` | Ordinary-output interval event bitmask. |
+| `sd_event_sig_mask` | Fortran default `integer`; NetCDF `NF90_INT` | Significant-level subset of `sd_event_mask`, using the same process-bit mapping. |
 | `sd_diag_mask` | Fortran default `integer`; NetCDF `NF90_INT` | Ordinary-output interval diagnostic bitmask evaluated from interval maxima. |
 | `sd_phase_change_flag` | Fortran default `integer`; NetCDF `NF90_INT` | 0/1 interval flag for phase-state category change. |
 | `sd_spatial_visit_flag` | Fortran default `integer`; NetCDF `NF90_INT` | v1.2+ 0/1 interval flag for one configured spatial box; current code uses Level-3 segment-box intersection plus Level-2 point checks. |
 | `trigger_code` | Fortran default `integer`; NetCDF `NF90_INT` | Categorical record trigger code, not a bitmask. |
+| `trigger_level` | Fortran default `integer`; NetCDF `NF90_INT` | Process-event level: `1` occurrence or `2` significant. Diagnostic event records do not use it. |
 | `target_reason_mask` | Fortran default `integer`; NetCDF `NF90_INT` | Broad reason bitmask: event, diagnostic, phase-state category change. No v1 state-target bit. |
 | `phase_state_pre/post` / `phase_state1/2_pre/post` | Fortran default `integer`; NetCDF `NF90_INT` | Single event-context phase-state code used to interpret phase-aware radius fields: `0` `PHASE_DRY_AEROSOL`, `1` `PHASE_LIQUID`, `10` `PHASE_ICE`, `11` `PHASE_MIXED`, `99` `PHASE_NONE` / invalid / missing. |
 | `event_multiplicity` | Fortran default `integer`; NetCDF `NF90_INT` | Collision-family multiplicity; warm/cold event-output name for internal `num_col`. |
@@ -296,10 +297,11 @@ future work. The main boundaries are:
 - `tracking_interest_ice_phase_enable` is the current coarse FW interest
   selector for `STAT_ICE` or `STAT_MIX` SDs. It is not a generic phase gate and
   does not introduce `TARGET_BY_STATE` or `TRIG_STATE_*`.
-- Current valid tracking IDs are local positive slot indices with `dm_id=mype`;
-  `INVALID_i4=-999` is the invalid sentinel. MPI boundary migration preserves
-  IDs and cold interval state. No active per-timestep global-halo ID assignment
-  path is confirmed in the current driver.
+- Initial tracking IDs remain non-negative local slot indices with
+  `dm_id=mype`. `INVALID_i4=-999` is the only invalid sentinel, while
+  `sd_id<=-1000` is a valid dynamic-ID namespace for lifecycle-enabled paths.
+  MPI boundary migration preserves IDs and cold interval state. No active
+  per-timestep global-halo ID assignment path is confirmed in this branch.
 - v1.2+ implements driver-level cleanup for terminal precipitation conversion
   after `sdm_sd2prec` and for vertical outflow after vertical boundary
   processing. These paths snapshot live slots before the operation, detect
@@ -841,18 +843,16 @@ cd scale-rm/test/case/shallowcloud/ice_tpht_smoke/squid_validation
 qsub squid_run_v13_kohler_validation.sh
 ```
 
-The v1.3+ SQUID full validation passed as `832697.sqd` with
-`required_failures=0`. The v1.3+ production I/O calibration wrapper is
-`squid_run_v13_production_io_threshold.sh`; it passed as `832700.sqd` with
-`required_failures=0`. A later local follow-up added controlled vapor occurrence
-coverage for `7:1`, `8:1`, and `9:1`; the completed SQUID job remains historical
-for that optional gap. Older v1.2 SQUID production I/O results are historical
-evidence only and should not be reported as v1.3 validation.
-
-Longer v1.3 production calibration scripts are prepared but not submitted:
-`squid_run_v13_long_production_calibration.sh` and
-`run_v13_long_production_calibration.sh`. Do not report longer production
-validation until a new job finishes with `required_failures=0`.
+The v1.3+ SQUID full-validation suite and the later follow-up suite both passed
+with `required_failures=0`. The follow-up campaign includes controlled vapor
+occurrence coverage for `7:1`, `8:1`, and `9:1`, significant Kohler activation
+and deactivation coverage for `10:2` and `11:2`, spatial rank-pruning checks,
+and optional aerosol/thermodynamic context checks. Production-style I/O
+calibration and a smoke-derived longer-calibration campaign also passed their
+required gates. These results are bounded smoke/full-validation and calibration
+evidence; they are not full real-science production validation. Older v1.2
+SQUID results remain historical evidence only, and calibration with a longer
+real science case remains future work.
 
 If you rerun the FW case, remove old `fw_tracking/` outputs first so that previously appended `tracking_interest_ids.pe*.ids` files do not contaminate the new TPHT handoff set.
 
@@ -1201,7 +1201,7 @@ python evaluate_representativeness.py
 - Evaluate both scalar metrics and distribution metrics; agreement in one does not guarantee agreement in the other.
 - Use multi-seed spread as an uncertainty estimate for sampling robustness.
 
-## 12. Cold TPHT Current Base and Future Porting Plan
+## 12. Cold TPHT Current Base, SCALE 5.5.5 Port, and Future Plan
 
 Cold TPHT extends the FW/BW/TPHT tracking workflow from warm liquid
 coalescence histories to cold and mixed-phase SDM process histories. The
@@ -1262,20 +1262,21 @@ verification ladder is:
 7. run SQUID full validation if the target machine is SQUID;
 8. run production I/O and threshold calibration for the actual science case.
 
-The next porting step is to move the Cold TPHT v1.3+ patch set to the latest
-SCALE-SDM code base instead of assuming this development branch already tracks
-upstream. High-risk files and modules for that port include
-`contrib/SDM/scale_atmos_phy_mp_sdm.F90`, the mirrored
-`scalelib/src/atmos-physics/microphysics/scale_atmos_phy_mp_sdm.F90`,
-`sdm_common.f90`, `sdm_tracking_cold.f90`, `sdm_io.f90`, `sdm_boundary.f90`,
-`sdm_idutil.f90`, `sdm_coalescence_cold.f90`, `sdm_condensation_water.f90`,
-`sdm_meltfreeze.f90`, `sdm_subldep.f90`, `sdm_memmgr.f90`, build-system
-dependencies, restart read/write blocks, validators, and smoke-case configs.
-The port should be treated as a staged integration: first isolate the patch
-series and namelist/build changes, then reconnect interval state arrays,
+A staged adaptation to SCALE 5.5.5 now exists on the separate Bitbucket feature
+branch
+[`contrib/SDM_feature-260731_two_pass_hybrid_tracking`](https://bitbucket.org/s-shima-lab/scale-sdm/src/contrib%2FSDM_feature-260731_two_pass_hybrid_tracking/).
+That port was implemented against the newer driver/module boundaries rather
+than by copying the old `contrib/SDM/scale_atmos_phy_mp_sdm.F90` driver. It has
+bounded local and SQUID smoke/full-validation and calibration evidence, but it
+is neither an upstream merge nor full real-science production validation. This
+GitHub branch remains the earlier reference implementation and does not
+automatically track newer SCALE-SDM changes.
+
+Future updates beyond the 5.5.5 port should remain staged integrations: first
+reconcile helper modules and namelist/build changes, then interval state arrays,
 restart/MPI/selected-copy paths, event writers, physical process hooks,
-spatial/lifecycle helpers, validators, and finally SQUID/production I/O
-calibration.
+spatial/lifecycle helpers, validators, and finally SQUID and real-science
+production I/O calibration.
 
 Longer-term Cold TPHT development should focus on:
 - collision aerosol and thermodynamic context after a separate collision-path
@@ -1293,11 +1294,12 @@ Longer-term Cold TPHT development should focus on:
 - possible `sd_id` / `dm_id` migration to 64-bit storage if future dynamic-ID
   production approaches 32-bit limits.
 
-Final reminder: the current Cold TPHT v1.3+ implementation in this repository
-is developed on the SCALE 5.2.6 / SCALE-SDM 5.2.6-2.3.1 code base. A future
-port should update the implementation to the latest SCALE-SDM version and rerun
-the full validation ladder before treating it as an upstream-ready or
-production-ready feature.
+Final reminder: the current Cold TPHT v1.3+ implementation in this GitHub
+repository is developed on the SCALE 5.2.6 / SCALE-SDM 5.2.6-2.3.1 code base.
+The separate SCALE 5.5.5 Bitbucket feature port is the current adaptation
+target. Any future move to a newer SCALE-SDM version must repeat the full
+validation ladder before the feature is described as upstream-ready or
+production-ready.
 
 ## Acknowledgements
 I would like to sincerely thank my advisor, Prof. Shin-ichiro Shima, for his invaluable suggestions on the code and algorithms, his scientific and technical guidance, and his generous support in providing computational resources. I would also like to express my special gratitude to my Ph.D. supervisor, Prof. Chunsong Lu, for his mentorship and cultivation throughout my doctoral studies. I would also like to thank Mikito Toda for his generous support and informative discussions.
