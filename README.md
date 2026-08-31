@@ -746,12 +746,16 @@ This branch keeps the routine FW/BW/TPHT validation cases under `scale-rm/test/c
 Use the following cases as the baseline tutorial/test matrix:
 - **(a) 2D forward, with coalescence output:** `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward`
 - **(b) 2D backward, with coalescence output:** `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward`
-- **(c) 2D backward, no coalescence output and no large-scale horizontal wind:** `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv`
+- **(c) 2D backward, physical coalescence disabled and no large-scale horizontal wind:** `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv`
 - **(d) 3D forward, with stratified sampling and coalescence output:** `scale-rm/test/case/shallowcloud/forward_tracking_sampling_tests/ft_stratified_baseline`
 - **(e) 3D backward, with stratified sampling and coalescence output:** `scale-rm/test/case/shallowcloud/backward_tracking_sampling_tests/bt_stratified_baseline`
 - **(f) Forward and backward representativeness ensembles:** `scale-rm/test/case/shallowcloud/forward_tracking_representativeness_tests` and `scale-rm/test/case/shallowcloud/backward_tracking_representativeness_tests`
 
-For a no-coalescence-output variant of the sampling cases, copy case (d) or (e), then set `coalescence_output_enable = .false.` in the copied `run.conf`.
+For a logging-only sensitivity case, copy case (d) or (e), then set
+`coalescence_output_enable = .false.` while leaving `doautoconversion = .true.`.
+That suppresses `SD_coal_output_NetCDF_*` but does **not** disable physical
+collision-coalescence. A case named `no_coal` must instead use the physical
+switch documented below.
 
 The retained TPHT tutorial pair is:
 - **FW TPHT discovery case**  
@@ -987,7 +991,10 @@ This writes:
 
 For the strict consistency check above, the expected result is `RESULT: PASS`.
 
-For trajectory reconstruction and visualization, you can then reuse the existing Python post-processing scripts in each case's `results/` directory.
+For trajectory reconstruction and visualization, use the maintained
+identity-safe workflow under `scale-rm/test/case/shallowcloud/tracking_postprocess/`.
+The small scripts retained in each case's `results/` directory are compatibility
+entry points to this shared implementation.
 
 Concrete files to edit/check for these settings:
 - Main model switch file (all cases): `run.conf`
@@ -1003,8 +1010,9 @@ Concrete files to edit/check for these settings:
 - 2D forward case config: `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/run.conf`
 - 2D backward case config: `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward/run.conf`
 - 2D backward no-coalescence/no-UV config: `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/run.conf`
-- Trajectory post-processing script (forward): `scale-rm/test/case/shallowcloud/forward_tracking_sampling_tests/ft_stratified_baseline/results/sd_output.py`
-- Trajectory post-processing script (backward): `scale-rm/test/case/shallowcloud/backward_tracking_sampling_tests/bt_stratified_baseline/results/sd_output.py`
+- Maintained trajectory extractor: `scale-rm/test/case/shallowcloud/tracking_postprocess/sd_output.py`
+- Maintained trajectory plotter: `scale-rm/test/case/shallowcloud/tracking_postprocess/traj_plot.py`
+- Per-case compatibility entry points: `scale-rm/test/case/shallowcloud/*/results/sd_output.py` and `traj_plot.py`
 - Generic smoke post-processing helper: `scale-rm/test/case/shallowcloud/tracking_postprocess/summarize_tracking_smoke.py`
 - Representativeness evaluation (forward): `scale-rm/test/case/shallowcloud/forward_tracking_representativeness_tests/evaluate_representativeness.py`
 - Representativeness evaluation (backward): `scale-rm/test/case/shallowcloud/backward_tracking_representativeness_tests/evaluate_representativeness.py`
@@ -1042,14 +1050,35 @@ The helper prefers Python `netCDF4` when available and falls back to the system
 `ncdump` executable, which is useful on lightweight local environments where
 Python NetCDF bindings are not installed.
 
-### How to configure “no coalescence output” in (d)/(f)
-In the copied case directory:
-1. Open `run.conf`.
-2. Set:
-   ```fortran
-   coalescence_output_enable = .false.
-   ```
-3. Keep tracking/sampling settings unchanged unless your experiment requires otherwise.
+### How to disable physical coalescence
+In a case explicitly intended to have no collision-coalescence, set both:
+
+```fortran
+&PARAM_ATMOS_PHY_MP
+ doautoconversion = .false.,
+/
+
+&PARAM_ATMOS_PHY_MP_SDM
+ coalescence_output_enable = .false.,
+/
+```
+
+`doautoconversion` is the physical switch. It prevents `sdm_calvar(2)` from
+being activated and therefore skips `sdm_coales`/`sdm_coales_cold`.
+`coalescence_output_enable` only controls the event log and is kept false for a
+consistent no-coalescence configuration. Keep `sdm_dtcmph(2)` at a valid
+positive cadence; it is not the physical on/off switch.
+
+### How to suppress coalescence-event output only
+For a logging-overhead sensitivity in which physical coalescence must remain
+active, use:
+
+```fortran
+doautoconversion = .true.
+coalescence_output_enable = .false.
+```
+
+Do not describe this second configuration as a no-coalescence simulation.
 
 ### Build and run workflow (what each step does)
 1. **Enter target case directory** (isolates all case-specific `run.conf`, job scripts, and outputs).
@@ -1116,22 +1145,57 @@ Notes:
 - In this repository, the corresponding case is `scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv`.
 
 ### Post-processing workflow
-- **Python trajectory extraction (`results/sd_output.py`)**: reads SD NetCDF snapshots and reconstructs trajectory chains.
-- **Python plotting (`results/traj_plot.py`)**: visualizes sampled trajectory paths for sanity checks.
-- The old per-case `random_traj.py` and `particle_tracer_opt.f90` helper copies have been removed from the shallowcloud test tree. Use the maintained scripts under `scale-rm/test/case/shallowcloud/tpht_test/` for TPHT handoff checks and the per-case `results/` scripts for trajectory extraction and plotting.
+- **Python trajectory extraction (`tracking_postprocess/sd_output.py`)**:
+  discovers actual `SD_selected_NetCDF_*` or `SD_all_NetCDF_*` output levels and
+  joins records by FW `(dm_id, sd_id)` or BW `(pre_dmid, pre_sdid)` identity.
+- **Python plotting (`tracking_postprocess/traj_plot.py`)**: draws only adjacent
+  records from the same identity and breaks lines at missing output levels and
+  periodic-boundary wraps.
+- The extractor accepts `dm_id=0` and treats `if_coal` as optional, so a
+  physically no-coalescence case remains valid input.
+- Per-case `results/sd_output.py` and `results/traj_plot.py` are lightweight
+  compatibility entry points. Do not edit them independently; maintain the
+  shared scripts above.
+- The old per-case `random_traj.py` and `particle_tracer_opt.f90` helper copies
+  have been removed from the shallowcloud test tree. TPHT handoff consistency
+  remains the responsibility of the tools under
+  `scale-rm/test/case/shallowcloud/tpht_test/`.
+
+The required Python packages are `numpy`, `netCDF4`, and `matplotlib`. From a
+case's `results/` directory, run either the PBS job or the two commands directly:
 
 2D backward no-coalescence post-processing example:
 ```bash
 cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_backward_no_coal_no_uv/results
 qsub run_py.pbs
-python traj_plot.py
+# or interactively:
+python3 sd_output.py --input-dir .. --output tracking_trajectories.nc
+python3 traj_plot.py --input tracking_trajectories.nc \
+  --style gmd --figure-width double \
+  --output-base particle_trajectories
 ```
+
+The plotter uses the GMD2026 publication style by default and writes PDF, SVG,
+and 600 dpi PNG. For a short smoke test or no-wind control, add
+`--relative-position` to plot displacement from each trajectory's first record.
+Use `--full-domain` for an absolute full-domain view, or `--style diagnostic`
+for a larger screen-oriented plot with an automatic title.
 
 2D forward post-processing example:
 ```bash
 cd scale-rm/test/case/shallowcloud/dycoms2_rf02_sdm_2D_forward/results
 qsub run_py.pbs
 ```
+
+For one exact model identity, add `--target DM_ID:SD_ID` to both commands. The
+output variable `particle_index` is only a compact compatibility index assigned
+by the post-processor; it is not a physical SD identifier. The old workflow's
+independent per-time sorting and column-wise line connection could join
+different particles after MPI migration or particle loss, producing the
+nonphysical zig-zag trajectories that this shared implementation avoids.
+Start/end markers follow increasing model time by default; add `--reverse-time`
+to `traj_plot.py` only when a BW figure should be presented in reconstruction
+direction.
 
 ### Current-version namelist settings used by these cases
 - `tracking_mode = 1` for forward cases and `tracking_mode = 2` for backward cases.
@@ -1141,7 +1205,10 @@ qsub run_py.pbs
 - `tracking_interest_radius_enable`, `tracking_interest_radius_threshold`, and `tracking_interest_coalescence_enable` define the warm/liquid TPHT interest filter, with the radius condition evaluated as `sd_r >= tracking_interest_radius_threshold`.
 - `tracking_interest_ice_radius_enable`, `tracking_interest_ice_radius_threshold`, `tracking_interest_ice_phase_enable`, `tracking_interest_rime_mass_enable`, and `tracking_interest_rime_mass_threshold` extend the TPHT interest filter to cold-SDM fields when `sdm_cold = .true.`.
 - If multiple warm or cold interest switches are enabled, the current implementation uses logical OR.
-- `coalescence_output_enable` controls writing `SD_coal_output_NetCDF_*`, but it is forced to `.false.` when the microphysical coalescence process is disabled.
+- `doautoconversion` controls physical SDM collision-coalescence.
+  `coalescence_output_enable` independently controls writing
+  `SD_coal_output_NetCDF_*`, and is forced to `.false.` when the physical
+  process is disabled.
 - Cold-SDM collision files use `SD_event_collision_NetCDF_*` with
   `trigger_code`, `target_reason_mask`, participant IDs, `event_multiplicity`,
   `phase_state*_pre/post`, and pre/post hydrometeor diagnostics. Warm mode

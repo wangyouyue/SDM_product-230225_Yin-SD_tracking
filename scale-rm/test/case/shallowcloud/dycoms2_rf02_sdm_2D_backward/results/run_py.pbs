@@ -7,5 +7,7 @@
 source ~/.bashrc
 cd ${PBS_O_WORKDIR}
 
-# please set num_blocks = core number in the python script
-python sd_output.py
+export MPLBACKEND=Agg
+
+time python3 sd_output.py --input-dir .. --output tracking_trajectories.nc
+time python3 traj_plot.py --input tracking_trajectories.nc --output-base particle_trajectories

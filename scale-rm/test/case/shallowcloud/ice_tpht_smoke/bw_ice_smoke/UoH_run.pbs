@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -l select=1:ncpus=40:mpiprocs=40
 #PBS -q T
-#PBS -N SDM40_no_coal
+#PBS -N SDM40_bw_ice
 #PBS -o $PBS_O_WORKDIR/log.txt
 #PBS -e $PBS_O_WORKDIR/error.txt
 
